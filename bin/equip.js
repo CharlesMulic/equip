@@ -6,6 +6,11 @@
 "use strict";
 
 const { spawn } = require("child_process");
+const path = require("path");
+
+const EQUIP_VERSION = JSON.parse(
+  require("fs").readFileSync(path.join(__dirname, "..", "package.json"), "utf-8")
+).version;
 
 // ─── Tool Registry ──────────────────────────────────────────
 
@@ -42,6 +47,7 @@ const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
 const child = spawn(npxCmd, ["-y", entry.package, entry.command, ...extraArgs], {
   stdio: "inherit",
   shell: process.platform === "win32",
+  env: { ...process.env, EQUIP_VERSION },
 });
 
 child.on("close", (code) => process.exit(code || 0));
