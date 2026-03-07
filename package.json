@@ -1,6 +1,6 @@
 {
   "name": "@cg3/equip",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "description": "Universal MCP + behavioral rules installer for AI coding agents",
   "main": "index.js",
   "bin": {

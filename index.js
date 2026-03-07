@@ -3,6 +3,9 @@
 
 "use strict";
 
+const path = require("path");
+const os = require("os");
+
 const { detectPlatforms, whichSync, dirExists, fileExists } = require("./lib/detect");
 const { readMcpEntry, buildHttpConfig, buildHttpConfigWithAuth, buildStdioConfig, installMcp, installMcpJson, installMcpToml, uninstallMcp, updateMcpKey, parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("./lib/mcp");
 const { parseRulesVersion, installRules, uninstallRules, markerPatterns } = require("./lib/rules");
@@ -42,7 +45,7 @@ class Equip {
    * @param {string} [config.hooks[].matcher] - Regex matcher for event filtering (e.g., "Bash")
    * @param {string} config.hooks[].script - Hook script content (Node.js)
    * @param {string} config.hooks[].name - Script filename (without .js extension)
-   * @param {string} [config.hookDir] - Directory for hook scripts (default: ~/.prior/hooks)
+   * @param {string} [config.hookDir] - Directory for hook scripts (default: ~/.${name}/hooks)
    */
   constructor(config) {
     if (!config.name) throw new Error("Equip: name is required");
@@ -53,7 +56,7 @@ class Equip {
     this.rules = config.rules || null;
     this.stdio = config.stdio || null;
     this.hookDefs = config.hooks || null;
-    this.hookDir = config.hookDir || null;
+    this.hookDir = config.hookDir || path.join(os.homedir(), `.${config.name}`, "hooks");
   }
 
   /**

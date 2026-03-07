@@ -44,9 +44,9 @@ Some platforms support **lifecycle hooks** — scripts that run automatically at
 | Claude Code | ✅ | `PostToolUseFailure`, `Stop`, `PreToolUse`, `PostToolUse` |
 | All others | ❌ | — |
 
-When hooks are supported, equip installs lightweight Node.js scripts to `~/.prior/hooks/` and registers them in the platform's settings. Hooks are a **silent enhancement** — if the platform doesn't support them, equip installs only MCP + rules without any error or warning.
+When hooks are supported, equip writes the consumer-provided scripts to a configurable directory (default: `~/.${name}/hooks/`) and registers them in the platform's settings. Hooks are a **silent enhancement** — if the platform doesn't support them, equip installs only MCP + rules without any error or warning.
 
-Hooks are opt-in per platform via the capabilities model. As more platforms add hook support, equip can enable them without consumer code changes.
+Hook scripts and event bindings are defined by the consumer (your package), not by equip. Equip provides only the installation infrastructure — capabilities detection, file writing, settings registration, and cleanup. As more platforms add hook support, equip can enable them without consumer code changes.
 
 ## Quick Start
 
