@@ -60,6 +60,7 @@ function cmdHelp() {
   console.log("");
   console.log("Commands:");
   console.log("  <tool>           Install an MCP tool (e.g. equip prior)");
+  console.log("  uninstall <tool> Remove an installed tool (alias: unequip)");
   console.log("  status           Show all MCP servers across all platforms");
   console.log("  doctor           Validate config integrity and detect drift");
   console.log("  update           Update equip and migrate configs");
@@ -122,6 +123,12 @@ function cmdDoctor() {
 }
 
 // ─── Command: update ────────────────────────────────────────
+
+function cmdUninstall(args) {
+  // Reuse unequip.js by injecting the tool name into argv and requiring it
+  process.argv = [process.argv[0], process.argv[1], ...args];
+  require("./unequip.js");
+}
 
 function cmdUpdate() {
   const { runUpdate } = require("../dist/lib/commands/update");
@@ -247,8 +254,16 @@ function reconcileState(toolName, pkg) {
 const cmd = process.argv[2];
 const extraArgs = process.argv.slice(3);
 
-if (!cmd || cmd === "--help" || cmd === "-h") {
+if (cmd === "--help" || cmd === "-h") {
   cmdHelp();
+  process.exit(0);
+}
+
+if (!cmd) {
+  checkStaleVersion();
+  cmdStatus();
+  const { DIM, RESET } = require("../dist/lib/cli");
+  process.stderr.write(`  ${DIM}Run "equip --help" for all commands${RESET}\n\n`);
   process.exit(0);
 }
 
@@ -263,10 +278,11 @@ if (cmd !== "update" && cmd !== "--version" && cmd !== "-v") {
 }
 
 switch (cmd) {
-  case "status":  cmdStatus(); break;
-  case "doctor":  cmdDoctor(); break;
-  case "update":  cmdUpdate(); break;
-  case "list":    cmdList(); break;
-  case "demo":    cmdDemo(extraArgs); break;
-  default:        dispatchTool(cmd, extraArgs); break;
+  case "status":    cmdStatus(); break;
+  case "doctor":    cmdDoctor(); break;
+  case "update":    cmdUpdate(); break;
+  case "list":      cmdList(); break;
+  case "demo":      cmdDemo(extraArgs); break;
+  case "uninstall": cmdUninstall(extraArgs); break;
+  default:          dispatchTool(cmd, extraArgs); break;
 }
