@@ -71,28 +71,55 @@ export function runDoctor(): void {
         issues++;
       }
 
-      // Check rules version if tracked
-      if (record.rulesVersion && def.rulesPath) {
+      // Check rules if tracked
+      let rulesOk = true;
+      if (record.rulesVersion) {
         checks++;
-        const rulesPath = def.rulesPath();
-        try {
-          const rulesContent = fs.readFileSync(rulesPath, "utf-8");
-          const versionMatch = rulesContent.match(new RegExp(`<!-- ${toolName}:v([\\d.]+) -->`));
-          if (!versionMatch) {
-            cli.warn(`  ${def.name}: rules block not found in ${sanitizePath(rulesPath)}`);
+        const rulesPath = record.rulesPath || (def.rulesPath ? def.rulesPath() : null);
+        if (!rulesPath) {
+          cli.ok(`  ${def.name}: config present (no rules path)`);
+          rulesOk = false;
+        } else {
+          try {
+            const rulesContent = fs.readFileSync(rulesPath, "utf-8");
+            const versionMatch = rulesContent.match(new RegExp(`<!-- ${toolName}:v([\\d.]+) -->`));
+            if (!versionMatch) {
+              cli.warn(`  ${def.name}: rules block not found in ${sanitizePath(rulesPath)}`);
+              issues++;
+              rulesOk = false;
+            } else if (versionMatch[1] !== record.rulesVersion) {
+              cli.warn(`  ${def.name}: rules version mismatch (installed: v${versionMatch[1]}, expected: v${record.rulesVersion})`);
+              issues++;
+              rulesOk = false;
+            }
+          } catch {
+            cli.warn(`  ${def.name}: rules file not readable (${sanitizePath(rulesPath)})`);
             issues++;
-          } else if (versionMatch[1] !== record.rulesVersion) {
-            cli.warn(`  ${def.name}: rules version mismatch (installed: v${versionMatch[1]}, expected: v${record.rulesVersion})`);
-            issues++;
-          } else {
-            cli.ok(`  ${def.name}: config + rules v${record.rulesVersion}`);
+            rulesOk = false;
           }
-        } catch {
-          cli.warn(`  ${def.name}: rules file not readable (${sanitizePath(rulesPath)})`);
-          issues++;
         }
-      } else {
-        cli.ok(`  ${def.name}: config present`);
+      }
+
+      // Check hooks if tracked
+      let hooksOk = true;
+      if (record.hookDir && record.hookScripts && record.hookScripts.length > 0) {
+        checks++;
+        for (const script of record.hookScripts) {
+          const scriptPath = require("path").join(record.hookDir, script);
+          if (!fileExists(scriptPath)) {
+            cli.warn(`  ${def.name}: hook script missing (${sanitizePath(scriptPath)})`);
+            issues++;
+            hooksOk = false;
+          }
+        }
+      }
+
+      // Summary line for this platform
+      const parts: string[] = ["config"];
+      if (record.rulesVersion && rulesOk) parts.push(`rules v${record.rulesVersion}`);
+      if (record.hookScripts && record.hookScripts.length > 0 && hooksOk) parts.push(`${record.hookScripts.length} hook${record.hookScripts.length === 1 ? "" : "s"}`);
+      if (rulesOk && hooksOk) {
+        cli.ok(`  ${def.name}: ${parts.join(" + ")}`);
       }
     }
   }

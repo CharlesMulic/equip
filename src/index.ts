@@ -105,9 +105,10 @@ class Equip {
     if ((result.action === "created" || result.action === "updated") && !options.dryRun) {
       try {
         trackInstall(this.name, this.package, platform.platform, {
+          configPath: platform.configPath,
           transport: "http",
           rulesVersion: this.rules.version,
-          configPath: platform.configPath,
+          rulesPath: platform.rulesPath || undefined,
         });
       } catch {}
     }
@@ -131,7 +132,18 @@ class Equip {
     if (!this.hookDefs) return null;
     const opts = { ...options };
     if (this.hookDir && !opts.hookDir) opts.hookDir = this.hookDir;
-    return installHooks(platform, this.hookDefs, opts);
+    const result = installHooks(platform, this.hookDefs, opts);
+    if (result?.installed && !opts.dryRun) {
+      try {
+        trackInstall(this.name, this.package, platform.platform, {
+          configPath: platform.configPath,
+          transport: "http",
+          hookDir: result.hookDir,
+          hookScripts: result.scripts,
+        });
+      } catch {}
+    }
+    return result;
   }
 
   uninstallHooks(platform: DetectedPlatform, options: { hookDir?: string; dryRun?: boolean } = {}): boolean {

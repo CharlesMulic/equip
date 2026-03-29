@@ -9,9 +9,18 @@ import * as os from "os";
 // ─── Types ──────────────────────────────────────────────────
 
 export interface ToolPlatformRecord {
-  transport: string;
-  rulesVersion?: string;
+  /** MCP config file path */
   configPath: string;
+  /** Transport type (http, stdio) */
+  transport: string;
+  /** Rules file path (where marker block was written) */
+  rulesPath?: string;
+  /** Installed rules version string */
+  rulesVersion?: string;
+  /** Directory containing hook scripts */
+  hookDir?: string;
+  /** List of installed hook script filenames */
+  hookScripts?: string[];
 }
 
 export interface ToolRecord {
@@ -60,9 +69,10 @@ export function writeState(state: EquipState): void {
 // ─── Tool Tracking ──────────────────────────────────────────
 
 /**
- * Record that a tool was installed on a platform.
+ * Record or update a tool's platform record.
+ * Merges fields into existing record (doesn't overwrite unrelated fields).
  */
-export function trackInstall(toolName: string, pkg: string, platformId: string, record: ToolPlatformRecord): void {
+export function trackInstall(toolName: string, pkg: string, platformId: string, fields: Partial<ToolPlatformRecord>): void {
   const state = readState();
   const version = getEquipVersion();
 
@@ -74,8 +84,11 @@ export function trackInstall(toolName: string, pkg: string, platformId: string, 
     };
   }
 
-  state.tools[toolName].platforms[platformId] = record;
+  // Merge into existing platform record (preserves fields from prior calls)
+  const existing = state.tools[toolName].platforms[platformId] || {} as ToolPlatformRecord;
+  state.tools[toolName].platforms[platformId] = { ...existing, ...fields };
   state.tools[toolName].updatedAt = new Date().toISOString();
+  state.tools[toolName].package = pkg;
   state.equipVersion = version;
 
   writeState(state);
