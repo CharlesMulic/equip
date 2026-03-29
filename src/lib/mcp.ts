@@ -2,11 +2,10 @@
 // Handles all platform-specific config format differences.
 // Zero dependencies.
 
-"use strict";
-
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
+import * as fs from "fs";
+import * as path from "path";
+import { execSync } from "child_process";
+import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -15,24 +14,23 @@ const { execSync } = require("child_process");
  * Returns key-value pairs as a plain object. Supports string, number, boolean, arrays.
  * This is NOT a full TOML parser — only handles flat tables needed for MCP config.
  */
-function parseTomlServerEntry(tomlContent, rootKey, serverName) {
+export function parseTomlServerEntry(tomlContent: string, rootKey: string, serverName: string): Record<string, unknown> | null {
   const tableHeader = `[${rootKey}.${serverName}]`;
   const idx = tomlContent.indexOf(tableHeader);
   if (idx === -1) return null;
 
   const afterHeader = tomlContent.slice(idx + tableHeader.length);
-  const nextTable = afterHeader.search(/\n\[(?!\[)/); // next top-level table
+  const nextTable = afterHeader.search(/\n\[(?!\[)/);
   const block = nextTable === -1 ? afterHeader : afterHeader.slice(0, nextTable);
 
-  const result = {};
+  const result: Record<string, unknown> = {};
   for (const line of block.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("[")) continue;
     const eq = trimmed.indexOf("=");
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
-    let val = trimmed.slice(eq + 1).trim();
-    // Parse value
+    const val = trimmed.slice(eq + 1).trim();
     if (val.startsWith('"') && val.endsWith('"')) {
       result[key] = val.slice(1, -1);
     } else if (val === "true") {
@@ -49,32 +47,30 @@ function parseTomlServerEntry(tomlContent, rootKey, serverName) {
 }
 
 /**
- * Parse a nested TOML sub-table (e.g., [mcp_servers.prior.env] or [mcp_servers.prior.http_headers]).
+ * Parse nested TOML sub-tables (e.g., [mcp_servers.prior.env]).
  */
-function parseTomlSubTables(tomlContent, rootKey, serverName) {
+export function parseTomlSubTables(tomlContent: string, rootKey: string, serverName: string): Record<string, Record<string, string>> {
   const prefix = `[${rootKey}.${serverName}.`;
-  const result = {};
+  const result: Record<string, Record<string, string>> = {};
   let idx = 0;
   while ((idx = tomlContent.indexOf(prefix, idx)) !== -1) {
-    const lineStart = tomlContent.lastIndexOf("\n", idx) + 1;
     const lineEnd = tomlContent.indexOf("\n", idx);
     const header = tomlContent.slice(idx, lineEnd === -1 ? undefined : lineEnd).trim();
-    // Extract sub-table name from [mcp_servers.prior.env]
-    const subName = header.slice(prefix.length, -1); // remove trailing ]
+    const subName = header.slice(prefix.length, -1);
     if (!subName || subName.includes(".")) { idx++; continue; }
 
     const afterHeader = tomlContent.slice(lineEnd === -1 ? tomlContent.length : lineEnd);
     const nextTable = afterHeader.search(/\n\[(?!\[)/);
     const block = nextTable === -1 ? afterHeader : afterHeader.slice(0, nextTable);
 
-    const sub = {};
+    const sub: Record<string, string> = {};
     for (const line of block.split("\n")) {
       const t = line.trim();
       if (!t || t.startsWith("#") || t.startsWith("[")) continue;
       const eq = t.indexOf("=");
       if (eq === -1) continue;
       const k = t.slice(0, eq).trim();
-      let v = t.slice(eq + 1).trim();
+      const v = t.slice(eq + 1).trim();
       if (v.startsWith('"') && v.endsWith('"')) sub[k] = v.slice(1, -1);
       else sub[k] = v;
     }
@@ -86,18 +82,14 @@ function parseTomlSubTables(tomlContent, rootKey, serverName) {
 
 /**
  * Build TOML text for a server entry.
- * @param {string} rootKey - e.g., "mcp_servers"
- * @param {string} serverName - e.g., "prior"
- * @param {object} config - { url, bearer_token_env_var, http_headers, ... }
- * @returns {string} TOML text block
  */
-function buildTomlEntry(rootKey, serverName, config) {
+export function buildTomlEntry(rootKey: string, serverName: string, config: Record<string, unknown>): string {
   const lines = [`[${rootKey}.${serverName}]`];
-  const subTables = {};
+  const subTables: Record<string, Record<string, unknown>> = {};
 
   for (const [k, v] of Object.entries(config)) {
     if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-      subTables[k] = v;
+      subTables[k] = v as Record<string, unknown>;
     } else if (typeof v === "string") {
       lines.push(`${k} = "${v}"`);
     } else if (typeof v === "boolean" || typeof v === "number") {
@@ -120,15 +112,13 @@ function buildTomlEntry(rootKey, serverName, config) {
 
 /**
  * Remove a TOML server entry block from content.
- * Removes [rootKey.serverName] and any [rootKey.serverName.*] sub-tables.
  */
-function removeTomlEntry(tomlContent, rootKey, serverName) {
+export function removeTomlEntry(tomlContent: string, rootKey: string, serverName: string): string {
   const mainHeader = `[${rootKey}.${serverName}]`;
   const subPrefix = `[${rootKey}.${serverName}.`;
 
-  // Find all lines belonging to this entry
   const lines = tomlContent.split("\n");
-  const result = [];
+  const result: string[] = [];
   let inEntry = false;
 
   for (const line of lines) {
@@ -145,7 +135,6 @@ function removeTomlEntry(tomlContent, rootKey, serverName) {
     }
   }
 
-  // Clean up extra blank lines
   return result.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
 }
 
@@ -153,21 +142,15 @@ function removeTomlEntry(tomlContent, rootKey, serverName) {
 
 /**
  * Read an MCP server entry from a config file (JSON or TOML).
- * @param {string} configPath - Path to config file
- * @param {string} rootKey - Root key ("mcpServers", "servers", or "mcp_servers")
- * @param {string} serverName - Server name to read
- * @param {string} [configFormat="json"] - "json" or "toml"
- * @returns {object|null} Server config or null
  */
-function readMcpEntry(configPath, rootKey, serverName, configFormat = "json") {
+export function readMcpEntry(configPath: string, rootKey: string, serverName: string, configFormat: string = "json"): Record<string, unknown> | null {
   try {
     let raw = fs.readFileSync(configPath, "utf-8");
-    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1); // Strip BOM
+    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
 
     if (configFormat === "toml") {
       const entry = parseTomlServerEntry(raw, rootKey, serverName);
       if (!entry) return null;
-      // Merge sub-tables
       const subs = parseTomlSubTables(raw, rootKey, serverName);
       return { ...entry, ...subs };
     }
@@ -179,59 +162,34 @@ function readMcpEntry(configPath, rootKey, serverName, configFormat = "json") {
 
 // ─── Config Builders ─────────────────────────────────────────
 
+function _fileExists(p: string): boolean {
+  try { return fs.statSync(p).isFile(); } catch { return false; }
+}
+
 /**
  * Build HTTP MCP config for a platform.
- * Handles platform-specific field names (url vs serverUrl, type field).
- * @param {string} serverUrl - MCP server URL
- * @param {string} platform - Platform id
- * @returns {object} MCP config object
+ * Uses the platform registry to determine field names.
  */
-function buildHttpConfig(serverUrl, platform) {
-  if (platform === "windsurf") return { serverUrl };
-  if (platform === "claude-code") return { type: "http", url: serverUrl };
-  if (platform === "vscode") return { type: "http", url: serverUrl };
-  if (platform === "cursor") return { type: "streamable-http", url: serverUrl };
-  if (platform === "gemini-cli") return { httpUrl: serverUrl };
-  // codex, cline, roo-code all use { url }
-  return { url: serverUrl };
+export function buildHttpConfig(serverUrl: string, platform: string): Record<string, unknown> {
+  const def = PLATFORM_REGISTRY.get(platform);
+  if (!def) return { url: serverUrl };
+
+  const result: Record<string, unknown> = { [def.httpShape.urlField]: serverUrl };
+  if (def.httpShape.typeField) result.type = def.httpShape.typeField;
+  return result;
 }
 
 /**
  * Build HTTP MCP config with auth headers.
- * @param {string} serverUrl - MCP server URL
- * @param {string} apiKey - API key for auth
- * @param {string} platform - Platform id
- * @param {object} [extraHeaders] - Additional headers
- * @returns {object} MCP config with headers
  */
-function buildHttpConfigWithAuth(serverUrl, apiKey, platform, extraHeaders) {
+export function buildHttpConfigWithAuth(serverUrl: string, apiKey: string, platform: string, extraHeaders?: Record<string, string>): Record<string, unknown> {
   const base = buildHttpConfig(serverUrl, platform);
-
-  if (platform === "codex") {
-    // Codex TOML uses http_headers for static headers
-    return {
-      ...base,
-      http_headers: {
-        Authorization: `Bearer ${apiKey}`,
-        ...extraHeaders,
-      },
-    };
-  }
-
-  if (platform === "gemini-cli") {
-    // Gemini CLI uses headers object
-    return {
-      ...base,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        ...extraHeaders,
-      },
-    };
-  }
+  const def = PLATFORM_REGISTRY.get(platform);
+  const headersField = def?.httpShape.headersField ?? "headers";
 
   return {
     ...base,
-    headers: {
+    [headersField]: {
       Authorization: `Bearer ${apiKey}`,
       ...extraHeaders,
     },
@@ -240,12 +198,8 @@ function buildHttpConfigWithAuth(serverUrl, apiKey, platform, extraHeaders) {
 
 /**
  * Build stdio MCP config.
- * @param {string} command - Command to run
- * @param {string[]} args - Command arguments
- * @param {object} env - Environment variables
- * @returns {object} MCP stdio config
  */
-function buildStdioConfig(command, args, env) {
+export function buildStdioConfig(command: string, args: string[], env: Record<string, string>): Record<string, unknown> {
   if (process.platform === "win32") {
     return { command: "cmd", args: ["/c", command, ...args], env };
   }
@@ -254,94 +208,34 @@ function buildStdioConfig(command, args, env) {
 
 // ─── Install ─────────────────────────────────────────────────
 
-function fileExists(p) {
-  try { return fs.statSync(p).isFile(); } catch { return false; }
-}
-
 /**
  * Install MCP config for a platform.
- * Tries platform CLI first (if available), falls back to JSON write.
- * @param {object} platform - Platform object from detect
- * @param {string} serverName - Server name (e.g., "prior")
- * @param {object} mcpEntry - MCP config object
- * @param {object} [options] - { dryRun, serverUrl }
- * @returns {{ success: boolean, method: string }}
+ * Tries platform CLI first (if available), falls back to file write.
  */
-function installMcp(platform, serverName, mcpEntry, options = {}) {
-  const { dryRun = false, serverUrl } = options;
+export function installMcp(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, options: { dryRun?: boolean; serverUrl?: string } = {}): { success: boolean; method: string } {
+  const { dryRun = false } = options;
+  const def = PLATFORM_REGISTRY.get(platform.platform);
 
-  // Claude Code: try CLI first
-  if (platform.platform === "claude-code" && platform.hasCli && mcpEntry.url) {
-    try {
-      if (!dryRun) {
-        const headerArgs = mcpEntry.headers
-          ? Object.entries(mcpEntry.headers).map(([k, v]) => `--header "${k}: ${v}"`).join(" ")
-          : "";
-        execSync(`claude mcp add --transport http -s user ${headerArgs} ${serverName} ${mcpEntry.url}`, {
-          encoding: "utf-8", timeout: 15000, stdio: "pipe",
-        });
-        const check = readMcpEntry(platform.configPath, platform.rootKey, serverName);
-        if (check) return { success: true, method: "cli" };
-      } else {
-        return { success: true, method: "cli" };
-      }
-    } catch { /* fall through */ }
+  // Try CLI install first
+  if (def?.cliInstall && platform.hasCli) {
+    const cliArgs = def.cliInstall.buildArgs(serverName, mcpEntry);
+    if (cliArgs) {
+      try {
+        if (!dryRun) {
+          const cliCmd = def.detection.cli!;
+          execSync(`${cliCmd} ${cliArgs.map(a => a.includes(" ") ? `"${a}"` : a).join(" ")}`, {
+            encoding: "utf-8", timeout: 15000, stdio: "pipe",
+          });
+          const check = readMcpEntry(platform.configPath, platform.rootKey, serverName, platform.configFormat);
+          if (check) return { success: true, method: "cli" };
+        } else {
+          return { success: true, method: "cli" };
+        }
+      } catch { /* fall through to file write */ }
+    }
   }
 
-  // Cursor: try CLI first
-  if (platform.platform === "cursor" && platform.hasCli) {
-    try {
-      const mcpJson = JSON.stringify({ name: serverName, ...mcpEntry });
-      if (!dryRun) {
-        execSync(`cursor --add-mcp '${mcpJson.replace(/'/g, "'\\''")}'`, {
-          encoding: "utf-8", timeout: 15000, stdio: "pipe",
-        });
-        const check = readMcpEntry(platform.configPath, platform.rootKey, serverName);
-        if (check) return { success: true, method: "cli" };
-      } else {
-        return { success: true, method: "cli" };
-      }
-    } catch { /* fall through */ }
-  }
-
-  // VS Code: try CLI first
-  if (platform.platform === "vscode" && platform.hasCli) {
-    try {
-      const mcpJson = JSON.stringify({ name: serverName, ...mcpEntry });
-      if (!dryRun) {
-        execSync(`code --add-mcp '${mcpJson.replace(/'/g, "'\\''")}'`, {
-          encoding: "utf-8", timeout: 15000, stdio: "pipe",
-        });
-        const check = readMcpEntry(platform.configPath, platform.rootKey, serverName);
-        if (check) return { success: true, method: "cli" };
-      } else {
-        return { success: true, method: "cli" };
-      }
-    } catch { /* fall through */ }
-  }
-
-  // Codex: skip CLI for HTTP (codex mcp add treats URLs as stdio commands).
-  // Use CLI only for stdio transport where the command syntax is unambiguous.
-  if (platform.platform === "codex" && platform.hasCli && mcpEntry.command) {
-    try {
-      const cliArgs = [serverName, "--", mcpEntry.command, ...(mcpEntry.args || [])].join(" ");
-      if (!dryRun) {
-        execSync(`codex mcp add ${cliArgs}`, {
-          encoding: "utf-8", timeout: 15000, stdio: "pipe",
-        });
-        const check = readMcpEntry(platform.configPath, platform.rootKey, serverName, "toml");
-        if (check) return { success: true, method: "cli" };
-      } else {
-        return { success: true, method: "cli" };
-      }
-    } catch { /* fall through to TOML write */ }
-  }
-
-  // Gemini CLI: try CLI first (gemini mcp add <name> -- or manual JSON)
-  // Gemini's `gemini mcp add` is for stdio primarily; HTTP goes through settings.json
-  // Fall through to JSON write for HTTP
-
-  // TOML write for Codex, JSON write for all others
+  // File write
   if (platform.configFormat === "toml") {
     return installMcpToml(platform, serverName, mcpEntry, dryRun);
   }
@@ -350,17 +244,11 @@ function installMcp(platform, serverName, mcpEntry, options = {}) {
 
 /**
  * Write MCP config directly to JSON file.
- * Merges with existing config, creates backup.
- * @param {object} platform - Platform object
- * @param {string} serverName - Server name
- * @param {object} mcpEntry - MCP config
- * @param {boolean} dryRun
- * @returns {{ success: boolean, method: string }}
  */
-function installMcpJson(platform, serverName, mcpEntry, dryRun) {
+export function installMcpJson(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean): { success: boolean; method: string } {
   const { configPath, rootKey } = platform;
 
-  let existing = {};
+  let existing: Record<string, unknown> = {};
   try {
     let raw = fs.readFileSync(configPath, "utf-8");
     if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
@@ -369,16 +257,14 @@ function installMcpJson(platform, serverName, mcpEntry, dryRun) {
   } catch { /* start fresh */ }
 
   if (!existing[rootKey]) existing[rootKey] = {};
-  existing[rootKey][serverName] = mcpEntry;
+  (existing[rootKey] as Record<string, unknown>)[serverName] = mcpEntry;
 
   if (!dryRun) {
     const dir = path.dirname(configPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    if (fileExists(configPath)) {
+    if (_fileExists(configPath)) {
       try { fs.copyFileSync(configPath, configPath + ".bak"); } catch {}
     }
-
     fs.writeFileSync(configPath, JSON.stringify(existing, null, 2) + "\n");
   }
 
@@ -387,20 +273,13 @@ function installMcpJson(platform, serverName, mcpEntry, dryRun) {
 
 /**
  * Write MCP config to TOML file (Codex).
- * Appends or replaces a [mcp_servers.<name>] table.
- * @param {object} platform - Platform object
- * @param {string} serverName - Server name
- * @param {object} mcpEntry - MCP config
- * @param {boolean} dryRun
- * @returns {{ success: boolean, method: string }}
  */
-function installMcpToml(platform, serverName, mcpEntry, dryRun) {
+export function installMcpToml(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean): { success: boolean; method: string } {
   const { configPath, rootKey } = platform;
 
   let existing = "";
   try { existing = fs.readFileSync(configPath, "utf-8"); } catch { /* start fresh */ }
 
-  // Remove existing entry if present
   const tableHeader = `[${rootKey}.${serverName}]`;
   if (existing.includes(tableHeader)) {
     existing = removeTomlEntry(existing, rootKey, serverName);
@@ -411,11 +290,9 @@ function installMcpToml(platform, serverName, mcpEntry, dryRun) {
   if (!dryRun) {
     const dir = path.dirname(configPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    if (fileExists(configPath)) {
+    if (_fileExists(configPath)) {
       try { fs.copyFileSync(configPath, configPath + ".bak"); } catch {}
     }
-
     const sep = existing && !existing.endsWith("\n\n") ? (existing.endsWith("\n") ? "\n" : "\n\n") : "";
     fs.writeFileSync(configPath, existing + sep + newBlock + "\n");
   }
@@ -425,16 +302,11 @@ function installMcpToml(platform, serverName, mcpEntry, dryRun) {
 
 /**
  * Remove an MCP server entry from a platform config.
- * @param {object} platform - Platform object
- * @param {string} serverName - Server name to remove
- * @param {boolean} dryRun
- * @returns {boolean} Whether anything was removed
  */
-function uninstallMcp(platform, serverName, dryRun) {
+export function uninstallMcp(platform: DetectedPlatform, serverName: string, dryRun: boolean = false): boolean {
   const { configPath, rootKey } = platform;
-  if (!fileExists(configPath)) return false;
+  if (!_fileExists(configPath)) return false;
 
-  // TOML path (Codex)
   if (platform.configFormat === "toml") {
     try {
       const content = fs.readFileSync(configPath, "utf-8");
@@ -453,7 +325,6 @@ function uninstallMcp(platform, serverName, dryRun) {
     } catch { return false; }
   }
 
-  // JSON path
   try {
     const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     if (!data?.[rootKey]?.[serverName]) return false;
@@ -473,31 +344,10 @@ function uninstallMcp(platform, serverName, dryRun) {
 
 /**
  * Update API key in existing MCP config.
- * @param {object} platform - Platform object
- * @param {string} serverName - Server name
- * @param {object} mcpEntry - New MCP config
- * @returns {{ success: boolean, method: string }}
  */
-function updateMcpKey(platform, serverName, mcpEntry) {
+export function updateMcpKey(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>): { success: boolean; method: string } {
   if (platform.configFormat === "toml") {
     return installMcpToml(platform, serverName, mcpEntry, false);
   }
   return installMcpJson(platform, serverName, mcpEntry, false);
 }
-
-module.exports = {
-  readMcpEntry,
-  buildHttpConfig,
-  buildHttpConfigWithAuth,
-  buildStdioConfig,
-  installMcp,
-  installMcpJson,
-  installMcpToml,
-  uninstallMcp,
-  updateMcpKey,
-  // TOML helpers (exported for testing)
-  parseTomlServerEntry,
-  parseTomlSubTables,
-  buildTomlEntry,
-  removeTomlEntry,
-};

@@ -2,19 +2,16 @@
 // Handles appending, updating, and removing rules from shared files.
 // Zero dependencies.
 
-"use strict";
-
-const fs = require("fs");
-const path = require("path");
+import * as fs from "fs";
+import * as path from "path";
+import type { DetectedPlatform } from "./platforms";
 
 // ─── Constants ──────────────────────────────────────────────
 
 /**
  * Create regex patterns for a given marker name.
- * @param {string} marker - Marker name (e.g., "prior")
- * @returns {{ MARKER_RE: RegExp, BLOCK_RE: RegExp }}
  */
-function markerPatterns(marker) {
+export function markerPatterns(marker: string): { MARKER_RE: RegExp; BLOCK_RE: RegExp } {
   return {
     MARKER_RE: new RegExp(`<!-- ${marker}:v[\\d.]+ -->`),
     BLOCK_RE: new RegExp(`<!-- ${marker}:v[\\d.]+ -->[\\s\\S]*?<!-- \\/${marker} -->\\n?`),
@@ -23,33 +20,28 @@ function markerPatterns(marker) {
 
 /**
  * Parse version from marker in content.
- * @param {string} content
- * @param {string} marker
- * @returns {string|null}
  */
-function parseRulesVersion(content, marker) {
+export function parseRulesVersion(content: string, marker: string): string | null {
   const m = content.match(new RegExp(`<!-- ${marker}:v([\\d.]+) -->`));
   return m ? m[1] : null;
 }
 
 // ─── Install ─────────────────────────────────────────────────
 
+export interface InstallRulesOptions {
+  content: string;
+  version: string;
+  marker: string;
+  fileName?: string;
+  clipboardPlatforms?: string[];
+  dryRun?: boolean;
+  copyToClipboard?: (text: string) => boolean;
+}
+
 /**
  * Install behavioral rules to a platform's rules file.
- * Supports: file-based (append/update), standalone file, or clipboard.
- *
- * @param {object} platform - Platform object with rulesPath
- * @param {object} options
- * @param {string} options.content - Rules content (with markers)
- * @param {string} options.version - Current version string
- * @param {string} options.marker - Marker name for tracking
- * @param {string} [options.fileName] - For standalone file platforms (e.g., "prior.md")
- * @param {string[]} [options.clipboardPlatforms] - Platform ids that use clipboard
- * @param {boolean} [options.dryRun]
- * @param {Function} [options.copyToClipboard] - Clipboard function
- * @returns {{ action: string }} "created" | "updated" | "skipped" | "clipboard"
  */
-function installRules(platform, options) {
+export function installRules(platform: DetectedPlatform, options: InstallRulesOptions): { action: string } {
   const {
     content,
     version,
@@ -60,7 +52,6 @@ function installRules(platform, options) {
     copyToClipboard,
   } = options;
 
-  // Clipboard-only platforms
   if (clipboardPlatforms.includes(platform.platform)) {
     if (!dryRun && copyToClipboard) {
       copyToClipboard(content);
@@ -70,22 +61,19 @@ function installRules(platform, options) {
 
   if (!platform.rulesPath) return { action: "skipped" };
 
-  // Determine actual file path — standalone file (directory-based) vs append (file-based)
-  // Only use fileName if rulesPath is a directory (or doesn't exist yet as a file)
-  let rulesPath;
+  let rulesPath: string;
   if (fileName) {
     try {
       const stat = fs.statSync(platform.rulesPath);
       rulesPath = stat.isDirectory() ? path.join(platform.rulesPath, fileName) : platform.rulesPath;
     } catch {
-      // Path doesn't exist — check if it looks like a file (has extension) or directory
       rulesPath = path.extname(platform.rulesPath) ? platform.rulesPath : path.join(platform.rulesPath, fileName);
     }
   } else {
     rulesPath = platform.rulesPath;
   }
 
-  const { MARKER_RE, BLOCK_RE } = markerPatterns(marker);
+  const { BLOCK_RE } = markerPatterns(marker);
 
   let existing = "";
   try { existing = fs.readFileSync(rulesPath, "utf-8"); } catch {}
@@ -101,13 +89,11 @@ function installRules(platform, options) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     if (existingVersion) {
-      // Replace existing block
       const updated = existing.replace(BLOCK_RE, content + "\n");
       fs.writeFileSync(rulesPath, updated);
       return { action: "updated" };
     }
 
-    // Append
     const sep = existing && !existing.endsWith("\n\n") ? (existing.endsWith("\n") ? "\n" : "\n\n") : "";
     fs.writeFileSync(rulesPath, existing + sep + content + "\n");
     return { action: "created" };
@@ -118,19 +104,13 @@ function installRules(platform, options) {
 
 /**
  * Remove rules from a platform's rules file.
- * @param {object} platform - Platform object
- * @param {object} options
- * @param {string} options.marker - Marker name
- * @param {string} [options.fileName] - For standalone file platforms
- * @param {boolean} [options.dryRun]
- * @returns {boolean} Whether anything was removed
  */
-function uninstallRules(platform, options) {
+export function uninstallRules(platform: DetectedPlatform, options: { marker: string; fileName?: string; dryRun?: boolean }): boolean {
   const { marker, fileName, dryRun = false } = options;
 
   if (!platform.rulesPath) return false;
 
-  let rulesPath;
+  let rulesPath: string;
   if (fileName) {
     try {
       const stat = fs.statSync(platform.rulesPath);
@@ -161,10 +141,3 @@ function uninstallRules(platform, options) {
     return true;
   } catch { return false; }
 }
-
-module.exports = {
-  markerPatterns,
-  parseRulesVersion,
-  installRules,
-  uninstallRules,
-};

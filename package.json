@@ -1,26 +1,31 @@
 {
   "name": "@cg3/equip",
-  "version": "0.2.23",
+  "version": "0.3.0",
   "description": "Universal MCP + behavioral rules installer for AI coding agents",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "equip": "bin/equip.js"
   },
   "exports": {
-    ".": "./index.js",
-    "./detect": "./lib/detect.js",
-    "./mcp": "./lib/mcp.js",
-    "./rules": "./lib/rules.js",
-    "./platforms": "./lib/platforms.js",
-    "./cli": "./lib/cli.js",
+    ".": { "types": "./dist/index.d.ts", "require": "./dist/index.js" },
+    "./detect": { "types": "./dist/lib/detect.d.ts", "require": "./dist/lib/detect.js" },
+    "./mcp": { "types": "./dist/lib/mcp.d.ts", "require": "./dist/lib/mcp.js" },
+    "./rules": { "types": "./dist/lib/rules.d.ts", "require": "./dist/lib/rules.js" },
+    "./platforms": { "types": "./dist/lib/platforms.d.ts", "require": "./dist/lib/platforms.js" },
+    "./cli": { "types": "./dist/lib/cli.d.ts", "require": "./dist/lib/cli.js" },
     "./package.json": "./package.json"
   },
   "files": [
-    "index.js",
+    "dist/",
     "bin/",
-    "lib/",
     "demo/"
   ],
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc && node --test test/equip.test.js",
+    "prepublishOnly": "npm run build"
+  },
   "keywords": [
     "mcp",
     "ai",
@@ -43,5 +48,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
   }
 }

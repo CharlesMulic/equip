@@ -30,7 +30,7 @@ const {
   parseTomlSubTables,
   buildTomlEntry,
   removeTomlEntry,
-} = require("../index");
+} = require("..");
 
 // ─── Helpers ─────────────────────────────────────────────────
 

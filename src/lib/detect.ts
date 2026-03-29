@@ -1,0 +1,81 @@
+// Platform detection — discovers installed AI coding tools.
+// Uses the platform registry as single source of truth.
+// Zero dependencies.
+
+import * as fs from "fs";
+import { execSync } from "child_process";
+import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
+import { readMcpEntry } from "./mcp";
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+export function whichSync(cmd: string): string | null {
+  try {
+    const r = execSync(process.platform === "win32" ? `where ${cmd} 2>nul` : `which ${cmd} 2>/dev/null`, { encoding: "utf-8", timeout: 5000 });
+    return r.trim().split(/\r?\n/)[0] || null;
+  } catch { return null; }
+}
+
+export function dirExists(p: string): boolean {
+  try { return fs.statSync(p).isDirectory(); } catch { return false; }
+}
+
+export function fileExists(p: string): boolean {
+  try { return fs.statSync(p).isFile(); } catch { return false; }
+}
+
+export function cliVersion(cmd: string, regex?: RegExp): string | null {
+  try {
+    const out = execSync(`${cmd} --version 2>&1`, { encoding: "utf-8", timeout: 5000 });
+    const m = out.match(regex || /(\d+\.\d+[\.\d]*)/);
+    return m ? m[1] : "unknown";
+  } catch { return null; }
+}
+
+// ─── Detection ──────────────────────────────────────────────
+
+/**
+ * Detect installed AI coding platforms.
+ * @param serverName - MCP server name to check for existing config
+ */
+export function detectPlatforms(serverName?: string): DetectedPlatform[] {
+  const platforms: DetectedPlatform[] = [];
+
+  for (const [, def] of PLATFORM_REGISTRY) {
+    const hasCli = def.detection.cli ? !!whichSync(def.detection.cli) : false;
+    const dirFound = def.detection.dirs.some(fn => dirExists(fn()));
+    const fileFound = def.detection.files.some(fn => fileExists(fn()));
+
+    // Also check parent dir for file-based detection (Cline, Roo)
+    const parentDirFound = def.detection.files.some(fn => {
+      const dir = require("path").dirname(fn());
+      return dirExists(dir);
+    });
+
+    if (!hasCli && !dirFound && !fileFound && !parentDirFound) continue;
+
+    // Resolve version
+    let version = "unknown";
+    if (def.detection.versionFn) {
+      version = def.detection.versionFn() || "unknown";
+    } else if (hasCli && def.detection.cli) {
+      version = cliVersion(def.detection.cli) || "unknown";
+    }
+
+    const configPath = def.configPath();
+    const rulesPath = def.rulesPath ? def.rulesPath() : null;
+
+    platforms.push({
+      platform: def.id,
+      version,
+      configPath,
+      rulesPath,
+      existingMcp: serverName ? readMcpEntry(configPath, def.rootKey, serverName, def.configFormat) : null,
+      hasCli,
+      rootKey: def.rootKey,
+      configFormat: def.configFormat,
+    });
+  }
+
+  return platforms;
+}

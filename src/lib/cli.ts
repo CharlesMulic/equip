@@ -1,33 +1,31 @@
 // CLI output helpers, prompts, and clipboard.
 // Zero dependencies.
 
-"use strict";
-
-const os = require("os");
-const readline = require("readline");
+import * as os from "os";
+import * as readline from "readline";
 
 // ─── Colors ──────────────────────────────────────────────────
 
-const GREEN = "\x1b[32m";
-const RED = "\x1b[31m";
-const YELLOW = "\x1b[33m";
-const CYAN = "\x1b[36m";
-const BOLD = "\x1b[1m";
-const DIM = "\x1b[2m";
-const RESET = "\x1b[0m";
+export const GREEN = "\x1b[32m";
+export const RED = "\x1b[31m";
+export const YELLOW = "\x1b[33m";
+export const CYAN = "\x1b[36m";
+export const BOLD = "\x1b[1m";
+export const DIM = "\x1b[2m";
+export const RESET = "\x1b[0m";
 
 // ─── Output ──────────────────────────────────────────────────
 
-function log(msg = "") { process.stderr.write(msg + "\n"); }
-function ok(msg) { log(`  ${GREEN}✓${RESET} ${msg}`); }
-function fail(msg) { log(`  ${RED}✗${RESET} ${msg}`); }
-function warn(msg) { log(`  ${YELLOW}⚠${RESET} ${msg}`); }
-function info(msg) { log(`  ${CYAN}ⓘ${RESET} ${msg}`); }
-function step(n, total, title) { log(`\n${BOLD}[${n}/${total}] ${title}${RESET}`); }
+export function log(msg = ""): void { process.stderr.write(msg + "\n"); }
+export function ok(msg: string): void { log(`  ${GREEN}✓${RESET} ${msg}`); }
+export function fail(msg: string): void { log(`  ${RED}✗${RESET} ${msg}`); }
+export function warn(msg: string): void { log(`  ${YELLOW}⚠${RESET} ${msg}`); }
+export function info(msg: string): void { log(`  ${CYAN}ⓘ${RESET} ${msg}`); }
+export function step(n: number, total: number, title: string): void { log(`\n${BOLD}[${n}/${total}] ${title}${RESET}`); }
 
 // ─── Prompts ─────────────────────────────────────────────────
 
-function prompt(question) {
+export function prompt(question: string): Promise<string> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
     rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); });
@@ -38,7 +36,7 @@ function prompt(question) {
  * Prompt that resolves on Enter (true) or Esc (false).
  * Falls back to readline if stdin isn't a TTY.
  */
-function promptEnterOrEsc(question) {
+export function promptEnterOrEsc(question: string): Promise<boolean> {
   return new Promise((resolve) => {
     process.stderr.write(question);
     if (!process.stdin.isTTY) {
@@ -49,7 +47,7 @@ function promptEnterOrEsc(question) {
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.setEncoding("utf-8");
-    const onData = (key) => {
+    const onData = (key: string): void => {
       if (key === "\x1b") {
         process.stdin.setRawMode(false); process.stdin.pause(); process.stdin.removeListener("data", onData);
         process.stderr.write("\n"); resolve(false);
@@ -68,7 +66,7 @@ function promptEnterOrEsc(question) {
 
 // ─── Clipboard ───────────────────────────────────────────────
 
-function copyToClipboard(text) {
+export function copyToClipboard(text: string): boolean {
   try {
     const cp = require("child_process");
     if (process.platform === "darwin") {
@@ -86,14 +84,6 @@ function copyToClipboard(text) {
 
 // ─── Utilities ───────────────────────────────────────────────
 
-function sanitizeError(msg) {
+export function sanitizeError(msg: string): string {
   return msg.replace(os.homedir(), "~");
 }
-
-module.exports = {
-  GREEN, RED, YELLOW, CYAN, BOLD, DIM, RESET,
-  log, ok, fail, warn, info, step,
-  prompt, promptEnterOrEsc,
-  copyToClipboard,
-  sanitizeError,
-};
