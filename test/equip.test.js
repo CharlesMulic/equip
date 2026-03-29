@@ -636,7 +636,23 @@ describe("equip CLI", () => {
 describe("state module", () => {
   const { readState, writeState, trackInstall, trackUninstall, getStatePath } = require("../dist/lib/state");
 
-  it("reads empty state when no file exists", () => {
+  // Clean up any state pollution from Equip class tests (they use name: "test", "myserver")
+  function cleanupTestState() {
+    const state = readState();
+    let changed = false;
+    for (const name of Object.keys(state.tools)) {
+      const tool = state.tools[name];
+      // Remove entries with tmp paths (test artifacts)
+      const hasTmpPaths = Object.values(tool.platforms).some(p => p.configPath && p.configPath.includes("Temp"));
+      if (hasTmpPaths || name === "test-tool") {
+        delete state.tools[name];
+        changed = true;
+      }
+    }
+    if (changed) writeState(state);
+  }
+
+  it("reads state", () => {
     const state = readState();
     assert.ok(state.tools);
     assert.equal(typeof state.tools, "object");
@@ -654,5 +670,16 @@ describe("state module", () => {
     trackUninstall("test-tool", "claude-code");
     const after = readState();
     assert.ok(!after.tools["test-tool"]);
+  });
+
+  it("cleanup: remove test artifacts from state", () => {
+    cleanupTestState();
+    const state = readState();
+    // Verify no test artifacts remain
+    for (const [name, tool] of Object.entries(state.tools)) {
+      for (const [, plat] of Object.entries(tool.platforms)) {
+        assert.ok(!plat.configPath || !plat.configPath.includes("Temp"), `${name} has tmp configPath`);
+      }
+    }
   });
 });
