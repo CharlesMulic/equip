@@ -5,6 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
+import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } from "./fs";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -221,28 +222,24 @@ export function installMcp(platform: DetectedPlatform, serverName: string, mcpEn
 
 /**
  * Write MCP config directly to JSON file.
+ * Uses atomic writes and detects corrupt config files.
  */
 export function installMcpJson(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean): { success: boolean; method: string } {
   const { configPath, rootKey } = platform;
 
-  let existing: Record<string, unknown> = {};
-  try {
-    let raw = fs.readFileSync(configPath, "utf-8");
-    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
-    existing = JSON.parse(raw);
-    if (typeof existing !== "object" || existing === null) existing = {};
-  } catch { /* start fresh */ }
+  const { data: existing, status, error } = safeReadJsonSync(configPath);
+  if (status === "corrupt") {
+    throw new Error(`Cannot install to ${configPath}: ${error}. Fix the file manually or restore from ${configPath}.bak if available.`);
+  }
 
-  if (!existing[rootKey]) existing[rootKey] = {};
-  (existing[rootKey] as Record<string, unknown>)[serverName] = mcpEntry;
+  const config = existing || {};
+  if (!config[rootKey]) config[rootKey] = {};
+  (config[rootKey] as Record<string, unknown>)[serverName] = mcpEntry;
 
   if (!dryRun) {
-    const dir = path.dirname(configPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (_fileExists(configPath)) {
-      try { fs.copyFileSync(configPath, configPath + ".bak"); } catch {}
-    }
-    fs.writeFileSync(configPath, JSON.stringify(existing, null, 2) + "\n");
+    createBackup(configPath);
+    atomicWriteFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    cleanupBackup(configPath);
   }
 
   return { success: true, method: "json" };
@@ -250,12 +247,13 @@ export function installMcpJson(platform: DetectedPlatform, serverName: string, m
 
 /**
  * Write MCP config to TOML file (Codex).
+ * Uses atomic writes.
  */
 export function installMcpToml(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean): { success: boolean; method: string } {
   const { configPath, rootKey } = platform;
 
   let existing = "";
-  try { existing = fs.readFileSync(configPath, "utf-8"); } catch { /* start fresh */ }
+  try { existing = fs.readFileSync(configPath, "utf-8"); } catch { /* file doesn't exist — start fresh */ }
 
   const tableHeader = `[${rootKey}.${serverName}]`;
   if (existing.includes(tableHeader)) {
@@ -265,13 +263,10 @@ export function installMcpToml(platform: DetectedPlatform, serverName: string, m
   const newBlock = buildTomlEntry(rootKey, serverName, mcpEntry);
 
   if (!dryRun) {
-    const dir = path.dirname(configPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (_fileExists(configPath)) {
-      try { fs.copyFileSync(configPath, configPath + ".bak"); } catch {}
-    }
+    createBackup(configPath);
     const sep = existing && !existing.endsWith("\n\n") ? (existing.endsWith("\n") ? "\n" : "\n\n") : "";
-    fs.writeFileSync(configPath, existing + sep + newBlock + "\n");
+    atomicWriteFileSync(configPath, existing + sep + newBlock + "\n");
+    cleanupBackup(configPath);
   }
 
   return { success: true, method: "toml" };
@@ -290,33 +285,36 @@ export function uninstallMcp(platform: DetectedPlatform, serverName: string, dry
       const tableHeader = `[${rootKey}.${serverName}]`;
       if (!content.includes(tableHeader)) return false;
       if (!dryRun) {
-        fs.copyFileSync(configPath, configPath + ".bak");
+        createBackup(configPath);
         const cleaned = removeTomlEntry(content, rootKey, serverName);
         if (cleaned.trim()) {
-          fs.writeFileSync(configPath, cleaned);
+          atomicWriteFileSync(configPath, cleaned);
         } else {
           fs.unlinkSync(configPath);
         }
+        cleanupBackup(configPath);
       }
       return true;
     } catch { return false; }
   }
 
-  try {
-    const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    if (!data?.[rootKey]?.[serverName]) return false;
-    delete data[rootKey][serverName];
-    if (Object.keys(data[rootKey]).length === 0) delete data[rootKey];
-    if (!dryRun) {
-      fs.copyFileSync(configPath, configPath + ".bak");
-      if (Object.keys(data).length === 0) {
-        fs.unlinkSync(configPath);
-      } else {
-        fs.writeFileSync(configPath, JSON.stringify(data, null, 2) + "\n");
-      }
+  const { data, status } = safeReadJsonSync(configPath);
+  if (status !== "ok" || !data) return false;
+  if (!data[rootKey] || !(data[rootKey] as Record<string, unknown>)[serverName]) return false;
+
+  delete (data[rootKey] as Record<string, unknown>)[serverName];
+  if (Object.keys(data[rootKey] as Record<string, unknown>).length === 0) delete data[rootKey];
+
+  if (!dryRun) {
+    createBackup(configPath);
+    if (Object.keys(data).length === 0) {
+      fs.unlinkSync(configPath);
+    } else {
+      atomicWriteFileSync(configPath, JSON.stringify(data, null, 2) + "\n");
     }
-    return true;
-  } catch { return false; }
+    cleanupBackup(configPath);
+  }
+  return true;
 }
 
 /**

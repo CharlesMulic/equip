@@ -24,6 +24,7 @@ const {
 const { buildHttpConfig, buildHttpConfigWithAuth, installMcpJson, installMcpToml, uninstallMcp } = require("../dist/lib/mcp");
 const { installRules } = require("../dist/lib/rules");
 const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("../dist/lib/mcp");
+const { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup, resolvePackageVersion } = require("../dist/lib/fs");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -679,5 +680,179 @@ describe("state module", () => {
         assert.ok(!plat.configPath || !plat.configPath.includes("Temp"), `${name} has tmp configPath`);
       }
     }
+  });
+});
+
+// ─── Atomic Write ───────────────────────────────────────────
+
+describe("atomicWriteFileSync", () => {
+  it("writes file that is readable", () => {
+    const p = tmpPath("atomic") + ".json";
+    atomicWriteFileSync(p, '{"hello":"world"}\n');
+    assert.equal(fs.readFileSync(p, "utf-8"), '{"hello":"world"}\n');
+    cleanup(p);
+  });
+
+  it("creates parent directories", () => {
+    const dir = tmpPath("atomic-dir");
+    const p = path.join(dir, "sub", "file.json");
+    atomicWriteFileSync(p, "test\n");
+    assert.equal(fs.readFileSync(p, "utf-8"), "test\n");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("overwrites existing file atomically", () => {
+    const p = tmpPath("atomic") + ".json";
+    fs.writeFileSync(p, "original");
+    atomicWriteFileSync(p, "replaced");
+    assert.equal(fs.readFileSync(p, "utf-8"), "replaced");
+    // No .tmp file should remain
+    assert.ok(!fs.existsSync(p + ".tmp"), ".tmp file should be cleaned up");
+    cleanup(p);
+  });
+});
+
+// ─── Safe JSON Read ─────────────────────────────────────────
+
+describe("safeReadJsonSync", () => {
+  it("returns ok for valid JSON", () => {
+    const p = tmpPath("safe-json") + ".json";
+    fs.writeFileSync(p, '{"mcpServers":{"prior":{"url":"https://example.com"}}}');
+    const result = safeReadJsonSync(p);
+    assert.equal(result.status, "ok");
+    assert.ok(result.data);
+    assert.ok(result.data.mcpServers);
+    cleanup(p);
+  });
+
+  it("returns missing for nonexistent file", () => {
+    const result = safeReadJsonSync("/tmp/does-not-exist-" + Date.now() + ".json");
+    assert.equal(result.status, "missing");
+    assert.equal(result.data, null);
+  });
+
+  it("returns corrupt for invalid JSON", () => {
+    const p = tmpPath("corrupt-json") + ".json";
+    fs.writeFileSync(p, "this is not json {{{");
+    const result = safeReadJsonSync(p);
+    assert.equal(result.status, "corrupt");
+    assert.equal(result.data, null);
+    assert.ok(result.error);
+    assert.ok(result.error.includes("Invalid JSON"));
+    cleanup(p);
+  });
+
+  it("returns corrupt for non-object JSON", () => {
+    const p = tmpPath("non-obj") + ".json";
+    fs.writeFileSync(p, '"just a string"');
+    const result = safeReadJsonSync(p);
+    assert.equal(result.status, "corrupt");
+    assert.ok(result.error.includes("not an object"));
+    cleanup(p);
+  });
+
+  it("handles BOM-prefixed files", () => {
+    const p = tmpPath("bom-json") + ".json";
+    fs.writeFileSync(p, "\uFEFF" + '{"key":"value"}');
+    const result = safeReadJsonSync(p);
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.key, "value");
+    cleanup(p);
+  });
+});
+
+// ─── Corrupt Config Detection ───────────────────────────────
+
+describe("installMcpJson with corrupt config", () => {
+  it("throws on corrupt existing config instead of silently overwriting", () => {
+    const p = mockPlatform();
+    fs.writeFileSync(p.configPath, "this is corrupt json {{{");
+    assert.throws(
+      () => installMcpJson(p, "myserver", { url: "https://example.com" }, false),
+      /Cannot install.*Invalid JSON/
+    );
+    // Verify the corrupt file was NOT overwritten
+    assert.equal(fs.readFileSync(p.configPath, "utf-8"), "this is corrupt json {{{");
+    cleanup(p.configPath);
+  });
+
+  it("starts fresh when config file doesn't exist (not corrupt)", () => {
+    const p = mockPlatform();
+    cleanup(p.configPath);
+    // Should succeed — missing file is fine, corrupt is not
+    const result = installMcpJson(p, "myserver", { url: "https://example.com" }, false);
+    assert.ok(result.success);
+    const data = JSON.parse(fs.readFileSync(p.configPath, "utf-8"));
+    assert.equal(data.mcpServers.myserver.url, "https://example.com");
+    cleanup(p.configPath);
+  });
+});
+
+// ─── Backup Cleanup ────────────────────────────────────────
+
+describe("backup lifecycle", () => {
+  it("createBackup creates .bak file", () => {
+    const p = tmpPath("bak-test") + ".json";
+    fs.writeFileSync(p, '{"original":true}');
+    const created = createBackup(p);
+    assert.ok(created);
+    assert.ok(fs.existsSync(p + ".bak"));
+    assert.equal(fs.readFileSync(p + ".bak", "utf-8"), '{"original":true}');
+    cleanup(p);
+  });
+
+  it("cleanupBackup removes .bak file", () => {
+    const p = tmpPath("bak-cleanup") + ".json";
+    fs.writeFileSync(p, "content");
+    fs.writeFileSync(p + ".bak", "backup");
+    cleanupBackup(p);
+    assert.ok(!fs.existsSync(p + ".bak"));
+    cleanup(p);
+  });
+
+  it("installMcpJson does not leave .bak after success", () => {
+    const p = mockPlatform();
+    // Create initial config so backup is created
+    fs.writeFileSync(p.configPath, '{"mcpServers":{"other":{"url":"https://other.com"}}}');
+    installMcpJson(p, "myserver", { url: "https://example.com" }, false);
+    // .bak should be cleaned up
+    assert.ok(!fs.existsSync(p.configPath + ".bak"), ".bak should not exist after successful write");
+    // Original data should be preserved
+    const data = JSON.parse(fs.readFileSync(p.configPath, "utf-8"));
+    assert.ok(data.mcpServers.other, "other server should be preserved");
+    assert.ok(data.mcpServers.myserver, "new server should be present");
+    cleanup(p.configPath);
+  });
+
+  it("installMcpToml does not leave .bak after success", () => {
+    const configPath = tmpPath("toml-bak") + ".toml";
+    const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
+    fs.writeFileSync(configPath, '[mcp_servers.existing]\nurl = "https://example.com"\n');
+    installMcpToml(p, "prior", { url: "https://api.cg3.io/mcp" }, false);
+    assert.ok(!fs.existsSync(configPath + ".bak"), ".bak should not exist after successful write");
+    cleanup(configPath);
+  });
+
+  it("uninstallMcp does not leave .bak after success", () => {
+    const p = mockPlatform();
+    fs.writeFileSync(p.configPath, JSON.stringify({ mcpServers: { prior: { url: "x" }, other: { url: "y" } } }));
+    uninstallMcp(p, "prior", false);
+    assert.ok(!fs.existsSync(p.configPath + ".bak"), ".bak should not exist after successful uninstall");
+    cleanup(p.configPath);
+  });
+});
+
+// ─── Package Version Resolution ─────────────────────────────
+
+describe("resolvePackageVersion", () => {
+  it("finds equip version from dist/lib directory", () => {
+    const distLib = path.join(__dirname, "..", "dist", "lib");
+    const version = resolvePackageVersion(distLib);
+    assert.match(version, /^\d+\.\d+\.\d+/);
+  });
+
+  it("returns unknown for unresolvable directory", () => {
+    const version = resolvePackageVersion("/tmp");
+    assert.equal(version, "unknown");
   });
 });

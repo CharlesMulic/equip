@@ -1,9 +1,8 @@
 // equip update — self-update equip and migrate configs if needed.
 
 import { execSync } from "child_process";
-import * as fs from "fs";
-import * as path from "path";
 import { readState, markUpdated } from "../state";
+import { resolvePackageVersion } from "../fs";
 import * as cli from "../cli";
 
 export function runUpdate(): void {
@@ -52,12 +51,7 @@ export function runUpdate(): void {
 }
 
 function getInstalledVersion(): string {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "..", "package.json"), "utf-8"));
-    return pkg.version;
-  } catch {
-    return "unknown";
-  }
+  return resolvePackageVersion(__dirname);
 }
 
 function getGlobalVersion(): string | null {

@@ -6,6 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { DetectedPlatform } from "./platforms";
 import { copyToClipboard } from "./cli";
+import { atomicWriteFileSync } from "./fs";
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -84,17 +85,14 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
   }
 
   if (!dryRun) {
-    const dir = path.dirname(rulesPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
     if (existingVersion) {
       const updated = existing.replace(BLOCK_RE, content + "\n");
-      fs.writeFileSync(rulesPath, updated);
+      atomicWriteFileSync(rulesPath, updated);
       return { action: "updated" };
     }
 
     const sep = existing && !existing.endsWith("\n\n") ? (existing.endsWith("\n") ? "\n" : "\n\n") : "";
-    fs.writeFileSync(rulesPath, existing + sep + content + "\n");
+    atomicWriteFileSync(rulesPath, existing + sep + content + "\n");
     return { action: "created" };
   }
 
@@ -132,7 +130,7 @@ export function uninstallRules(platform: DetectedPlatform, options: { marker: st
     if (!dryRun) {
       const cleaned = content.replace(BLOCK_RE, "").replace(/\n{3,}/g, "\n\n").trim();
       if (cleaned) {
-        fs.writeFileSync(rulesPath, cleaned + "\n");
+        atomicWriteFileSync(rulesPath, cleaned + "\n");
       } else {
         fs.unlinkSync(rulesPath);
       }

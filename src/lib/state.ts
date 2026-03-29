@@ -11,6 +11,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { atomicWriteFileSync, resolvePackageVersion } from "./fs";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -66,10 +67,7 @@ export function readState(): EquipState {
 }
 
 export function writeState(state: EquipState): void {
-  fs.mkdirSync(EQUIP_DIR, { recursive: true });
-  const tmp = STATE_PATH + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + "\n");
-  fs.renameSync(tmp, STATE_PATH);
+  atomicWriteFileSync(STATE_PATH, JSON.stringify(state, null, 2) + "\n");
 }
 
 // ─── Tool Tracking ──────────────────────────────────────────
@@ -132,10 +130,5 @@ export function markUpdated(): void {
 // ─── Helpers ────────────────────────────────────────────────
 
 function getEquipVersion(): string {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf-8"));
-    return pkg.version;
-  } catch {
-    return "unknown";
-  }
+  return resolvePackageVersion(__dirname);
 }
