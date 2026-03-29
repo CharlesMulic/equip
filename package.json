@@ -1,6 +1,6 @@
 {
   "name": "@cg3/equip",
-  "version": "0.2.22",
+  "version": "0.2.23",
   "description": "Universal MCP + behavioral rules installer for AI coding agents",
   "main": "index.js",
   "bin": {
@@ -35,11 +35,11 @@
     "codex",
     "gemini"
   ],
-  "author": "CG3 LLC",
+  "author": "Charles Mulic",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cg3-llc/equip"
+    "url": "https://github.com/CharlesMulic/equip"
   },
   "engines": {
     "node": ">=18"
