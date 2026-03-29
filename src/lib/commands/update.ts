@@ -21,8 +21,8 @@ export function runUpdate(): void {
       timeout: 60000,
       stdio: "pipe",
     });
-    const newVersion = getInstalledVersion();
-    if (newVersion !== oldVersion) {
+    const newVersion = getGlobalVersion();
+    if (newVersion && newVersion !== oldVersion) {
       cli.ok(`Updated to v${newVersion}`);
     } else {
       cli.ok(`Already at latest (v${oldVersion})`);
@@ -57,5 +57,20 @@ function getInstalledVersion(): string {
     return pkg.version;
   } catch {
     return "unknown";
+  }
+}
+
+function getGlobalVersion(): string | null {
+  try {
+    const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+    const out = execSync(`${npmCmd} list -g @cg3/equip --json`, {
+      encoding: "utf-8",
+      timeout: 15000,
+      stdio: "pipe",
+    });
+    const data = JSON.parse(out);
+    return data?.dependencies?.["@cg3/equip"]?.version || null;
+  } catch {
+    return null;
   }
 }
