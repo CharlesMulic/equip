@@ -102,15 +102,19 @@ class Equip {
   installRules(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): { action: string } {
     if (!this.rules) return { action: "skipped" };
     const result = installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
-    if ((result.action === "created" || result.action === "updated") && !options.dryRun) {
-      try {
-        trackInstall(this.name, this.package, platform.platform, {
-          configPath: platform.configPath,
-          transport: "http",
-          rulesVersion: this.rules.version,
-          rulesPath: platform.rulesPath || undefined,
-        });
-      } catch {}
+    // Track state for any non-skip result, including "skipped" due to version match
+    // (we still want to record rulesPath so doctor can check it)
+    if (result.action !== "skipped" || platform.rulesPath) {
+      if (!options.dryRun) {
+        try {
+          trackInstall(this.name, this.package, platform.platform, {
+            configPath: platform.configPath,
+            transport: "http",
+            rulesVersion: this.rules.version,
+            rulesPath: platform.rulesPath || undefined,
+          });
+        } catch {}
+      }
     }
     return result;
   }
@@ -133,13 +137,16 @@ class Equip {
     const opts = { ...options };
     if (this.hookDir && !opts.hookDir) opts.hookDir = this.hookDir;
     const result = installHooks(platform, this.hookDefs, opts);
-    if (result?.installed && !opts.dryRun) {
+    // Track state whether newly installed or already present
+    const hookDir = result?.hookDir || opts.hookDir || this.hookDir;
+    const hookScripts = result?.scripts || this.hookDefs.map(d => d.name + ".js");
+    if (!opts.dryRun && hookDir) {
       try {
         trackInstall(this.name, this.package, platform.platform, {
           configPath: platform.configPath,
           transport: "http",
-          hookDir: result.hookDir,
-          hookScripts: result.scripts,
+          hookDir,
+          hookScripts,
         });
       } catch {}
     }
