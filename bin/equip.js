@@ -158,8 +158,17 @@ function spawnTool(pkg, command, extraArgs, toolName) {
     env: { ...process.env, EQUIP_VERSION },
   });
   child.on("close", (code) => {
-    if (code === 0 && toolName) {
-      try { reconcileState(toolName, pkg); } catch (e) { process.stderr.write(`[equip] state reconciliation failed: ${e.message}\n`); }
+    // Always reconcile state — install may have succeeded even if
+    // the tool exited non-zero (e.g. user cancelled a post-install prompt)
+    if (toolName) {
+      try {
+        const changed = reconcileState(toolName, pkg);
+        if (changed > 0) {
+          process.stderr.write(`\n  equip: tracked ${toolName} on ${changed} platform${changed === 1 ? "" : "s"}\n`);
+        }
+      } catch (e) {
+        process.stderr.write(`\n[equip] state reconciliation failed: ${e.message}\n`);
+      }
     }
     process.exit(code || 0);
   });
@@ -181,6 +190,8 @@ function reconcileState(toolName, pkg) {
   const { dirExists, fileExists } = require("../dist/lib/detect");
   const _fs = require("fs");
   const _path = require("path");
+
+  let count = 0;
 
   for (const [id, def] of PLATFORM_REGISTRY) {
     // Quick check: is this platform present?
@@ -223,7 +234,10 @@ function reconcileState(toolName, pkg) {
     } catch {}
 
     trackInstall(toolName, pkg, id, record);
+    count++;
   }
+
+  return count;
 }
 
 // ─── Main ───────────────────────────────────────────────────
