@@ -142,25 +142,88 @@ function dispatchTool(alias, extraArgs) {
       console.error(`Run "equip --help" for usage.`);
       process.exit(1);
     }
-    spawnTool(pkg, command, extraArgs);
+    spawnTool(pkg, command, extraArgs, null);
     return;
   }
 
-  spawnTool(entry.package, entry.command, extraArgs);
+  // For registered tools, the alias IS the tool name (e.g. "prior")
+  spawnTool(entry.package, entry.command, extraArgs, alias);
 }
 
-function spawnTool(pkg, command, extraArgs) {
+function spawnTool(pkg, command, extraArgs, toolName) {
   const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
   const child = spawn(npxCmd, ["-y", `${pkg}@latest`, command, ...extraArgs], {
     stdio: "inherit",
     shell: process.platform === "win32",
     env: { ...process.env, EQUIP_VERSION },
   });
-  child.on("close", (code) => process.exit(code || 0));
+  child.on("close", (code) => {
+    if (code === 0 && toolName) {
+      try { reconcileState(toolName, pkg); } catch {}
+    }
+    process.exit(code || 0);
+  });
   child.on("error", (err) => {
     console.error(`Failed to run ${pkg}: ${err.message}`);
     process.exit(1);
   });
+}
+
+/**
+ * After a tool finishes, scan platform configs and update state
+ * based on what's actually on disk. This ensures state is always
+ * accurate regardless of which equip version the tool used internally.
+ */
+function reconcileState(toolName, pkg) {
+  const { PLATFORM_REGISTRY } = require("../dist/lib/platforms");
+  const { readMcpEntry } = require("../dist/lib/mcp");
+  const { trackInstall } = require("../dist/lib/state");
+  const { dirExists, fileExists } = require("../dist/lib/detect");
+  const _fs = require("fs");
+  const _path = require("path");
+
+  for (const [id, def] of PLATFORM_REGISTRY) {
+    // Quick check: is this platform present?
+    const dirFound = def.detection.dirs.some(fn => dirExists(fn()));
+    const fileFound = def.detection.files.some(fn => fileExists(fn()));
+    const configPath = def.configPath();
+    if (!dirFound && !fileFound && !fileExists(configPath)) continue;
+
+    // Check if tool has an MCP entry on this platform
+    const entry = readMcpEntry(configPath, def.rootKey, toolName, def.configFormat);
+    if (!entry) continue;
+
+    // Build state record from what's on disk
+    const record = {
+      configPath,
+      transport: entry.command ? "stdio" : "http",
+    };
+
+    // Check for rules
+    if (def.rulesPath) {
+      const rulesPath = def.rulesPath();
+      try {
+        const content = _fs.readFileSync(rulesPath, "utf-8");
+        const versionMatch = content.match(new RegExp(`<!-- ${toolName}:v([\\d.]+) -->`));
+        if (versionMatch) {
+          record.rulesPath = rulesPath;
+          record.rulesVersion = versionMatch[1];
+        }
+      } catch {}
+    }
+
+    // Check for hooks (look for tool's hook directory)
+    const hookDir = _path.join(require("os").homedir(), `.${toolName}`, "hooks");
+    try {
+      const hookFiles = _fs.readdirSync(hookDir).filter(f => f.endsWith(".js"));
+      if (hookFiles.length > 0) {
+        record.hookDir = hookDir;
+        record.hookScripts = hookFiles;
+      }
+    } catch {}
+
+    trackInstall(toolName, pkg, id, record);
+  }
 }
 
 // ─── Main ───────────────────────────────────────────────────
