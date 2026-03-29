@@ -189,4 +189,4 @@ No layer is a silver bullet. Together, they give you the best coverage available
 
 ## License
 
-MIT — CG3 LLC
+MIT — Charles Mulic

@@ -10,7 +10,7 @@ const { detectPlatforms, whichSync, dirExists, fileExists } = require("./lib/det
 const { readMcpEntry, buildHttpConfig, buildHttpConfigWithAuth, buildStdioConfig, installMcp, installMcpJson, installMcpToml, uninstallMcp, updateMcpKey, parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("./lib/mcp");
 const { parseRulesVersion, installRules, uninstallRules, markerPatterns } = require("./lib/rules");
 const { getHookCapabilities, installHooks, uninstallHooks, hasHooks, buildHooksConfig } = require("./lib/hooks");
-const { createManualPlatform, platformName, KNOWN_PLATFORMS } = require("./lib/platforms");
+const { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS } = require("./lib/platforms");
 const cli = require("./lib/cli");
 
 /**
@@ -233,6 +233,7 @@ module.exports = {
   markerPatterns,
   createManualPlatform,
   platformName,
+  resolvePlatformId,
   KNOWN_PLATFORMS,
   // Hooks
   getHookCapabilities,
