@@ -10,6 +10,7 @@ import { parseRulesVersion, installRules, uninstallRules, markerPatterns } from 
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
 import * as cli from "./lib/cli";
+import { trackInstall, trackUninstall } from "./lib/state";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -70,11 +71,24 @@ class Equip {
   installMcp(platform: DetectedPlatform, apiKey: string, options: { transport?: string; dryRun?: boolean } = {}): { success: boolean; method: string } {
     const { transport = "http", dryRun = false } = options;
     const config = this.buildConfig(platform.platform, apiKey, transport);
-    return installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl });
+    const result = installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl });
+    if (result.success && !dryRun) {
+      try {
+        trackInstall(this.name, `@cg3/${this.name}`, platform.platform, {
+          transport,
+          configPath: platform.configPath,
+        });
+      } catch { /* state tracking is best-effort */ }
+    }
+    return result;
   }
 
   uninstallMcp(platform: DetectedPlatform, dryRun: boolean = false): boolean {
-    return uninstallMcp(platform, this.name, dryRun);
+    const removed = uninstallMcp(platform, this.name, dryRun);
+    if (removed && !dryRun) {
+      try { trackUninstall(this.name, platform.platform); } catch {}
+    }
+    return removed;
   }
 
   updateMcpKey(platform: DetectedPlatform, apiKey: string, transport: string = "http"): { success: boolean; method: string } {
@@ -84,7 +98,17 @@ class Equip {
 
   installRules(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): { action: string } {
     if (!this.rules) return { action: "skipped" };
-    return installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
+    const result = installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
+    if ((result.action === "created" || result.action === "updated") && !options.dryRun) {
+      try {
+        trackInstall(this.name, `@cg3/${this.name}`, platform.platform, {
+          transport: "http",
+          rulesVersion: this.rules.version,
+          configPath: platform.configPath,
+        });
+      } catch {}
+    }
+    return result;
   }
 
   uninstallRules(platform: DetectedPlatform, dryRun: boolean = false): boolean {

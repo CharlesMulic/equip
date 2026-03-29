@@ -593,8 +593,17 @@ describe("equip CLI", () => {
   it("shows help with no args", () => {
     const { execSync } = require("child_process");
     const out = execSync("node bin/equip.js --help", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
-    assert.ok(out.includes("Available tools:"));
+    assert.ok(out.includes("Commands:"));
     assert.ok(out.includes("prior"));
+    assert.ok(out.includes("status"));
+    assert.ok(out.includes("doctor"));
+    assert.ok(out.includes("update"));
+  });
+
+  it("shows version", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js --version", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
+    assert.ok(out.includes("equip v"));
   });
 
   it("errors on unknown tool without command", () => {
@@ -603,7 +612,47 @@ describe("equip CLI", () => {
       execSync("node bin/equip.js nonexistent", { encoding: "utf-8", cwd: path.join(__dirname, ".."), stdio: "pipe" });
       assert.fail("should have thrown");
     } catch (e) {
-      assert.ok(e.stderr.includes("Usage: npx @cg3/equip"));
+      assert.ok(e.stderr.includes("Unknown command:"));
     }
+  });
+
+  it("status runs without error", () => {
+    const { execSync } = require("child_process");
+    // status writes to stderr (cli.log uses stderr), capture both
+    const out = execSync("node bin/equip.js status", { encoding: "utf-8", cwd: path.join(__dirname, ".."), timeout: 15000 });
+    // status outputs to stderr via cli.log, stdout may be empty — just verify no crash
+  });
+
+  it("list shows registered tools", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js list", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
+    assert.ok(out.includes("prior"));
+    assert.ok(out.includes("Registered tools"));
+  });
+});
+
+// ─── State Module ───────────────────────────────────────────
+
+describe("state module", () => {
+  const { readState, writeState, trackInstall, trackUninstall, getStatePath } = require("../dist/lib/state");
+
+  it("reads empty state when no file exists", () => {
+    const state = readState();
+    assert.ok(state.tools);
+    assert.equal(typeof state.tools, "object");
+  });
+
+  it("trackInstall and trackUninstall roundtrip", () => {
+    trackInstall("test-tool", "@test/pkg", "claude-code", {
+      transport: "http",
+      configPath: "/tmp/test.json",
+    });
+    const state = readState();
+    assert.ok(state.tools["test-tool"]);
+    assert.equal(state.tools["test-tool"].platforms["claude-code"].transport, "http");
+
+    trackUninstall("test-tool", "claude-code");
+    const after = readState();
+    assert.ok(!after.tools["test-tool"]);
   });
 });
