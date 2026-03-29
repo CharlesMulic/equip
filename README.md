@@ -46,7 +46,7 @@ These platforms get MCP server config but don't have a writable global rules fil
 | Copilot (JetBrains) | `~/.config/github-copilot/intellij/mcp.json` (JSON, `mcpServers`) |
 | Copilot CLI | `~/.copilot/mcp-config.json` (JSON, `mcpServers`) |
 
-For these platforms, `installRules()` returns `{ action: "clipboard" }` if the platform is in the configurable `clipboardPlatforms` list (default: `["cursor", "vscode"]`), or `{ action: "skipped" }` otherwise. It's up to the consumer to decide how to handle this — e.g., copying rules to the clipboard, printing instructions, or skipping silently.
+For these platforms, `installRules()` returns `{ action: "clipboard" }` if the platform is in the configurable `clipboardPlatforms` list (default: `["cursor", "vscode"]`) and automatically copies the rules content to the system clipboard. For platforms with no rules path and not in `clipboardPlatforms`, it returns `{ action: "skipped" }`.
 
 ### Hooks — Structural Enforcement
 
@@ -85,7 +85,7 @@ The CLI runs `npx -y <package>@latest <command>` with any extra args forwarded (
 
 ### Shorthand Registry
 
-Registered shorthands save typing. Open a PR to `bin/equip.js` to add yours:
+Registered shorthands save typing. Open a PR to [`registry.json`](./registry.json) to add yours:
 
 | Shorthand | Expands to |
 |---|---|
@@ -159,15 +159,21 @@ for (const p of platforms) {
 - `equip.hasHooks(platform, options?)` — Check if hooks are installed
 - `equip.supportsHooks(platform)` — Check if platform supports hooks
 
-### Primitives
-
-All internal functions are also exported for advanced usage:
+### Utilities
 
 ```js
-const { detectPlatforms, installMcpJson, installRules, createManualPlatform, platformName, resolvePlatformId, cli } = require("@cg3/equip");
+const { createManualPlatform, platformName, resolvePlatformId, parseRulesVersion, markerPatterns, cli, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform } = require("@cg3/equip");
 ```
 
+- `createManualPlatform(id)` — Create a platform object for a specific platform ID (bypasses detection)
+- `platformName(id)` — Human-readable display name for a platform ID
 - `resolvePlatformId(input)` — Resolve a friendly name or alias to a canonical platform ID (e.g., `"claude"` → `"claude-code"`, `"roo"` → `"roo-code"`)
+- `parseRulesVersion(content, marker)` — Extract version from a marker block in content
+- `markerPatterns(marker)` — Get regex patterns for a marker name
+- `KNOWN_PLATFORMS` — Array of all supported platform IDs
+- `PLATFORM_REGISTRY` — Map of platform definitions (for advanced use)
+- `getPlatform(id)` — Get a platform definition by ID (throws if unknown)
+- `cli` — Output helpers: `log`, `ok`, `fail`, `warn`, `info`, `step`, `prompt`, `copyToClipboard`, color constants
 
 ## Key Features
 
