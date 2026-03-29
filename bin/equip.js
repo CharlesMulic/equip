@@ -159,7 +159,7 @@ function spawnTool(pkg, command, extraArgs, toolName) {
   });
   child.on("close", (code) => {
     if (code === 0 && toolName) {
-      try { reconcileState(toolName, pkg); } catch {}
+      try { reconcileState(toolName, pkg); } catch (e) { process.stderr.write(`[equip] state reconciliation failed: ${e.message}\n`); }
     }
     process.exit(code || 0);
   });

@@ -10,13 +10,11 @@ import { parseRulesVersion, installRules, uninstallRules, markerPatterns } from 
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
 import * as cli from "./lib/cli";
-import { trackInstall, trackUninstall } from "./lib/state";
 
 // ─── Equip Class ────────────────────────────────────────────
 
 export interface EquipConfig {
   name: string;
-  package?: string;
   serverUrl?: string;
   rules?: {
     content: string;
@@ -39,7 +37,6 @@ export interface EquipConfig {
  */
 class Equip {
   name: string;
-  package: string;
   serverUrl?: string;
   rules: EquipConfig["rules"] | null;
   stdio: EquipConfig["stdio"] | null;
@@ -51,7 +48,6 @@ class Equip {
     if (!config.serverUrl && !config.stdio) throw new Error("Equip: serverUrl or stdio is required");
 
     this.name = config.name;
-    this.package = config.package || config.name;
     this.serverUrl = config.serverUrl;
     this.rules = config.rules || null;
     this.stdio = config.stdio || null;
@@ -74,24 +70,11 @@ class Equip {
   installMcp(platform: DetectedPlatform, apiKey: string, options: { transport?: string; dryRun?: boolean } = {}): { success: boolean; method: string } {
     const { transport = "http", dryRun = false } = options;
     const config = this.buildConfig(platform.platform, apiKey, transport);
-    const result = installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl });
-    if (result.success && !dryRun) {
-      try {
-        trackInstall(this.name, this.package, platform.platform, {
-          transport,
-          configPath: platform.configPath,
-        });
-      } catch { /* state tracking is best-effort */ }
-    }
-    return result;
+    return installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl });
   }
 
   uninstallMcp(platform: DetectedPlatform, dryRun: boolean = false): boolean {
-    const removed = uninstallMcp(platform, this.name, dryRun);
-    if (removed && !dryRun) {
-      try { trackUninstall(this.name, platform.platform); } catch {}
-    }
-    return removed;
+    return uninstallMcp(platform, this.name, dryRun);
   }
 
   updateMcpKey(platform: DetectedPlatform, apiKey: string, transport: string = "http"): { success: boolean; method: string } {
@@ -101,22 +84,7 @@ class Equip {
 
   installRules(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): { action: string } {
     if (!this.rules) return { action: "skipped" };
-    const result = installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
-    // Track state for any non-skip result, including "skipped" due to version match
-    // (we still want to record rulesPath so doctor can check it)
-    if (result.action !== "skipped" || platform.rulesPath) {
-      if (!options.dryRun) {
-        try {
-          trackInstall(this.name, this.package, platform.platform, {
-            configPath: platform.configPath,
-            transport: "http",
-            rulesVersion: this.rules.version,
-            rulesPath: platform.rulesPath || undefined,
-          });
-        } catch {}
-      }
-    }
-    return result;
+    return installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
   }
 
   uninstallRules(platform: DetectedPlatform, dryRun: boolean = false): boolean {
@@ -136,21 +104,7 @@ class Equip {
     if (!this.hookDefs) return null;
     const opts = { ...options };
     if (this.hookDir && !opts.hookDir) opts.hookDir = this.hookDir;
-    const result = installHooks(platform, this.hookDefs, opts);
-    // Track state whether newly installed or already present
-    const hookDir = result?.hookDir || opts.hookDir || this.hookDir;
-    const hookScripts = result?.scripts || this.hookDefs.map(d => d.name + ".js");
-    if (!opts.dryRun && hookDir) {
-      try {
-        trackInstall(this.name, this.package, platform.platform, {
-          configPath: platform.configPath,
-          transport: "http",
-          hookDir,
-          hookScripts,
-        });
-      } catch {}
-    }
-    return result;
+    return installHooks(platform, this.hookDefs, opts);
   }
 
   uninstallHooks(platform: DetectedPlatform, options: { hookDir?: string; dryRun?: boolean } = {}): boolean {
