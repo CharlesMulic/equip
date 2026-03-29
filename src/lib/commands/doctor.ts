@@ -82,7 +82,7 @@ export function runDoctor(): void {
         } else {
           try {
             const rulesContent = fs.readFileSync(rulesPath, "utf-8");
-            const versionMatch = rulesContent.match(new RegExp(`<!-- ${toolName}:v([\\d.]+) -->`));
+            const versionMatch = rulesContent.match(new RegExp(`<!-- ${toolName}:v([0-9.]+) -->`));
             if (!versionMatch) {
               cli.warn(`  ${def.name}: rules block not found in ${sanitizePath(rulesPath)}`);
               issues++;

@@ -215,7 +215,7 @@ function reconcileState(toolName, pkg) {
       const rulesPath = def.rulesPath();
       try {
         const content = _fs.readFileSync(rulesPath, "utf-8");
-        const versionMatch = content.match(new RegExp(`<!-- ${toolName}:v([\\d.]+) -->`));
+        const versionMatch = content.match(new RegExp(`<!-- ${toolName}:v([0-9.]+) -->`));
         if (versionMatch) {
           record.rulesPath = rulesPath;
           record.rulesVersion = versionMatch[1];
