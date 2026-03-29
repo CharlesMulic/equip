@@ -210,7 +210,7 @@ function reconcileState(toolName, pkg) {
       transport: entry.command ? "stdio" : "http",
     };
 
-    // Check for rules
+    // Check for rules (only on platforms that support writable rules)
     if (def.rulesPath) {
       const rulesPath = def.rulesPath();
       try {
@@ -223,15 +223,17 @@ function reconcileState(toolName, pkg) {
       } catch {}
     }
 
-    // Check for hooks (look for tool's hook directory)
-    const hookDir = _path.join(require("os").homedir(), `.${toolName}`, "hooks");
-    try {
-      const hookFiles = _fs.readdirSync(hookDir).filter(f => f.endsWith(".js"));
-      if (hookFiles.length > 0) {
-        record.hookDir = hookDir;
-        record.hookScripts = hookFiles;
-      }
-    } catch {}
+    // Check for hooks (only on platforms that support hooks)
+    if (def.hooks) {
+      const hookDir = _path.join(require("os").homedir(), `.${toolName}`, "hooks");
+      try {
+        const hookFiles = _fs.readdirSync(hookDir).filter(f => f.endsWith(".js"));
+        if (hookFiles.length > 0) {
+          record.hookDir = hookDir;
+          record.hookScripts = hookFiles;
+        }
+      } catch {}
+    }
 
     trackInstall(toolName, pkg, id, record);
     count++;
