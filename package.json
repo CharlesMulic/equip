@@ -9,17 +9,14 @@
   },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "require": "./dist/index.js" },
-    "./detect": { "types": "./dist/lib/detect.d.ts", "require": "./dist/lib/detect.js" },
-    "./mcp": { "types": "./dist/lib/mcp.d.ts", "require": "./dist/lib/mcp.js" },
-    "./rules": { "types": "./dist/lib/rules.d.ts", "require": "./dist/lib/rules.js" },
-    "./platforms": { "types": "./dist/lib/platforms.d.ts", "require": "./dist/lib/platforms.js" },
-    "./cli": { "types": "./dist/lib/cli.d.ts", "require": "./dist/lib/cli.js" },
+    "./dist/*": "./dist/*",
     "./package.json": "./package.json"
   },
   "files": [
     "dist/",
     "bin/",
-    "demo/"
+    "demo/",
+    "registry.json"
   ],
   "scripts": {
     "build": "tsc",

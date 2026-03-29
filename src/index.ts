@@ -4,12 +4,11 @@
 import * as path from "path";
 import * as os from "os";
 
-import { detectPlatforms, whichSync, dirExists, fileExists } from "./lib/detect";
-import { readMcpEntry, buildHttpConfig, buildHttpConfigWithAuth, buildStdioConfig, installMcp, installMcpJson, installMcpToml, uninstallMcp, updateMcpKey, parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } from "./lib/mcp";
+import { detectPlatforms } from "./lib/detect";
+import { readMcpEntry, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
 import { parseRulesVersion, installRules, uninstallRules, markerPatterns } from "./lib/rules";
-import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, buildHooksConfig, type HookDefinition } from "./lib/hooks";
+import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
-import { getVsCodeUserDir, getVsCodeMcpPath, getClineConfigPath, getRooConfigPath, getCodexConfigPath, getGeminiSettingsPath, getJunieMcpPath, getCopilotJetBrainsMcpPath, getCopilotCliMcpPath } from "./lib/platforms";
 import * as cli from "./lib/cli";
 
 // ─── Equip Class ────────────────────────────────────────────
@@ -85,15 +84,7 @@ class Equip {
 
   installRules(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): { action: string } {
     if (!this.rules) return { action: "skipped" };
-    return installRules(platform, {
-      content: this.rules.content,
-      version: this.rules.version,
-      marker: this.rules.marker,
-      fileName: this.rules.fileName,
-      clipboardPlatforms: this.rules.clipboardPlatforms,
-      dryRun: options.dryRun || false,
-      copyToClipboard: cli.copyToClipboard,
-    });
+    return installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
   }
 
   uninstallRules(platform: DetectedPlatform, dryRun: boolean = false): boolean {
@@ -135,57 +126,23 @@ class Equip {
   }
 }
 
-// ─── Exports ────────────────────────────────────────────────
+// ─── Public API ─────────────────────────────────────────────
 
 export {
   Equip,
-  // Detection
-  detectPlatforms,
-  // MCP
-  readMcpEntry,
-  buildHttpConfig,
-  buildHttpConfigWithAuth,
-  buildStdioConfig,
-  installMcp,
-  installMcpJson,
-  installMcpToml,
-  uninstallMcp,
-  updateMcpKey,
-  parseTomlServerEntry,
-  parseTomlSubTables,
-  buildTomlEntry,
-  removeTomlEntry,
-  // Rules
-  installRules,
-  uninstallRules,
-  parseRulesVersion,
-  markerPatterns,
-  // Platforms
+  // Platform utilities
   createManualPlatform,
   platformName,
   resolvePlatformId,
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
-  // Hooks
-  getHookCapabilities,
-  installHooks,
-  uninstallHooks,
-  hasHooks,
-  buildHooksConfig,
-  // CLI helpers
+  // Rules utilities (used by consumers for version checking)
+  parseRulesVersion,
+  markerPatterns,
+  // CLI helpers (for consumer setup scripts)
   cli,
-  // Backward-compat path helpers
-  getVsCodeUserDir,
-  getVsCodeMcpPath,
-  getClineConfigPath,
-  getRooConfigPath,
-  getCodexConfigPath,
-  getGeminiSettingsPath,
-  getJunieMcpPath,
-  getCopilotJetBrainsMcpPath,
-  getCopilotCliMcpPath,
 };
 
-// Types (re-exported above via named exports; listed here for clarity)
+// Types
 export type { DetectedPlatform, PlatformDefinition, PlatformHttpShape, PlatformHookCapabilities, HookDefinition };

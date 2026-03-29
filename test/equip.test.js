@@ -3,34 +3,27 @@
 
 "use strict";
 
-const { describe, it, beforeEach } = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
 
+// Public API
 const {
   Equip,
-  detectPlatforms,
-  readMcpEntry,
-  buildHttpConfig,
-  buildHttpConfigWithAuth,
-  buildStdioConfig,
-  installMcpJson,
-  installMcpToml,
-  uninstallMcp,
-  installRules,
-  uninstallRules,
-  parseRulesVersion,
-  markerPatterns,
   createManualPlatform,
   platformName,
   KNOWN_PLATFORMS,
-  parseTomlServerEntry,
-  parseTomlSubTables,
-  buildTomlEntry,
-  removeTomlEntry,
+  parseRulesVersion,
+  markerPatterns,
+  cli,
 } = require("..");
+
+// Internal modules (for low-level tests)
+const { buildHttpConfig, buildHttpConfigWithAuth, installMcpJson, installMcpToml, uninstallMcp } = require("../dist/lib/mcp");
+const { installRules } = require("../dist/lib/rules");
+const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("../dist/lib/mcp");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -47,6 +40,7 @@ function mockPlatform(overrides = {}) {
     hasCli: false,
     existingMcp: null,
     rootKey: "mcpServers",
+    configFormat: "json",
     ...overrides,
   };
 }
@@ -156,9 +150,104 @@ describe("Equip class", () => {
     const r = e.installRules(p);
     assert.equal(r.action, "skipped");
   });
+
+  it("buildConfig uses http_headers for codex", () => {
+    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const config = e.buildConfig("codex", "key123");
+    assert.equal(config.url, "https://example.com/mcp");
+    assert.equal(config.http_headers.Authorization, "Bearer key123");
+    assert.ok(!config.headers);
+  });
+
+  it("buildConfig uses httpUrl for gemini-cli", () => {
+    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const config = e.buildConfig("gemini-cli", "key123");
+    assert.equal(config.httpUrl, "https://example.com/mcp");
+    assert.equal(config.headers.Authorization, "Bearer key123");
+  });
+
+  it("buildConfig uses url and headers for junie", () => {
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const config = e.buildConfig("junie", "key123");
+    assert.equal(config.url, "https://example.com/mcp");
+    assert.equal(config.headers.Authorization, "Bearer key123");
+  });
+
+  it("installMcp and readMcp roundtrip with TOML (Codex)", () => {
+    const configPath = tmpPath("codex-equip") + ".toml";
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
+    cleanup(configPath);
+    e.installMcp(p, "key123");
+    const entry = e.readMcp(p);
+    assert.ok(entry);
+    assert.equal(entry.url, "https://example.com/mcp");
+    assert.equal(entry.http_headers.Authorization, "Bearer key123");
+    e.uninstallMcp(p);
+    assert.equal(e.readMcp(p), null);
+    cleanup(configPath);
+  });
+
+  it("installMcp and readMcp roundtrip (Gemini CLI)", () => {
+    const configPath = tmpPath("gemini-equip") + ".json";
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "gemini-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
+    cleanup(configPath);
+    e.installMcp(p, "key123");
+    const entry = e.readMcp(p);
+    assert.ok(entry);
+    assert.equal(entry.httpUrl, "https://example.com/mcp");
+    e.uninstallMcp(p);
+    assert.equal(e.readMcp(p), null);
+    cleanup(configPath);
+  });
+
+  it("installMcp and readMcp roundtrip (Junie)", () => {
+    const configPath = tmpPath("junie-equip") + ".json";
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "junie", configPath, rootKey: "mcpServers", configFormat: "json" });
+    cleanup(configPath);
+    e.installMcp(p, "key123");
+    const entry = e.readMcp(p);
+    assert.ok(entry);
+    assert.equal(entry.url, "https://example.com/mcp");
+    e.uninstallMcp(p);
+    assert.equal(e.readMcp(p), null);
+    cleanup(configPath);
+  });
+
+  it("installMcp and readMcp roundtrip (Copilot JetBrains)", () => {
+    const dir = tmpPath("copilot-jb-equip");
+    fs.mkdirSync(dir, { recursive: true });
+    const configPath = path.join(dir, "mcp.json");
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "copilot-jetbrains", configPath, rootKey: "mcpServers", configFormat: "json" });
+    e.installMcp(p, "key123");
+    const entry = e.readMcp(p);
+    assert.ok(entry);
+    assert.equal(entry.url, "https://example.com/mcp");
+    e.uninstallMcp(p);
+    assert.equal(e.readMcp(p), null);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("installMcp and readMcp roundtrip (Copilot CLI)", () => {
+    const dir = tmpPath("copilot-cli-equip");
+    fs.mkdirSync(dir, { recursive: true });
+    const configPath = path.join(dir, "mcp-config.json");
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "copilot-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
+    e.installMcp(p, "key123");
+    const entry = e.readMcp(p);
+    assert.ok(entry);
+    assert.equal(entry.url, "https://example.com/mcp");
+    e.uninstallMcp(p);
+    assert.equal(e.readMcp(p), null);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
-// ─── HTTP Config ─────────────────────────────────────────────
+// ─── HTTP Config (internal) ─────────────────────────────────
 
 describe("buildHttpConfig", () => {
   it("returns url for standard platforms", () => {
@@ -185,9 +274,42 @@ describe("buildHttpConfig", () => {
     assert.equal(c.type, "http");
     assert.equal(c.url, "https://x.com/mcp");
   });
+
+  it("returns httpUrl for gemini-cli", () => {
+    const c = buildHttpConfig("https://x.com/mcp", "gemini-cli");
+    assert.equal(c.httpUrl, "https://x.com/mcp");
+    assert.ok(!c.url);
+  });
+
+  it("returns url for codex", () => {
+    const c = buildHttpConfig("https://x.com/mcp", "codex");
+    assert.equal(c.url, "https://x.com/mcp");
+    assert.ok(!c.type);
+  });
 });
 
-// ─── MCP JSON ────────────────────────────────────────────────
+describe("buildHttpConfigWithAuth", () => {
+  it("uses http_headers for codex", () => {
+    const c = buildHttpConfigWithAuth("https://x.com/mcp", "ask_123", "codex");
+    assert.equal(c.url, "https://x.com/mcp");
+    assert.equal(c.http_headers.Authorization, "Bearer ask_123");
+    assert.ok(!c.headers);
+  });
+
+  it("uses headers for gemini-cli", () => {
+    const c = buildHttpConfigWithAuth("https://x.com/mcp", "ask_123", "gemini-cli");
+    assert.equal(c.httpUrl, "https://x.com/mcp");
+    assert.equal(c.headers.Authorization, "Bearer ask_123");
+  });
+
+  it("uses headers for junie", () => {
+    const config = buildHttpConfigWithAuth("https://x.com/mcp", "key123", "junie");
+    assert.equal(config.url, "https://x.com/mcp");
+    assert.equal(config.headers.Authorization, "Bearer key123");
+  });
+});
+
+// ─── MCP JSON (internal) ────────────────────────────────────
 
 describe("installMcpJson", () => {
   it("creates config with correct server name", () => {
@@ -221,7 +343,7 @@ describe("installMcpJson", () => {
   });
 });
 
-// ─── Rules ───────────────────────────────────────────────────
+// ─── Rules (internal) ───────────────────────────────────────
 
 describe("installRules (function)", () => {
   it("creates rules file", () => {
@@ -279,6 +401,11 @@ describe("platformName", () => {
     assert.equal(platformName("claude-code"), "Claude Code");
     assert.equal(platformName("vscode"), "VS Code");
     assert.equal(platformName("roo-code"), "Roo Code");
+    assert.equal(platformName("codex"), "Codex");
+    assert.equal(platformName("gemini-cli"), "Gemini CLI");
+    assert.equal(platformName("junie"), "Junie");
+    assert.equal(platformName("copilot-jetbrains"), "Copilot (JetBrains)");
+    assert.equal(platformName("copilot-cli"), "Copilot CLI");
     assert.equal(platformName("unknown"), "unknown");
   });
 });
@@ -286,6 +413,8 @@ describe("platformName", () => {
 describe("KNOWN_PLATFORMS", () => {
   it("includes all 11 platforms", () => {
     assert.equal(KNOWN_PLATFORMS.length, 11);
+    assert.ok(KNOWN_PLATFORMS.includes("claude-code"));
+    assert.ok(KNOWN_PLATFORMS.includes("cursor"));
     assert.ok(KNOWN_PLATFORMS.includes("vscode"));
     assert.ok(KNOWN_PLATFORMS.includes("cline"));
     assert.ok(KNOWN_PLATFORMS.includes("roo-code"));
@@ -329,7 +458,7 @@ describe("parseRulesVersion", () => {
   });
 });
 
-// ─── TOML Helpers (Codex) ───────────────────────────────────
+// ─── TOML Helpers (internal) ────────────────────────────────
 
 describe("parseTomlServerEntry", () => {
   it("parses a server entry", () => {
@@ -403,7 +532,7 @@ describe("removeTomlEntry", () => {
   });
 });
 
-// ─── Codex TOML Install/Uninstall ───────────────────────────
+// ─── TOML Install/Uninstall (internal) ──────────────────────
 
 describe("installMcpToml", () => {
   it("creates TOML config file", () => {
@@ -458,139 +587,6 @@ describe("Codex uninstallMcp (TOML)", () => {
   });
 });
 
-// ─── Codex HTTP Config ──────────────────────────────────────
-
-describe("buildHttpConfig (Codex)", () => {
-  it("returns url for codex", () => {
-    const c = buildHttpConfig("https://api.cg3.io/mcp", "codex");
-    assert.equal(c.url, "https://api.cg3.io/mcp");
-    assert.ok(!c.serverUrl);
-    assert.ok(!c.type);
-  });
-});
-
-describe("buildHttpConfigWithAuth (Codex)", () => {
-  it("uses http_headers for codex", () => {
-    const c = buildHttpConfigWithAuth("https://api.cg3.io/mcp", "ask_123", "codex");
-    assert.equal(c.url, "https://api.cg3.io/mcp");
-    assert.equal(c.http_headers.Authorization, "Bearer ask_123");
-    assert.ok(!c.headers, "should not have 'headers' key for codex");
-  });
-});
-
-// ─── Gemini CLI Config ──────────────────────────────────────
-
-describe("buildHttpConfig (Gemini CLI)", () => {
-  it("returns httpUrl for gemini-cli", () => {
-    const c = buildHttpConfig("https://api.cg3.io/mcp", "gemini-cli");
-    assert.equal(c.httpUrl, "https://api.cg3.io/mcp");
-    assert.ok(!c.url);
-    assert.ok(!c.serverUrl);
-  });
-});
-
-describe("buildHttpConfigWithAuth (Gemini CLI)", () => {
-  it("uses headers for gemini-cli", () => {
-    const c = buildHttpConfigWithAuth("https://api.cg3.io/mcp", "ask_123", "gemini-cli");
-    assert.equal(c.httpUrl, "https://api.cg3.io/mcp");
-    assert.equal(c.headers.Authorization, "Bearer ask_123");
-  });
-});
-
-describe("Gemini CLI MCP install (JSON)", () => {
-  it("installs to settings.json with mcpServers", () => {
-    const configPath = tmpPath("gemini-settings") + ".json";
-    const p = mockPlatform({ platform: "gemini-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
-    cleanup(configPath);
-    installMcpJson(p, "prior", { httpUrl: "https://api.cg3.io/mcp", headers: { Authorization: "Bearer key" } }, false);
-    const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    assert.ok(data.mcpServers.prior);
-    assert.equal(data.mcpServers.prior.httpUrl, "https://api.cg3.io/mcp");
-    cleanup(configPath);
-  });
-
-  it("preserves existing Gemini settings", () => {
-    const configPath = tmpPath("gemini-settings") + ".json";
-    fs.writeFileSync(configPath, JSON.stringify({ selectedAuthType: "gemini-api-key", theme: "Dracula", mcpServers: { git: { command: "uvx", args: ["mcp-server-git"] } } }));
-    const p = mockPlatform({ platform: "gemini-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
-    installMcpJson(p, "prior", { httpUrl: "https://api.cg3.io/mcp" }, false);
-    const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    assert.ok(data.mcpServers.prior);
-    assert.ok(data.mcpServers.git, "existing git server should be preserved");
-    assert.equal(data.selectedAuthType, "gemini-api-key", "non-MCP settings preserved");
-    assert.equal(data.theme, "Dracula", "theme preserved");
-    cleanup(configPath);
-  });
-});
-
-// ─── Codex & Gemini Platform Names ──────────────────────────
-
-describe("platformName (new platforms)", () => {
-  it("returns Codex", () => {
-    assert.equal(platformName("codex"), "Codex");
-  });
-  it("returns Gemini CLI", () => {
-    assert.equal(platformName("gemini-cli"), "Gemini CLI");
-  });
-});
-
-// ─── Codex & Gemini Rules ───────────────────────────────────
-
-describe("Codex rules install", () => {
-  it("appends rules to AGENTS.md", () => {
-    const rulesPath = tmpPath("codex-agents") + ".md";
-    fs.writeFileSync(rulesPath, "# My AGENTS.md\n\nAlways run tests.\n");
-    const p = mockPlatform({ platform: "codex", rulesPath });
-    const r = installRules(p, { content: RULES_CONTENT, version: "1.0.0", marker: "test" });
-    assert.equal(r.action, "created");
-    const content = fs.readFileSync(rulesPath, "utf-8");
-    assert.ok(content.includes("Always run tests"), "original content preserved");
-    assert.ok(content.includes("test:v1.0.0"), "marker present");
-    cleanup(rulesPath);
-  });
-});
-
-describe("Gemini CLI rules install", () => {
-  it("appends rules to GEMINI.md", () => {
-    const rulesPath = tmpPath("gemini-rules") + ".md";
-    fs.writeFileSync(rulesPath, "# My Gemini Rules\n\nPrefer TypeScript.\n");
-    const p = mockPlatform({ platform: "gemini-cli", rulesPath });
-    const r = installRules(p, { content: RULES_CONTENT, version: "1.0.0", marker: "test" });
-    assert.equal(r.action, "created");
-    const content = fs.readFileSync(rulesPath, "utf-8");
-    assert.ok(content.includes("Prefer TypeScript"), "original content preserved");
-    assert.ok(content.includes("test:v1.0.0"), "marker present");
-    cleanup(rulesPath);
-  });
-});
-
-// ─── Equip Class (Codex & Gemini) ───────────────────────────
-
-describe("Equip class (Codex)", () => {
-  it("buildConfig uses http_headers for codex", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
-    const config = e.buildConfig("codex", "key123");
-    assert.equal(config.url, "https://example.com/mcp");
-    assert.equal(config.http_headers.Authorization, "Bearer key123");
-    assert.ok(!config.headers);
-  });
-
-  it("installMcp and readMcp roundtrip with TOML", () => {
-    const configPath = tmpPath("codex-equip") + ".toml";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
-    const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
-    cleanup(configPath);
-    e.installMcp(p, "key123");
-    const entry = e.readMcp(p);
-    assert.ok(entry);
-    assert.equal(entry.url, "https://example.com/mcp");
-    assert.equal(entry.http_headers.Authorization, "Bearer key123");
-    e.uninstallMcp(p);
-    assert.equal(e.readMcp(p), null);
-    cleanup(configPath);
-  });
-});
-
 // ─── CLI Dispatcher ─────────────────────────────────────────
 
 describe("equip CLI", () => {
@@ -609,228 +605,5 @@ describe("equip CLI", () => {
     } catch (e) {
       assert.ok(e.stderr.includes("Usage: npx @cg3/equip"));
     }
-  });
-});
-
-describe("Equip class (Gemini CLI)", () => {
-  it("buildConfig uses httpUrl for gemini-cli", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
-    const config = e.buildConfig("gemini-cli", "key123");
-    assert.equal(config.httpUrl, "https://example.com/mcp");
-    assert.equal(config.headers.Authorization, "Bearer key123");
-  });
-
-  it("installMcp and readMcp roundtrip with JSON", () => {
-    const configPath = tmpPath("gemini-equip") + ".json";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
-    const p = mockPlatform({ platform: "gemini-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
-    cleanup(configPath);
-    e.installMcp(p, "key123");
-    const entry = e.readMcp(p);
-    assert.ok(entry);
-    assert.equal(entry.httpUrl, "https://example.com/mcp");
-    e.uninstallMcp(p);
-    assert.equal(e.readMcp(p), null);
-    cleanup(configPath);
-  });
-});
-
-// --- Junie -----------------------------------------------------------
-
-describe("platformName (Junie)", () => {
-  it("returns Junie", () => {
-    assert.equal(platformName("junie"), "Junie");
-  });
-});
-
-describe("buildHttpConfig (Junie)", () => {
-  it("returns url for junie", () => {
-    const config = buildHttpConfig("https://example.com/mcp", "junie");
-    assert.equal(config.url, "https://example.com/mcp");
-    assert.equal(config.type, undefined);
-  });
-});
-
-describe("buildHttpConfigWithAuth (Junie)", () => {
-  it("uses headers for junie", () => {
-    const config = buildHttpConfigWithAuth("https://example.com/mcp", "key123", "junie");
-    assert.equal(config.url, "https://example.com/mcp");
-    assert.equal(config.headers.Authorization, "Bearer key123");
-  });
-});
-
-describe("Junie MCP install (JSON)", () => {
-  it("installs to mcp.json with mcpServers", () => {
-    const dir = tmpPath("junie-mcp-dir");
-    fs.mkdirSync(dir, { recursive: true });
-    const configPath = path.join(dir, "mcp.json");
-    const p = mockPlatform({ platform: "junie", configPath, rootKey: "mcpServers", configFormat: "json" });
-    installMcpJson(p, "prior", { url: "https://api.cg3.io/mcp" }, false);
-    const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    assert.ok(data.mcpServers.prior);
-    assert.equal(data.mcpServers.prior.url, "https://api.cg3.io/mcp");
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("preserves existing Junie MCP entries", () => {
-    const dir = tmpPath("junie-mcp-existing-dir");
-    fs.mkdirSync(dir, { recursive: true });
-    const configPath = path.join(dir, "mcp.json");
-    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { other: { url: "https://other.com" } } }));
-    const p = mockPlatform({ platform: "junie", configPath, rootKey: "mcpServers", configFormat: "json" });
-    installMcpJson(p, "prior", { url: "https://api.cg3.io/mcp" }, false);
-    const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    assert.equal(data.mcpServers.other.url, "https://other.com");
-    assert.equal(data.mcpServers.prior.url, "https://api.cg3.io/mcp");
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-});
-
-describe("Equip class (Junie)", () => {
-  it("buildConfig uses url and headers for junie", () => {
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
-    const config = e.buildConfig("junie", "key123");
-    assert.equal(config.url, "https://example.com/mcp");
-    assert.equal(config.headers.Authorization, "Bearer key123");
-  });
-
-  it("installMcp and readMcp roundtrip with JSON", () => {
-    const configPath = tmpPath("junie-equip") + ".json";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
-    const p = mockPlatform({ platform: "junie", configPath, rootKey: "mcpServers", configFormat: "json" });
-    cleanup(configPath);
-    e.installMcp(p, "key123");
-    const entry = e.readMcp(p);
-    assert.ok(entry);
-    assert.equal(entry.url, "https://example.com/mcp");
-    e.uninstallMcp(p);
-    assert.equal(e.readMcp(p), null);
-    cleanup(configPath);
-  });
-});
-
-describe("createManualPlatform (Junie)", () => {
-  it("returns correct config for junie", () => {
-    const p = createManualPlatform("junie");
-    assert.equal(p.platform, "junie");
-    assert.equal(p.rootKey, "mcpServers");
-    assert.equal(p.configFormat, "json");
-    assert.ok(p.configPath.includes(".junie"));
-    assert.equal(p.rulesPath, null);
-  });
-});
-
-// --- Copilot (JetBrains) ------------------------------------------------
-
-describe("platformName (Copilot JetBrains)", () => {
-  it("returns Copilot (JetBrains)", () => {
-    assert.equal(platformName("copilot-jetbrains"), "Copilot (JetBrains)");
-  });
-});
-
-describe("buildHttpConfig (Copilot JetBrains)", () => {
-  it("returns url for copilot-jetbrains", () => {
-    const config = buildHttpConfig("https://example.com/mcp", "copilot-jetbrains");
-    assert.equal(config.url, "https://example.com/mcp");
-    assert.equal(config.type, undefined);
-  });
-});
-
-describe("Copilot JetBrains MCP install (JSON)", () => {
-  it("installs and preserves entries", () => {
-    const dir = tmpPath("copilot-jb-dir");
-    fs.mkdirSync(dir, { recursive: true });
-    const configPath = path.join(dir, "mcp.json");
-    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { other: { url: "https://other.com" } } }));
-    const p = mockPlatform({ platform: "copilot-jetbrains", configPath, rootKey: "mcpServers", configFormat: "json" });
-    installMcpJson(p, "prior", { url: "https://api.cg3.io/mcp" }, false);
-    const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    assert.equal(data.mcpServers.other.url, "https://other.com");
-    assert.equal(data.mcpServers.prior.url, "https://api.cg3.io/mcp");
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-});
-
-describe("Equip class (Copilot JetBrains)", () => {
-  it("installMcp and readMcp roundtrip", () => {
-    const dir = tmpPath("copilot-jb-equip");
-    fs.mkdirSync(dir, { recursive: true });
-    const configPath = path.join(dir, "mcp.json");
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
-    const p = mockPlatform({ platform: "copilot-jetbrains", configPath, rootKey: "mcpServers", configFormat: "json" });
-    e.installMcp(p, "key123");
-    const entry = e.readMcp(p);
-    assert.ok(entry);
-    assert.equal(entry.url, "https://example.com/mcp");
-    e.uninstallMcp(p);
-    assert.equal(e.readMcp(p), null);
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-});
-
-describe("createManualPlatform (Copilot JetBrains)", () => {
-  it("returns correct config", () => {
-    const p = createManualPlatform("copilot-jetbrains");
-    assert.equal(p.platform, "copilot-jetbrains");
-    assert.equal(p.rootKey, "mcpServers");
-    assert.equal(p.configFormat, "json");
-    assert.ok(p.configPath.includes("github-copilot"));
-    assert.equal(p.rulesPath, null);
-  });
-});
-
-// --- Copilot CLI ---------------------------------------------------------
-
-describe("platformName (Copilot CLI)", () => {
-  it("returns Copilot CLI", () => {
-    assert.equal(platformName("copilot-cli"), "Copilot CLI");
-  });
-});
-
-describe("buildHttpConfig (Copilot CLI)", () => {
-  it("returns url for copilot-cli", () => {
-    const config = buildHttpConfig("https://example.com/mcp", "copilot-cli");
-    assert.equal(config.url, "https://example.com/mcp");
-  });
-});
-
-describe("Copilot CLI MCP install (JSON)", () => {
-  it("installs to mcp-config.json", () => {
-    const dir = tmpPath("copilot-cli-dir");
-    fs.mkdirSync(dir, { recursive: true });
-    const configPath = path.join(dir, "mcp-config.json");
-    const p = mockPlatform({ platform: "copilot-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
-    installMcpJson(p, "prior", { url: "https://api.cg3.io/mcp" }, false);
-    const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    assert.equal(data.mcpServers.prior.url, "https://api.cg3.io/mcp");
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-});
-
-describe("Equip class (Copilot CLI)", () => {
-  it("installMcp and readMcp roundtrip", () => {
-    const dir = tmpPath("copilot-cli-equip");
-    fs.mkdirSync(dir, { recursive: true });
-    const configPath = path.join(dir, "mcp-config.json");
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
-    const p = mockPlatform({ platform: "copilot-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
-    e.installMcp(p, "key123");
-    const entry = e.readMcp(p);
-    assert.ok(entry);
-    assert.equal(entry.url, "https://example.com/mcp");
-    e.uninstallMcp(p);
-    assert.equal(e.readMcp(p), null);
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-});
-
-describe("createManualPlatform (Copilot CLI)", () => {
-  it("returns correct config", () => {
-    const p = createManualPlatform("copilot-cli");
-    assert.equal(p.platform, "copilot-cli");
-    assert.equal(p.rootKey, "mcpServers");
-    assert.equal(p.configFormat, "json");
-    assert.ok(p.configPath.includes(".copilot"));
-    assert.equal(p.rulesPath, null);
   });
 });

@@ -7,17 +7,27 @@
 
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 const EQUIP_VERSION = JSON.parse(
-  require("fs").readFileSync(path.join(__dirname, "..", "package.json"), "utf-8")
+  fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8")
 ).version;
 
 // ─── Tool Registry ──────────────────────────────────────────
+// Loaded from registry.json — submit a PR to add your tool.
 
-const TOOLS = {
-  prior: { package: "@cg3/prior-node", command: "setup" },
-  demo: { builtin: true },
-};
+const REGISTRY = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "registry.json"), "utf-8")
+);
+
+// Filter out JSON schema fields
+const TOOLS = {};
+for (const [key, value] of Object.entries(REGISTRY)) {
+  if (!key.startsWith("$")) TOOLS[key] = value;
+}
+
+// Built-in tools (not in registry.json)
+TOOLS.demo = { builtin: true, description: "Built-in reference example" };
 
 // ─── CLI ─────────────────────────────────────────────────────
 
@@ -29,10 +39,11 @@ if (!alias || alias === "--help" || alias === "-h") {
   console.log("");
   console.log("Available tools:");
   for (const [name, info] of Object.entries(TOOLS)) {
+    const desc = info.description ? `  ${info.description}` : "";
     if (info.builtin) {
-      console.log(`  ${name}  →  built-in (reference example)`);
+      console.log(`  ${name}  →  built-in${desc ? " — " + info.description : ""}`);
     } else {
-      console.log(`  ${name}  →  ${info.package} ${info.command}`);
+      console.log(`  ${name}  →  ${info.package} ${info.command}${desc ? " — " + info.description : ""}`);
     }
   }
   console.log("");
@@ -62,14 +73,14 @@ if (entry && entry.builtin) {
 // No registry match — treat as a package name (e.g. "@scope/pkg setup")
 if (!entry) {
   const pkg = alias;
-  const command = extraArgs.shift(); // first extra arg is the command
+  const command = extraArgs.shift();
   if (!command) {
     console.error(`Usage: npx @cg3/equip <package> <command> [options]`);
     console.error(`   or: npx @cg3/equip <shorthand> [options]`);
     console.error("");
     console.error("Registered shorthands:");
     for (const [name, info] of Object.entries(TOOLS)) {
-      console.log(`  ${name}  →  ${info.package} ${info.command}`);
+      if (!info.builtin) console.log(`  ${name}  →  ${info.package} ${info.command}`);
     }
     process.exit(1);
   }

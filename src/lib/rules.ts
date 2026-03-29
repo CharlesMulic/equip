@@ -5,6 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { DetectedPlatform } from "./platforms";
+import { copyToClipboard } from "./cli";
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -35,7 +36,6 @@ export interface InstallRulesOptions {
   fileName?: string;
   clipboardPlatforms?: string[];
   dryRun?: boolean;
-  copyToClipboard?: (text: string) => boolean;
 }
 
 /**
@@ -49,11 +49,10 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
     fileName,
     clipboardPlatforms = ["cursor", "vscode"],
     dryRun = false,
-    copyToClipboard,
   } = options;
 
   if (clipboardPlatforms.includes(platform.platform)) {
-    if (!dryRun && copyToClipboard) {
+    if (!dryRun) {
       copyToClipboard(content);
     }
     return { action: "clipboard" };
