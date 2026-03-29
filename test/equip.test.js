@@ -34,10 +34,8 @@ function tmpPath(prefix = "equip-test") {
 function mockPlatform(overrides = {}) {
   return {
     platform: "claude-code",
-    version: "1.0.0",
     configPath: tmpPath("config") + ".json",
     rulesPath: tmpPath("rules") + ".md",
-    hasCli: false,
     existingMcp: null,
     rootKey: "mcpServers",
     configFormat: "json",

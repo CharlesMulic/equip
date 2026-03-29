@@ -1,5 +1,11 @@
 // State management — tracks what equip has installed across platforms.
 // State file: ~/.equip/state.json
+//
+// IMPORTANT: State is exclusively written by the global equip CLI
+// (bin/equip.js reconcileState). The Equip library class is stateless —
+// it writes config files but does NOT touch state.json. This avoids
+// version skew issues between the CLI's equip and a tool's bundled equip.
+//
 // Zero dependencies.
 
 import * as fs from "fs";

@@ -4,7 +4,6 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
 import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
@@ -210,32 +209,10 @@ export function buildStdioConfig(command: string, args: string[], env: Record<st
 
 /**
  * Install MCP config for a platform.
- * Tries platform CLI first (if available), falls back to file write.
+ * Writes directly to the platform's config file (JSON or TOML).
  */
 export function installMcp(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, options: { dryRun?: boolean; serverUrl?: string } = {}): { success: boolean; method: string } {
   const { dryRun = false } = options;
-  const def = PLATFORM_REGISTRY.get(platform.platform);
-
-  // Try CLI install first
-  if (def?.cliInstall && platform.hasCli) {
-    const cliArgs = def.cliInstall.buildArgs(serverName, mcpEntry);
-    if (cliArgs) {
-      try {
-        if (!dryRun) {
-          const cliCmd = def.detection.cli!;
-          execSync(`${cliCmd} ${cliArgs.map(a => a.includes(" ") ? `"${a}"` : a).join(" ")}`, {
-            encoding: "utf-8", timeout: 15000, stdio: "pipe",
-          });
-          const check = readMcpEntry(platform.configPath, platform.rootKey, serverName, platform.configFormat);
-          if (check) return { success: true, method: "cli" };
-        } else {
-          return { success: true, method: "cli" };
-        }
-      } catch { /* fall through to file write */ }
-    }
-  }
-
-  // File write
   if (platform.configFormat === "toml") {
     return installMcpToml(platform, serverName, mcpEntry, dryRun);
   }

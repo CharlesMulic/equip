@@ -32,11 +32,6 @@ export interface PlatformHookCapabilities {
   format: string;
 }
 
-export interface PlatformCliInstall {
-  /** Build CLI install command args. Returns null if CLI doesn't support this transport. */
-  buildArgs: (serverName: string, mcpEntry: Record<string, unknown>) => string[] | null;
-}
-
 export interface PlatformDefinition {
   id: string;
   name: string;
@@ -48,17 +43,14 @@ export interface PlatformDefinition {
   httpShape: PlatformHttpShape;
   detection: PlatformDetection;
   hooks: PlatformHookCapabilities | null;
-  cliInstall: PlatformCliInstall | null;
 }
 
 /** The shape returned by detect() and createManualPlatform() */
 export interface DetectedPlatform {
   platform: string;
-  version: string;
   configPath: string;
   rulesPath: string | null;
   existingMcp: Record<string, unknown> | null;
-  hasCli: boolean;
   rootKey: string;
   configFormat: "json" | "toml";
 }
@@ -91,36 +83,6 @@ function getClaudeCodeVersion(): string | null {
   } catch { return null; }
 }
 
-// ─── CLI Install Helpers ────────────────────────────────────
-
-function claudeCliArgs(serverName: string, mcpEntry: Record<string, unknown>): string[] | null {
-  if (!mcpEntry.url) return null;
-  const args = ["mcp", "add", "--transport", "http", "-s", "user"];
-  if (mcpEntry.headers && typeof mcpEntry.headers === "object") {
-    for (const [k, v] of Object.entries(mcpEntry.headers as Record<string, string>)) {
-      args.push("--header", `${k}: ${v}`);
-    }
-  }
-  args.push(serverName, mcpEntry.url as string);
-  return args;
-}
-
-function cursorCliArgs(serverName: string, mcpEntry: Record<string, unknown>): string[] | null {
-  const json = JSON.stringify({ name: serverName, ...mcpEntry });
-  return ["--add-mcp", json];
-}
-
-function vscodeCliArgs(serverName: string, mcpEntry: Record<string, unknown>): string[] | null {
-  const json = JSON.stringify({ name: serverName, ...mcpEntry });
-  return ["--add-mcp", json];
-}
-
-function codexCliArgs(serverName: string, mcpEntry: Record<string, unknown>): string[] | null {
-  // Codex CLI only supports stdio install, not HTTP
-  if (!mcpEntry.command) return null;
-  return ["mcp", "add", serverName, "--", mcpEntry.command as string, ...((mcpEntry.args as string[]) || [])];
-}
-
 // ─── Registry ───────────────────────────────────────────────
 
 const CLAUDE_CODE_HOOKS_EVENTS = [
@@ -150,7 +112,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       events: CLAUDE_CODE_HOOKS_EVENTS,
       format: "claude-code",
     },
-    cliInstall: { buildArgs: claudeCliArgs },
   }],
   ["cursor", {
     id: "cursor",
@@ -167,7 +128,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
-    cliInstall: { buildArgs: cursorCliArgs },
   }],
   ["windsurf", {
     id: "windsurf",
@@ -184,7 +144,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
-    cliInstall: null,
   }],
   ["vscode", {
     id: "vscode",
@@ -201,7 +160,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [() => path.join(vsCodeUserDir(), "mcp.json")],
     },
     hooks: null,
-    cliInstall: { buildArgs: vscodeCliArgs },
   }],
   ["cline", {
     id: "cline",
@@ -218,7 +176,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [() => path.join(vsCodeUserDir(), "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")],
     },
     hooks: null,
-    cliInstall: null,
   }],
   ["roo-code", {
     id: "roo-code",
@@ -235,7 +192,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [() => path.join(vsCodeUserDir(), "globalStorage", "rooveterinaryinc.roo-cline", "settings", "cline_mcp_settings.json")],
     },
     hooks: null,
-    cliInstall: null,
   }],
   ["codex", {
     id: "codex",
@@ -252,7 +208,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
-    cliInstall: { buildArgs: codexCliArgs },
   }],
   ["gemini-cli", {
     id: "gemini-cli",
@@ -269,7 +224,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
-    cliInstall: null,
   }],
   ["junie", {
     id: "junie",
@@ -286,7 +240,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
-    cliInstall: null,
   }],
   ["copilot-jetbrains", {
     id: "copilot-jetbrains",
@@ -303,7 +256,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
-    cliInstall: null,
   }],
   ["copilot-cli", {
     id: "copilot-cli",
@@ -320,7 +272,6 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
-    cliInstall: null,
   }],
 ]);
 
@@ -351,11 +302,9 @@ export function createManualPlatform(platformId: string): DetectedPlatform {
   const def = getPlatform(platformId);
   return {
     platform: def.id,
-    version: "unknown",
     configPath: def.configPath(),
     rulesPath: def.rulesPath ? def.rulesPath() : null,
     existingMcp: null,
-    hasCli: false,
     rootKey: def.rootKey,
     configFormat: def.configFormat,
   };

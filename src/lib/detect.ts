@@ -29,36 +29,34 @@ export function fileExists(p: string): boolean {
 
 /**
  * Detect installed AI coding platforms.
- * Checks directories and files first (fast), then CLI presence.
- * Skips --version calls for performance.
+ * Checks directories and files first (fast fs stat).
+ * Falls back to CLI presence check (which/where) only when
+ * no filesystem evidence exists.
  * @param serverName - MCP server name to check for existing config
  */
 export function detectPlatforms(serverName?: string): DetectedPlatform[] {
   const platforms: DetectedPlatform[] = [];
 
   for (const [, def] of PLATFORM_REGISTRY) {
-    // Check dirs/files first (fast fs stat), CLI last (slow shell exec)
+    // Check dirs/files first (fast fs stat)
     const dirFound = def.detection.dirs.some(fn => dirExists(fn()));
     const fileFound = def.detection.files.some(fn => fileExists(fn()));
     const parentDirFound = def.detection.files.some(fn => dirExists(path.dirname(fn())));
 
-    // Only shell out for `which` if no dir/file evidence found
-    const hasCli = (dirFound || fileFound || parentDirFound)
-      ? (def.detection.cli ? !!whichSync(def.detection.cli) : false)
-      : (def.detection.cli ? !!whichSync(def.detection.cli) : false);
+    // Only shell out for `which` if no filesystem evidence found
+    const fsEvidence = dirFound || fileFound || parentDirFound;
+    const cliFound = !fsEvidence && def.detection.cli ? !!whichSync(def.detection.cli) : false;
 
-    if (!hasCli && !dirFound && !fileFound && !parentDirFound) continue;
+    if (!fsEvidence && !cliFound) continue;
 
     const configPath = def.configPath();
     const rulesPath = def.rulesPath ? def.rulesPath() : null;
 
     platforms.push({
       platform: def.id,
-      version: "detected",
       configPath,
       rulesPath,
       existingMcp: serverName ? readMcpEntry(configPath, def.rootKey, serverName, def.configFormat) : null,
-      hasCli,
       rootKey: def.rootKey,
       configFormat: def.configFormat,
     });
