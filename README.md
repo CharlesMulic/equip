@@ -28,7 +28,7 @@ These platforms get both MCP server config *and* auto-installed behavioral rules
 | Platform | MCP Config | Rules |
 |---|---|---|
 | Claude Code | `~/.claude.json` (JSON, `mcpServers`) | `~/.claude/CLAUDE.md` (append) |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` (JSON, `mcpServers`) | `global_rules.md` (append) |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` (JSON, `mcpServers`, `serverUrl`) | `~/.codeium/windsurf/memories/global_rules.md` (append) |
 | Cline | `globalStorage/.../cline_mcp_settings.json` (JSON, `mcpServers`) | `~/Documents/Cline/Rules/` (standalone file) |
 | Roo Code | `globalStorage/.../cline_mcp_settings.json` (JSON, `mcpServers`) | `~/.roo/rules/` (standalone file) |
 | Codex | `~/.codex/config.toml` (TOML, `mcp_servers`) | `~/.codex/AGENTS.md` (append) |
@@ -40,7 +40,7 @@ These platforms get MCP server config but don't have a writable global rules fil
 
 | Platform | MCP Config |
 |---|---|
-| Cursor | `~/.cursor/mcp.json` (JSON, `mcpServers`) |
+| Cursor | `~/.cursor/mcp.json` (JSON, `mcpServers`, `type: "streamable-http"`) |
 | VS Code | `Code/User/mcp.json` (JSON, `servers`, `type: "http"`) |
 | Junie (JetBrains) | `~/.junie/mcp/mcp.json` (JSON, `mcpServers`) |
 | Copilot (JetBrains) | `~/.config/github-copilot/intellij/mcp.json` (JSON, `mcpServers`) |
@@ -54,7 +54,7 @@ Some platforms support **lifecycle hooks** — scripts that run automatically at
 
 | Platform | Hooks Support | Events |
 |---|---|---|
-| Claude Code | ✅ | `PostToolUseFailure`, `Stop`, `PreToolUse`, `PostToolUse` |
+| Claude Code | ✅ | `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `Notification`, `SubagentStart`, `SubagentStop`, `PreCompact`, `TaskCompleted` |
 | All others | ❌ | — |
 
 When hooks are supported, equip writes the consumer-provided scripts to a configurable directory (default: `~/.${name}/hooks/`) and registers them in the platform's settings. Hooks are a **silent enhancement** — if the platform doesn't support them, equip installs only MCP + rules without any error or warning.
@@ -137,6 +137,12 @@ for (const p of platforms) {
   - `clipboardPlatforms` — Platform IDs that use clipboard (default: `["cursor", "vscode"]`)
 - `config.stdio` — Stdio transport config (optional, alternative to HTTP)
   - `command`, `args`, `envKey`
+- `config.hooks` — Lifecycle hook definitions (optional, array)
+  - `event` — Hook event name (e.g., `"PostToolUseFailure"`)
+  - `matcher` — Regex matcher for event filtering (optional, e.g., `"Bash"`)
+  - `script` — Hook script content (Node.js)
+  - `name` — Script filename (without `.js` extension)
+- `config.hookDir` — Directory for hook scripts (default: `~/.${name}/hooks/`)
 
 ### Instance Methods
 
@@ -158,8 +164,10 @@ for (const p of platforms) {
 All internal functions are also exported for advanced usage:
 
 ```js
-const { detectPlatforms, installMcpJson, installRules, createManualPlatform, platformName, cli } = require("@cg3/equip");
+const { detectPlatforms, installMcpJson, installRules, createManualPlatform, platformName, resolvePlatformId, cli } = require("@cg3/equip");
 ```
+
+- `resolvePlatformId(input)` — Resolve a friendly name or alias to a canonical platform ID (e.g., `"claude"` → `"claude-code"`, `"roo"` → `"roo-code"`)
 
 ## Key Features
 

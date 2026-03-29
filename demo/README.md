@@ -15,7 +15,7 @@ The demo runs in **dry-run mode by default** — it shows exactly what would hap
 
 ## What it does
 
-The demo installs a fictional MCP tool called `my-tool` across all detected AI coding platforms. It walks through the core equip operations:
+The demo installs a fictional MCP tool called `acme-docs` across all detected AI coding platforms. It walks through the core equip operations:
 
 1. **Detect** — scan for installed AI tools (Claude Code, Cursor, VS Code, etc.)
 2. **API key** — prompt for or configure authentication
