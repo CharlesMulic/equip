@@ -2,6 +2,8 @@
 
 Universal MCP server + behavioral rules installer for AI coding agents.
 
+[Join the Discord](https://discord.gg/bBcRHT4J) — bug reports, feedback, share what you're building.
+
 Equip handles the hard part of distributing your MCP tool: detecting which AI coding platforms are installed, writing the correct config format for each one, and managing versioned behavioral rules — all with zero dependencies.
 
 ## Run the Demo
