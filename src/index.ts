@@ -7,6 +7,7 @@ import * as os from "os";
 import { detectPlatforms } from "./lib/detect";
 import { readMcpEntry, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
 import { parseRulesVersion, installRules, uninstallRules, markerPatterns } from "./lib/rules";
+import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
 import * as cli from "./lib/cli";
@@ -124,6 +125,71 @@ class Equip {
   supportsHooks(platform: DetectedPlatform): boolean {
     return !!this.hookDefs && this.hookDefs.length > 0 && !!getHookCapabilities(platform.platform);
   }
+
+  /**
+   * Verify that a tool is correctly installed on a platform.
+   * Returns a structured result with per-check status.
+   */
+  verify(platform: DetectedPlatform): VerifyResult {
+    const checks: VerifyCheck[] = [];
+
+    // Check MCP config entry
+    const mcpEntry = this.readMcp(platform);
+    checks.push({
+      name: "mcp",
+      ok: !!mcpEntry,
+      detail: mcpEntry ? "MCP config entry present" : "MCP config entry missing",
+    });
+
+    // Check rules (if configured and platform supports them)
+    if (this.rules && platform.rulesPath) {
+      let rulesOk = false;
+      let rulesDetail = "Rules file not found";
+      try {
+        const content = fs.readFileSync(platform.rulesPath, "utf-8");
+        const version = parseRulesVersion(content, this.rules.marker);
+        if (version === this.rules.version) {
+          rulesOk = true;
+          rulesDetail = `Rules v${version} present`;
+        } else if (version) {
+          rulesDetail = `Rules version mismatch: installed v${version}, expected v${this.rules.version}`;
+        } else {
+          rulesDetail = "Rules marker block not found";
+        }
+      } catch { /* file not readable */ }
+      checks.push({ name: "rules", ok: rulesOk, detail: rulesDetail });
+    }
+
+    // Check hooks (if configured and platform supports them)
+    if (this.hookDefs && this.hookDefs.length > 0 && this.supportsHooks(platform)) {
+      const hooksInstalled = this.hasHooks(platform);
+      checks.push({
+        name: "hooks",
+        ok: hooksInstalled,
+        detail: hooksInstalled ? `${this.hookDefs.length} hook${this.hookDefs.length === 1 ? "" : "s"} registered` : "Hooks not registered",
+      });
+    }
+
+    return {
+      platform: platform.platform,
+      ok: checks.every(c => c.ok),
+      checks,
+    };
+  }
+}
+
+// ─── Verify Types ───────────────────────────────────────────
+
+export interface VerifyCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface VerifyResult {
+  platform: string;
+  ok: boolean;
+  checks: VerifyCheck[];
 }
 
 // ─── Public API ─────────────────────────────────────────────

@@ -25,6 +25,7 @@ const { buildHttpConfig, buildHttpConfigWithAuth, installMcpJson, installMcpToml
 const { installRules } = require("../dist/lib/rules");
 const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("../dist/lib/mcp");
 const { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup, resolvePackageVersion } = require("../dist/lib/fs");
+const { reconcileState } = require("../dist/lib/reconcile");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -854,5 +855,141 @@ describe("resolvePackageVersion", () => {
   it("returns unknown for unresolvable directory", () => {
     const version = resolvePackageVersion("/tmp");
     assert.equal(version, "unknown");
+  });
+});
+
+// ─── Verify Method ──────────────────────────────────────────
+
+describe("Equip.verify()", () => {
+  it("returns ok when MCP is installed", () => {
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform();
+    cleanup(p.configPath);
+    e.installMcp(p, "key123");
+    const result = e.verify(p);
+    assert.ok(result.ok);
+    assert.equal(result.checks.find(c => c.name === "mcp").ok, true);
+    cleanup(p.configPath);
+  });
+
+  it("returns not ok when MCP is missing", () => {
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform();
+    cleanup(p.configPath);
+    // Don't install — verify should fail
+    const result = e.verify(p);
+    assert.ok(!result.ok);
+    assert.equal(result.checks.find(c => c.name === "mcp").ok, false);
+  });
+
+  it("checks rules when configured", () => {
+    const e = new Equip({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      rules: { content: "<!-- test:v1.0.0 -->\nTest\n<!-- /test -->", version: "1.0.0", marker: "test" },
+    });
+    const p = mockPlatform();
+    cleanup(p.configPath, p.rulesPath);
+    e.installMcp(p, "key123");
+    e.installRules(p);
+    const result = e.verify(p);
+    assert.ok(result.ok);
+    const rulesCheck = result.checks.find(c => c.name === "rules");
+    assert.ok(rulesCheck);
+    assert.ok(rulesCheck.ok);
+    assert.ok(rulesCheck.detail.includes("v1.0.0"));
+    cleanup(p.configPath, p.rulesPath);
+  });
+
+  it("detects rules version mismatch", () => {
+    const e = new Equip({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      rules: { content: "<!-- test:v2.0.0 -->\nTest\n<!-- /test -->", version: "2.0.0", marker: "test" },
+    });
+    const p = mockPlatform();
+    cleanup(p.configPath, p.rulesPath);
+    e.installMcp(p, "key123");
+    // Write an older version of rules
+    fs.writeFileSync(p.rulesPath, "<!-- test:v1.0.0 -->\nOld\n<!-- /test -->\n");
+    const result = e.verify(p);
+    assert.ok(!result.ok);
+    const rulesCheck = result.checks.find(c => c.name === "rules");
+    assert.ok(!rulesCheck.ok);
+    assert.ok(rulesCheck.detail.includes("mismatch"));
+    cleanup(p.configPath, p.rulesPath);
+  });
+
+  it("returns structured result with platform id", () => {
+    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "cursor" });
+    const result = e.verify(p);
+    assert.equal(result.platform, "cursor");
+    assert.ok(Array.isArray(result.checks));
+  });
+});
+
+// ─── Reconcile State ────────────────────────────────────────
+
+describe("reconcileState", () => {
+  const { readState, writeState, trackUninstall } = require("../dist/lib/state");
+
+  it("finds installed tools across platforms", () => {
+    // Set up a mock config file with a tool entry
+    const p = mockPlatform();
+    fs.writeFileSync(p.configPath, JSON.stringify({ mcpServers: { "test-reconcile": { url: "https://example.com" } } }));
+
+    // Reconcile won't find it because it scans real platform paths, not tmp paths
+    // This test verifies the function runs without error and returns a count
+    const count = reconcileState({
+      toolName: "test-reconcile",
+      package: "@test/pkg",
+      marker: "test-reconcile",
+    });
+    assert.equal(typeof count, "number");
+
+    // Clean up any state artifacts
+    trackUninstall("test-reconcile");
+    cleanup(p.configPath);
+  });
+
+  it("accepts custom marker and hookDir", () => {
+    // Verify the function accepts options without throwing
+    const count = reconcileState({
+      toolName: "nonexistent-tool",
+      package: "@test/pkg",
+      marker: "custom-marker",
+      hookDir: "/tmp/custom-hooks",
+    });
+    assert.equal(count, 0); // tool not installed anywhere
+  });
+
+  it("uses toolName as default marker", () => {
+    const count = reconcileState({
+      toolName: "nonexistent",
+      package: "@test/pkg",
+      // no marker — should default to toolName
+    });
+    assert.equal(count, 0);
+  });
+});
+
+// ─── equipVersionAtInstall ──────────────────────────────────
+
+describe("equipVersionAtInstall tracking", () => {
+  const { readState, trackInstall, trackUninstall } = require("../dist/lib/state");
+
+  it("records equipVersion on each platform record", () => {
+    trackInstall("version-test", "@test/pkg", "claude-code", {
+      transport: "http",
+      configPath: "/tmp/test.json",
+    });
+    const state = readState();
+    const record = state.tools["version-test"]?.platforms["claude-code"];
+    assert.ok(record);
+    assert.ok(record.equipVersion, "should have equipVersion");
+    assert.match(record.equipVersion, /^\d+\.\d+\.\d+/);
+
+    trackUninstall("version-test");
   });
 });

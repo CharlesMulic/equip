@@ -1,9 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Tool registry for npx @cg3/equip <shorthand>. Submit a PR to add your tool.",
+  "$comment": "Tool registry for equip <shorthand>. Submit a PR to add your tool.",
   "prior": {
     "package": "@cg3/prior-node",
     "command": "setup",
-    "description": "Prior — agent-centric shared knowledge base"
+    "description": "Prior — agent-centric shared knowledge base",
+    "marker": "prior",
+    "hookDir": "~/.prior/hooks"
   }
 }

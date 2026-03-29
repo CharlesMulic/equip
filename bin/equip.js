@@ -169,7 +169,17 @@ function spawnTool(pkg, command, extraArgs, toolName) {
     // the tool exited non-zero (e.g. user cancelled a post-install prompt)
     if (toolName) {
       try {
-        const changed = reconcileState(toolName, pkg);
+        const { reconcileState } = require("../dist/lib/reconcile");
+        const toolMeta = TOOLS[toolName] || {};
+        const hookDir = toolMeta.hookDir
+          ? toolMeta.hookDir.replace(/^~/, require("os").homedir())
+          : undefined;
+        const changed = reconcileState({
+          toolName,
+          package: pkg,
+          marker: toolMeta.marker || toolName,
+          hookDir,
+        });
         if (changed > 0) {
           process.stderr.write(`\n  equip: tracked ${toolName} on ${changed} platform${changed === 1 ? "" : "s"}\n`);
         }
@@ -183,70 +193,6 @@ function spawnTool(pkg, command, extraArgs, toolName) {
     console.error(`Failed to run ${pkg}: ${err.message}`);
     process.exit(1);
   });
-}
-
-/**
- * After a tool finishes, scan platform configs and update state
- * based on what's actually on disk. This ensures state is always
- * accurate regardless of which equip version the tool used internally.
- */
-function reconcileState(toolName, pkg) {
-  const { PLATFORM_REGISTRY } = require("../dist/lib/platforms");
-  const { readMcpEntry } = require("../dist/lib/mcp");
-  const { trackInstall } = require("../dist/lib/state");
-  const { dirExists, fileExists } = require("../dist/lib/detect");
-  const _fs = require("fs");
-  const _path = require("path");
-
-  let count = 0;
-
-  for (const [id, def] of PLATFORM_REGISTRY) {
-    // Quick check: is this platform present?
-    const dirFound = def.detection.dirs.some(fn => dirExists(fn()));
-    const fileFound = def.detection.files.some(fn => fileExists(fn()));
-    const configPath = def.configPath();
-    if (!dirFound && !fileFound && !fileExists(configPath)) continue;
-
-    // Check if tool has an MCP entry on this platform
-    const entry = readMcpEntry(configPath, def.rootKey, toolName, def.configFormat);
-    if (!entry) continue;
-
-    // Build state record from what's on disk
-    const record = {
-      configPath,
-      transport: entry.command ? "stdio" : "http",
-    };
-
-    // Check for rules (only on platforms that support writable rules)
-    if (def.rulesPath) {
-      const rulesPath = def.rulesPath();
-      try {
-        const content = _fs.readFileSync(rulesPath, "utf-8");
-        const versionMatch = content.match(new RegExp(`<!-- ${toolName}:v([0-9.]+) -->`));
-        if (versionMatch) {
-          record.rulesPath = rulesPath;
-          record.rulesVersion = versionMatch[1];
-        }
-      } catch {}
-    }
-
-    // Check for hooks (only on platforms that support hooks)
-    if (def.hooks) {
-      const hookDir = _path.join(require("os").homedir(), `.${toolName}`, "hooks");
-      try {
-        const hookFiles = _fs.readdirSync(hookDir).filter(f => f.endsWith(".js"));
-        if (hookFiles.length > 0) {
-          record.hookDir = hookDir;
-          record.hookScripts = hookFiles;
-        }
-      } catch {}
-    }
-
-    trackInstall(toolName, pkg, id, record);
-    count++;
-  }
-
-  return count;
 }
 
 // ─── Main ───────────────────────────────────────────────────

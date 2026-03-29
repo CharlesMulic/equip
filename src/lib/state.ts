@@ -28,6 +28,8 @@ export interface ToolPlatformRecord {
   hookDir?: string;
   /** List of installed hook script filenames */
   hookScripts?: string[];
+  /** Equip version that wrote this record */
+  equipVersion?: string;
 }
 
 export interface ToolRecord {
@@ -90,7 +92,7 @@ export function trackInstall(toolName: string, pkg: string, platformId: string, 
 
   // Merge into existing platform record (preserves fields from prior calls)
   const existing = state.tools[toolName].platforms[platformId] || {} as ToolPlatformRecord;
-  state.tools[toolName].platforms[platformId] = { ...existing, ...fields };
+  state.tools[toolName].platforms[platformId] = { ...existing, ...fields, equipVersion: version };
   state.tools[toolName].updatedAt = new Date().toISOString();
   state.tools[toolName].package = pkg;
   state.equipVersion = version;
