@@ -16,6 +16,7 @@ import { trackInstall, trackUninstall } from "./lib/state";
 
 export interface EquipConfig {
   name: string;
+  package?: string;
   serverUrl?: string;
   rules?: {
     content: string;
@@ -38,6 +39,7 @@ export interface EquipConfig {
  */
 class Equip {
   name: string;
+  package: string;
   serverUrl?: string;
   rules: EquipConfig["rules"] | null;
   stdio: EquipConfig["stdio"] | null;
@@ -49,6 +51,7 @@ class Equip {
     if (!config.serverUrl && !config.stdio) throw new Error("Equip: serverUrl or stdio is required");
 
     this.name = config.name;
+    this.package = config.package || config.name;
     this.serverUrl = config.serverUrl;
     this.rules = config.rules || null;
     this.stdio = config.stdio || null;
@@ -74,7 +77,7 @@ class Equip {
     const result = installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl });
     if (result.success && !dryRun) {
       try {
-        trackInstall(this.name, `@cg3/${this.name}`, platform.platform, {
+        trackInstall(this.name, this.package, platform.platform, {
           transport,
           configPath: platform.configPath,
         });
@@ -101,7 +104,7 @@ class Equip {
     const result = installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
     if ((result.action === "created" || result.action === "updated") && !options.dryRun) {
       try {
-        trackInstall(this.name, `@cg3/${this.name}`, platform.platform, {
+        trackInstall(this.name, this.package, platform.platform, {
           transport: "http",
           rulesVersion: this.rules.version,
           configPath: platform.configPath,
