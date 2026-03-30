@@ -4,9 +4,10 @@
 
 "use strict";
 
-const { spawn, execSync } = require("child_process");
+const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8"));
 const EQUIP_VERSION = PKG.version;
@@ -19,6 +20,21 @@ const REGISTRY = JSON.parse(
 const TOOLS = {};
 for (const [key, value] of Object.entries(REGISTRY)) {
   if (!key.startsWith("$")) TOOLS[key] = value;
+}
+
+// ─── Arg Parsing ───────────────────────────────────────────
+
+function parseArgs(argv) {
+  const args = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--verbose") { args.verbose = true; }
+    else if (a === "--dry-run") { args.dryRun = true; }
+    else if (a === "--non-interactive") { args.nonInteractive = true; }
+    else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
+    else { args._.push(a); }
+  }
+  return args;
 }
 
 // ─── Built-in Commands ──────────────────────────────────────
@@ -59,8 +75,7 @@ function cmdHelp() {
   console.log("Usage: equip <command> [options]");
   console.log("");
   console.log("Commands:");
-  console.log("  <tool>           Install a registered tool (e.g. equip prior)");
-  console.log("  <package>        Install any npm package (e.g. equip my-docs)");
+  console.log("  <tool>           Install a tool from the registry");
   console.log("  ./script.js      Run a local setup script (for development)");
   console.log("  .                Run current directory's package bin entry");
   console.log("  uninstall <tool> Remove an installed tool (alias: unequip)");
@@ -70,17 +85,13 @@ function cmdHelp() {
   console.log("  list             Show registered tools");
   console.log("  demo             Run the built-in demo");
   console.log("");
-  console.log("Registered tools:");
-  for (const [name, info] of Object.entries(TOOLS)) {
-    const desc = info.description ? ` — ${info.description}` : "";
-    console.log(`  ${name}${desc}`);
-  }
-  console.log("");
   console.log("Options:");
+  console.log("  --verbose        Show detailed logging");
+  console.log("  --api-key <key>  Provide API key (skip prompt)");
+  console.log("  --dry-run        Preview without writing");
   console.log("  --help, -h       Show this help");
   console.log("  --version, -v    Show version");
   console.log("");
-  console.log("Tool options are forwarded (e.g. equip prior --dry-run --platform codex)");
 }
 
 // ─── Command: list ──────────────────────────────────────────
@@ -93,7 +104,7 @@ function cmdList() {
     console.log(`  ${GREEN}${name}${RESET}  →  ${info.package} ${info.command}${desc}`);
   }
   console.log(`\n  ${DIM}Install: equip <tool>${RESET}`);
-  console.log(`  ${DIM}Add yours: PR to registry.json at github.com/CharlesMulic/equip${RESET}\n`);
+  console.log(`  ${DIM}Browse:  https://cg3.io/equip${RESET}\n`);
 }
 
 // ─── Command: demo ──────────────────────────────────────────
@@ -128,7 +139,6 @@ function cmdDoctor() {
 // ─── Command: update ────────────────────────────────────────
 
 function cmdUninstall(args) {
-  // Reuse unequip.js by injecting the tool name into argv and requiring it
   process.argv = [process.argv[0], process.argv[1], ...args];
   require("./unequip.js");
 }
@@ -138,7 +148,227 @@ function cmdUpdate() {
   runUpdate();
 }
 
-// ─── Tool Dispatch ──────────────────────────────────────────
+// ─── Logger ─────────────────────────────────────────────────
+
+function createConsoleLogger() {
+  const { DIM, RESET, YELLOW, RED } = require("../dist/lib/cli");
+  return {
+    debug(msg, ctx) { process.stderr.write(`  ${DIM}[debug] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
+    info(msg, ctx) { process.stderr.write(`  [info] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}\n`); },
+    warn(msg, ctx) { process.stderr.write(`  ${YELLOW}[warn] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
+    error(msg, ctx) { process.stderr.write(`  ${RED}[error] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
+  };
+}
+
+// ─── Direct-Mode Install ───────────────────────────────────
+
+async function directInstall(toolDef, parsedArgs) {
+  const { Equip, toolDefToEquipConfig, platformName, InstallReportBuilder, cli } = require("../dist/index");
+  const { reconcileState } = require("../dist/lib/reconcile");
+  const { log, ok, fail, warn, step, DIM, RESET, BOLD, GREEN } = cli;
+
+  const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
+  const dryRun = parsedArgs.dryRun;
+
+  log(`\n${BOLD}equip${RESET} v${EQUIP_VERSION} — installing ${toolDef.displayName || toolDef.name}`);
+  if (dryRun) warn("DRY RUN — no changes will be made");
+
+  // ── Auth Resolution ──
+  let apiKey = null;
+  if (toolDef.requiresAuth) {
+    // Check --api-key flag
+    if (parsedArgs.apiKey) {
+      apiKey = parsedArgs.apiKey;
+      if (logger) logger.info("Using API key from --api-key flag");
+    }
+
+    // Check environment variable
+    if (!apiKey && toolDef.envKey && process.env[toolDef.envKey]) {
+      apiKey = process.env[toolDef.envKey];
+      if (logger) logger.info(`Using API key from $${toolDef.envKey}`);
+    }
+
+    // Check stored credentials
+    if (!apiKey) {
+      try {
+        const credPath = path.join(os.homedir(), ".equip", "credentials", `${toolDef.name}.json`);
+        const cred = JSON.parse(fs.readFileSync(credPath, "utf-8"));
+        if (cred.credential) {
+          apiKey = cred.credential;
+          if (logger) logger.info("Using stored credential");
+        }
+      } catch { /* no stored credential */ }
+    }
+
+    // Interactive prompt
+    if (!apiKey && !parsedArgs.nonInteractive) {
+      const prompt = toolDef.auth?.keyPrompt || `Enter your ${toolDef.displayName || toolDef.name} API key`;
+      if (toolDef.auth?.keyHelpUrl) {
+        log(`  ${DIM}Get a key at: ${toolDef.auth.keyHelpUrl}${RESET}`);
+      }
+      apiKey = await cli.prompt(`  ${prompt}: `);
+      if (!apiKey) {
+        fail("No API key provided");
+        process.exit(1);
+      }
+    }
+
+    if (!apiKey) {
+      fail(`${toolDef.name} requires authentication. Use --api-key or set ${toolDef.envKey || "the key"}`);
+      process.exit(1);
+    }
+
+    // Store credential for future use
+    if (apiKey && !parsedArgs.dryRun) {
+      try {
+        const credDir = path.join(os.homedir(), ".equip", "credentials");
+        if (!fs.existsSync(credDir)) fs.mkdirSync(credDir, { recursive: true });
+        const credPath = path.join(credDir, `${toolDef.name}.json`);
+        fs.writeFileSync(credPath, JSON.stringify({
+          authType: "api_key",
+          credential: apiKey,
+          toolName: toolDef.name,
+          storedAt: new Date().toISOString(),
+        }, null, 2));
+        // Set restrictive permissions on Unix
+        if (process.platform !== "win32") {
+          fs.chmodSync(credPath, 0o600);
+        }
+      } catch { /* best effort */ }
+    }
+  }
+
+  // ── Platform Detection ──
+  const config = toolDefToEquipConfig(toolDef, { logger });
+  const equip = new Equip(config);
+  const platforms = equip.detect();
+
+  if (platforms.length === 0) {
+    fail("No supported AI coding tools detected.");
+    log(`\n  Install one of: Claude Code, Cursor, Windsurf, VS Code, Cline, Roo Code`);
+    process.exit(1);
+  }
+
+  const names = platforms.map(p => platformName(p.platform)).join(", ");
+  log(`\n  Detected   ${names}`);
+
+  // ── Install Loop ──
+  const report = new InstallReportBuilder();
+  const totalSteps = (config.rules ? 3 : 2) + (config.skill ? 1 : 0);
+  let stepNum = 0;
+
+  // MCP Server
+  step(++stepNum, totalSteps, "MCP Server");
+  const transport = toolDef.transport || "http";
+  log(`  Transport  ${transport}`);
+
+  for (const p of platforms) {
+    const result = equip.installMcp(p, apiKey, { transport, dryRun });
+    report.addResult(p.platform, result);
+    if (result.success) {
+      ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${DIM}(${transport}, ${result.method})${RESET}`);
+    } else {
+      fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
+    }
+  }
+
+  // Rules
+  if (config.rules) {
+    step(++stepNum, totalSteps, "Behavioral Rules");
+    for (const p of platforms) {
+      const result = equip.installRules(p, { dryRun });
+      report.addResult(p.platform, result);
+      if (result.action === "clipboard") {
+        ok(`${platformName(p.platform)}   Rules copied to clipboard`);
+        if (result.warnings.length > 0) {
+          warn(`${platformName(p.platform)}   ${result.warnings[0].message}`);
+        }
+      } else if (result.action === "created" || result.action === "updated") {
+        ok(`${platformName(p.platform)}   Rules v${config.rules.version} ${result.action}`);
+      } else if (result.action === "skipped" && result.attempted) {
+        ok(`${platformName(p.platform)}   Rules already current`);
+      }
+    }
+  }
+
+  // Skills
+  if (config.skill) {
+    step(++stepNum, totalSteps, "Skills");
+    for (const p of platforms) {
+      const result = equip.installSkill(p, { dryRun });
+      report.addResult(p.platform, result);
+      if (result.action === "created") {
+        ok(`${platformName(p.platform)}   Skill "${config.skill.name}" installed`);
+      } else if (result.action === "skipped" && result.attempted) {
+        ok(`${platformName(p.platform)}   Skill already current`);
+      }
+    }
+  }
+
+  // Verification
+  step(++stepNum, totalSteps, "Verification");
+  if (!dryRun) {
+    for (const p of platforms) {
+      const v = equip.verify(p);
+      if (v.ok) {
+        ok(`${platformName(p.platform)}   All checks passed`);
+      } else {
+        const failed = v.checks.filter(c => !c.ok).map(c => c.detail).join(", ");
+        warn(`${platformName(p.platform)}   ${failed}`);
+      }
+    }
+  }
+
+  report.complete();
+
+  // ── State Reconciliation ──
+  if (!dryRun) {
+    try {
+      const changed = reconcileState({
+        toolName: toolDef.name,
+        package: toolDef.npmPackage || toolDef.name,
+        marker: toolDef.rules?.marker || toolDef.name,
+      });
+      if (changed > 0 && logger) {
+        logger.debug("State reconciled", { platforms: changed });
+      }
+    } catch (e) {
+      if (logger) logger.warn("State reconciliation failed", { error: e.message });
+    }
+  }
+
+  // ── Telemetry (fire and forget) ──
+  if (!dryRun) {
+    try {
+      const payload = {
+        tool: toolDef.name,
+        action: "install",
+        ...report.toJSON(),
+        os: process.platform,
+        arch: process.arch,
+        equipVersion: EQUIP_VERSION,
+        nodeVersion: process.version,
+      };
+      fetch("https://api.cg3.io/equip/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
+    } catch { /* fire and forget */ }
+  }
+
+  // ── Summary ──
+  log("");
+  const succeeded = platforms.length;
+  log(`${GREEN}${BOLD}  Done.${RESET} ${succeeded} platform${succeeded === 1 ? "" : "s"} configured.`);
+  if (report.warningCount > 0) {
+    log(`  ${DIM}${report.warningCount} warning${report.warningCount === 1 ? "" : "s"}${RESET}`);
+  }
+  log("");
+}
+
+// ─── Package-Mode Dispatch (existing) ──────────────────────
 
 function isLocalPath(arg) {
   return arg.startsWith("./") || arg.startsWith("../") || arg.startsWith("/")
@@ -147,37 +377,6 @@ function isLocalPath(arg) {
     || arg.endsWith(".js");
 }
 
-function dispatchTool(alias, extraArgs) {
-  // Local path: run directly with node
-  if (isLocalPath(alias)) {
-    runLocal(alias, extraArgs);
-    return;
-  }
-
-  const entry = TOOLS[alias];
-
-  if (!entry) {
-    // No registry match — treat as a package name
-    // equip my-docs setup   → npx -y my-docs@latest setup
-    // equip my-docs          → npx -y my-docs@latest setup (default command)
-    const pkg = alias;
-    const command = extraArgs.length > 0 ? extraArgs.shift() : "setup";
-    // Infer tool name from package (strip scope: @myorg/my-docs → my-docs)
-    const inferredName = pkg.includes("/") ? pkg.split("/").pop() : pkg;
-    spawnTool(pkg, command, extraArgs, inferredName);
-    return;
-  }
-
-  // For registered tools, the alias IS the tool name (e.g. "prior")
-  spawnTool(entry.package, entry.command, extraArgs, alias);
-}
-
-/**
- * Run a local script or package directory.
- * - equip ./piratehat.js       → node ./piratehat.js
- * - equip .                    → reads package.json bin, runs it
- * - equip ../my-tool/setup.js  → node ../my-tool/setup.js
- */
 function runLocal(localPath, extraArgs) {
   const _path = require("path");
   const _fs = require("fs");
@@ -185,7 +384,6 @@ function runLocal(localPath, extraArgs) {
   let toolName = null;
 
   if (localPath === "." || (_fs.existsSync(localPath) && _fs.statSync(localPath).isDirectory())) {
-    // Directory — look for package.json with bin field
     const pkgPath = _path.join(localPath, "package.json");
     if (!_fs.existsSync(pkgPath)) {
       console.error(`No package.json found in ${localPath}`);
@@ -198,13 +396,10 @@ function runLocal(localPath, extraArgs) {
       console.error(`No bin field in ${pkgPath}`);
       process.exit(1);
     }
-    // Use the first bin entry
     const binScript = Object.values(binEntries)[0];
     scriptPath = _path.resolve(localPath, binScript);
   } else {
-    // Direct script path
     scriptPath = _path.resolve(localPath);
-    // Infer tool name from filename (piratehat.js → piratehat)
     toolName = _path.basename(scriptPath, ".js");
   }
 
@@ -249,8 +444,6 @@ function spawnTool(pkg, command, extraArgs, toolName) {
     env: { ...process.env, EQUIP_VERSION },
   });
   child.on("close", (code) => {
-    // Always reconcile state — install may have succeeded even if
-    // the tool exited non-zero (e.g. user cancelled a post-install prompt)
     if (toolName) {
       try {
         const { reconcileState } = require("../dist/lib/reconcile");
@@ -279,40 +472,95 @@ function spawnTool(pkg, command, extraArgs, toolName) {
   });
 }
 
+// ─── Tool Dispatch ──────────────────────────────────────────
+
+async function dispatchTool(alias, parsedArgs) {
+  const extraArgs = parsedArgs._;
+
+  // Local path: run directly with node
+  if (isLocalPath(alias)) {
+    runLocal(alias, extraArgs);
+    return;
+  }
+
+  // Try to fetch tool definition from registry API / cache / registry.json
+  const { fetchToolDef } = require("../dist/lib/registry");
+  const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
+  const toolDef = await fetchToolDef(alias, {
+    logger,
+    registryPath: path.join(__dirname, "..", "registry.json"),
+  });
+
+  if (toolDef && toolDef.installMode === "direct") {
+    // Direct-mode: in-process install
+    await directInstall(toolDef, parsedArgs);
+    return;
+  }
+
+  if (toolDef && toolDef.installMode === "package") {
+    // Package-mode: spawn npx
+    spawnTool(toolDef.npmPackage, toolDef.setupCommand || "setup", extraArgs, alias);
+    return;
+  }
+
+  // Fallback: check local registry for package-mode entries
+  const localEntry = TOOLS[alias];
+  if (localEntry) {
+    spawnTool(localEntry.package, localEntry.command, extraArgs, alias);
+    return;
+  }
+
+  // Unknown tool — treat as npm package name
+  const pkg = alias;
+  const command = extraArgs.length > 0 ? extraArgs.shift() : "setup";
+  const inferredName = pkg.includes("/") ? pkg.split("/").pop() : pkg;
+  spawnTool(pkg, command, extraArgs, inferredName);
+}
+
 // ─── Main ───────────────────────────────────────────────────
 
-const cmd = process.argv[2];
-const extraArgs = process.argv.slice(3);
+async function main() {
+  const rawArgs = process.argv.slice(2);
+  const cmd = rawArgs[0];
 
-if (cmd === "--help" || cmd === "-h") {
-  cmdHelp();
-  process.exit(0);
+  if (cmd === "--help" || cmd === "-h") {
+    cmdHelp();
+    process.exit(0);
+  }
+
+  if (!cmd) {
+    checkStaleVersion();
+    cmdStatus();
+    const { DIM, RESET } = require("../dist/lib/cli");
+    process.stderr.write(`  ${DIM}Run "equip --help" for all commands${RESET}\n\n`);
+    process.exit(0);
+  }
+
+  if (cmd === "--version" || cmd === "-v") {
+    cmdVersion();
+    process.exit(0);
+  }
+
+  // Stale version check for non-trivial commands
+  if (cmd !== "update" && cmd !== "--version" && cmd !== "-v") {
+    checkStaleVersion();
+  }
+
+  // Parse remaining args (after the command)
+  const parsedArgs = parseArgs(rawArgs.slice(1));
+
+  switch (cmd) {
+    case "status":    cmdStatus(); break;
+    case "doctor":    cmdDoctor(); break;
+    case "update":    cmdUpdate(); break;
+    case "list":      cmdList(); break;
+    case "demo":      cmdDemo(parsedArgs._); break;
+    case "uninstall": cmdUninstall(parsedArgs._); break;
+    default:          await dispatchTool(cmd, parsedArgs); break;
+  }
 }
 
-if (!cmd) {
-  checkStaleVersion();
-  cmdStatus();
-  const { DIM, RESET } = require("../dist/lib/cli");
-  process.stderr.write(`  ${DIM}Run "equip --help" for all commands${RESET}\n\n`);
-  process.exit(0);
-}
-
-if (cmd === "--version" || cmd === "-v") {
-  cmdVersion();
-  process.exit(0);
-}
-
-// Stale version check for non-trivial commands
-if (cmd !== "update" && cmd !== "--version" && cmd !== "-v") {
-  checkStaleVersion();
-}
-
-switch (cmd) {
-  case "status":    cmdStatus(); break;
-  case "doctor":    cmdDoctor(); break;
-  case "update":    cmdUpdate(); break;
-  case "list":      cmdList(); break;
-  case "demo":      cmdDemo(extraArgs); break;
-  case "uninstall": cmdUninstall(extraArgs); break;
-  default:          dispatchTool(cmd, extraArgs); break;
-}
+main().catch(err => {
+  console.error(`equip: ${err.message}`);
+  process.exit(1);
+});

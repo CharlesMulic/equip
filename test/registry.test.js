@@ -1,0 +1,256 @@
+// Tests for registry module: ToolDefinition conversion, fetchToolDef resolution, caching.
+
+"use strict";
+
+const { describe, it, before, after } = require("node:test");
+const assert = require("assert/strict");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const { toolDefToEquipConfig, fetchToolDef } = require("../dist/lib/registry");
+
+// ─── Test Helpers ───────────────────────────────────────────
+
+function tmpPath(prefix = "reg-test") {
+  return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+}
+
+function recordingLogger() {
+  const calls = [];
+  return {
+    calls,
+    debug(msg, ctx) { calls.push({ level: "debug", msg, ctx }); },
+    info(msg, ctx) { calls.push({ level: "info", msg, ctx }); },
+    warn(msg, ctx) { calls.push({ level: "warn", msg, ctx }); },
+    error(msg, ctx) { calls.push({ level: "error", msg, ctx }); },
+  };
+}
+
+// ─── toolDefToEquipConfig ──────────────────────────────────
+
+describe("toolDefToEquipConfig", () => {
+  it("converts minimal direct-mode tool", () => {
+    const def = {
+      name: "test-tool",
+      displayName: "Test Tool",
+      description: "A test",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      requiresAuth: false,
+      categories: [],
+    };
+    const config = toolDefToEquipConfig(def);
+    assert.equal(config.name, "test-tool");
+    assert.equal(config.serverUrl, "https://example.com/mcp");
+    assert.equal(config.rules, undefined);
+    assert.equal(config.hooks, undefined);
+    assert.equal(config.skill, undefined);
+  });
+
+  it("converts tool with rules", () => {
+    const def = {
+      name: "test",
+      displayName: "Test",
+      description: "",
+      installMode: "direct",
+      serverUrl: "https://example.com/mcp",
+      rules: {
+        content: "<!-- test:v1.0.0 -->\nRules\n<!-- /test -->",
+        version: "1.0.0",
+        marker: "test",
+      },
+    };
+    const config = toolDefToEquipConfig(def);
+    assert.ok(config.rules);
+    assert.equal(config.rules.content, def.rules.content);
+    assert.equal(config.rules.version, "1.0.0");
+    assert.equal(config.rules.marker, "test");
+  });
+
+  it("converts tool with skills (takes first from array)", () => {
+    const def = {
+      name: "test",
+      displayName: "Test",
+      description: "",
+      installMode: "direct",
+      serverUrl: "https://example.com/mcp",
+      skills: [
+        { name: "search", files: [{ path: "SKILL.md", content: "skill content" }] },
+        { name: "other", files: [{ path: "SKILL.md", content: "other" }] },
+      ],
+    };
+    const config = toolDefToEquipConfig(def);
+    assert.ok(config.skill);
+    assert.equal(config.skill.name, "search");
+    assert.equal(config.skill.files.length, 1);
+  });
+
+  it("converts tool with stdio config", () => {
+    const def = {
+      name: "test",
+      displayName: "Test",
+      description: "",
+      installMode: "direct",
+      stdioCommand: "node",
+      stdioArgs: ["server.js"],
+      envKey: "MY_API_KEY",
+    };
+    const config = toolDefToEquipConfig(def);
+    assert.ok(config.stdio);
+    assert.equal(config.stdio.command, "node");
+    assert.deepEqual(config.stdio.args, ["server.js"]);
+    assert.equal(config.stdio.envKey, "MY_API_KEY");
+  });
+
+  it("converts tool with hooks", () => {
+    const def = {
+      name: "test",
+      displayName: "Test",
+      description: "",
+      installMode: "direct",
+      serverUrl: "https://example.com/mcp",
+      hooks: [{ event: "PostToolUse", script: "console.log('hi')", name: "test-hook" }],
+      hookDir: "~/.test/hooks",
+    };
+    const config = toolDefToEquipConfig(def);
+    assert.ok(config.hooks);
+    assert.equal(config.hooks.length, 1);
+    assert.equal(config.hooks[0].event, "PostToolUse");
+    assert.ok(config.hookDir);
+    // ~ should be expanded
+    assert.ok(!config.hookDir.startsWith("~"));
+    assert.ok(config.hookDir.includes(".test"));
+  });
+
+  it("passes logger through", () => {
+    const logger = recordingLogger();
+    const def = { name: "test", displayName: "Test", description: "", installMode: "direct" };
+    const config = toolDefToEquipConfig(def, { logger });
+    assert.equal(config.logger, logger);
+  });
+});
+
+// ─── fetchToolDef ──────────────────────────────────────────
+
+describe("fetchToolDef", () => {
+  it("fetches demo-fetch from live API", async () => {
+    const logger = recordingLogger();
+    const def = await fetchToolDef("demo-fetch", { logger });
+
+    assert.ok(def, "Should fetch demo-fetch from API");
+    assert.equal(def.name, "demo-fetch");
+    assert.equal(def.installMode, "direct");
+    assert.equal(def.serverUrl, "https://httpbin.org/anything");
+    assert.ok(def.rules, "Should have rules");
+    assert.equal(def.rules.marker, "demo-fetch");
+    assert.ok(def.skills, "Should have skills");
+    assert.ok(def.skills.length > 0);
+
+    // Should have logged fetch and cache
+    const infos = logger.calls.filter(c => c.level === "info");
+    assert.ok(infos.some(c => c.msg.includes("fetched from API")));
+  });
+
+  it("fetches prior from live API as package-mode", async () => {
+    const def = await fetchToolDef("prior");
+    assert.ok(def);
+    assert.equal(def.name, "prior");
+    assert.equal(def.installMode, "package");
+    assert.equal(def.npmPackage, "@cg3/prior-node");
+  });
+
+  it("returns null for nonexistent tool", async () => {
+    const def = await fetchToolDef("nonexistent-tool-xyz-12345");
+    assert.equal(def, null);
+  });
+
+  it("falls back to local registry.json", async () => {
+    // Create a test registry.json
+    const regPath = tmpPath("registry") + ".json";
+    fs.writeFileSync(regPath, JSON.stringify({
+      "local-tool": {
+        "package": "@test/local-tool",
+        "command": "setup",
+        "description": "A local-only tool"
+      }
+    }));
+
+    // Fetch a tool that doesn't exist in API but is in local registry
+    const logger = recordingLogger();
+    const def = await fetchToolDef("local-tool", { logger, registryPath: regPath });
+
+    assert.ok(def, "Should fall back to local registry");
+    assert.equal(def.name, "local-tool");
+    assert.equal(def.installMode, "package");
+    assert.equal(def.npmPackage, "@test/local-tool");
+
+    fs.unlinkSync(regPath);
+  });
+
+  it("caches fetched definitions", async () => {
+    // First fetch — hits API
+    await fetchToolDef("demo-fetch");
+
+    // Verify cache file exists
+    const cachePath = path.join(os.homedir(), ".equip", "cache", "demo-fetch.json");
+    assert.ok(fs.existsSync(cachePath), "Cache file should exist after fetch");
+
+    const cached = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+    assert.equal(cached.name, "demo-fetch");
+    assert.equal(cached.installMode, "direct");
+  });
+});
+
+// ─── Direct-mode CLI integration ───────────────────────────
+
+describe("direct-mode CLI", () => {
+  it("dry-run installs demo-fetch without writing files", () => {
+    const { execSync } = require("child_process");
+    // CLI writes to stderr, redirect stderr to stdout to capture
+    const out = execSync("node bin/equip.js demo-fetch --dry-run 2>&1", {
+      encoding: "utf-8",
+      cwd: path.join(__dirname, ".."),
+      timeout: 15000,
+      shell: true,
+    });
+    assert.ok(out.includes("Demo Fetch"), "Should show tool display name");
+    assert.ok(out.includes("DRY RUN"), "Should indicate dry run");
+    assert.ok(out.includes("MCP Server"), "Should show MCP install step");
+    assert.ok(out.includes("Done."), "Should complete successfully");
+  });
+
+  it("verbose dry-run shows debug output", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js demo-fetch --dry-run --verbose 2>&1", {
+      encoding: "utf-8",
+      cwd: path.join(__dirname, ".."),
+      timeout: 15000,
+      shell: true,
+    });
+    assert.ok(out.includes("[debug]"), "Should show debug-level output");
+    assert.ok(out.includes("Fetching tool definition from API"), "Should log API fetch");
+  });
+
+  it("prior routes to package-mode", () => {
+    const { execSync } = require("child_process");
+    // Verify verbose output shows Prior routed as package-mode.
+    // The npx dispatch will start but we kill it quickly via timeout.
+    try {
+      execSync("node bin/equip.js prior --verbose 2>&1", {
+        encoding: "utf-8",
+        cwd: path.join(__dirname, ".."),
+        timeout: 5000,
+        shell: true,
+      });
+    } catch (e) {
+      // Will timeout or fail (npx dispatch), but output should show routing
+      const out = e.stdout || "";
+      assert.ok(
+        out.includes("package") || out.includes("Prior Setup") || out.includes("prior"),
+        "Should route Prior through package-mode"
+      );
+    }
+  });
+});

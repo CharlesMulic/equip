@@ -14,6 +14,7 @@ import * as cli from "./lib/cli";
 import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile } from "./lib/skills";
 import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, type EquipWarning, type EquipLogger, type EquipErrorCode, type EquipWarningCode, type ArtifactType, type ArtifactAction } from "./lib/types";
 import type { ReadMcpResult } from "./lib/mcp";
+import { fetchToolDef, toolDefToEquipConfig, type ToolDefinition, type LocalRegistryEntry } from "./lib/registry";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -250,6 +251,9 @@ export {
   NOOP_LOGGER,
   InstallReportBuilder,
   makeResult,
+  // Registry
+  fetchToolDef,
+  toolDefToEquipConfig,
 };
 
 // Types
@@ -269,4 +273,6 @@ export type {
   ArtifactType,
   ArtifactAction,
   ReadMcpResult,
+  ToolDefinition,
+  LocalRegistryEntry,
 };

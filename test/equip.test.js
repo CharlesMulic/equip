@@ -605,14 +605,14 @@ describe("Codex uninstallMcp (TOML)", () => {
 // ─── CLI Dispatcher ─────────────────────────────────────────
 
 describe("equip CLI", () => {
-  it("shows help with no args", () => {
+  it("shows help with --help", () => {
     const { execSync } = require("child_process");
     const out = execSync("node bin/equip.js --help", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
     assert.ok(out.includes("Commands:"));
-    assert.ok(out.includes("prior"));
     assert.ok(out.includes("status"));
     assert.ok(out.includes("doctor"));
     assert.ok(out.includes("update"));
+    assert.ok(out.includes("--verbose"));
   });
 
   it("shows version", () => {
@@ -646,10 +646,10 @@ describe("equip CLI", () => {
   it("help shows all dispatch paths", () => {
     const { execSync } = require("child_process");
     const out = execSync("node bin/equip.js --help", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
-    assert.ok(out.includes("<tool>"), "should show registered tool path");
-    assert.ok(out.includes("<package>"), "should show unregistered package path");
+    assert.ok(out.includes("<tool>"), "should show tool install path");
     assert.ok(out.includes("./script.js"), "should show local script path");
-    assert.ok(out.includes("."), "should show local package path");
+    assert.ok(out.includes("uninstall"), "should show uninstall command");
+    assert.ok(out.includes("--api-key"), "should show api-key option");
   });
 
   it("default command (no args) runs status without error", () => {
