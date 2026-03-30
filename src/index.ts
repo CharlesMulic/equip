@@ -5,13 +5,15 @@ import * as path from "path";
 import * as os from "os";
 
 import { detectPlatforms } from "./lib/detect";
-import { readMcpEntry, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
+import { readMcpEntry, readMcpEntryDetailed, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
 import { parseRulesVersion, installRules, uninstallRules, markerPatterns } from "./lib/rules";
 import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
 import * as cli from "./lib/cli";
 import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile } from "./lib/skills";
+import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, type EquipWarning, type EquipLogger, type EquipErrorCode, type EquipWarningCode, type ArtifactType, type ArtifactAction } from "./lib/types";
+import type { ReadMcpResult } from "./lib/mcp";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ export interface EquipConfig {
   hooks?: HookDefinition[];
   hookDir?: string;
   skill?: SkillConfig;
+  logger?: EquipLogger;
 }
 
 /**
@@ -46,6 +49,7 @@ class Equip {
   hookDefs: HookDefinition[] | null;
   hookDir: string;
   skill: SkillConfig | null;
+  logger: EquipLogger;
 
   constructor(config: EquipConfig) {
     if (!config.name) throw new Error("Equip: name is required");
@@ -57,6 +61,7 @@ class Equip {
     this.hookDefs = config.hooks || null;
     this.hookDir = config.hookDir || path.join(os.homedir(), `.${config.name}`, "hooks");
     this.skill = config.skill || null;
+    this.logger = config.logger || NOOP_LOGGER;
   }
 
   detect(): DetectedPlatform[] {
@@ -72,24 +77,24 @@ class Equip {
     return buildHttpConfigWithAuth(this.serverUrl, apiKey, platformId);
   }
 
-  installMcp(platform: DetectedPlatform, apiKey: string, options: { transport?: string; dryRun?: boolean } = {}): { success: boolean; method: string } {
+  installMcp(platform: DetectedPlatform, apiKey: string, options: { transport?: string; dryRun?: boolean } = {}): ArtifactResult {
     const { transport = "http", dryRun = false } = options;
     const config = this.buildConfig(platform.platform, apiKey, transport);
-    return installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl });
+    return installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl, logger: this.logger });
   }
 
   uninstallMcp(platform: DetectedPlatform, dryRun: boolean = false): boolean {
     return uninstallMcp(platform, this.name, dryRun);
   }
 
-  updateMcpKey(platform: DetectedPlatform, apiKey: string, transport: string = "http"): { success: boolean; method: string } {
+  updateMcpKey(platform: DetectedPlatform, apiKey: string, transport: string = "http"): ArtifactResult {
     const config = this.buildConfig(platform.platform, apiKey, transport);
-    return updateMcpKey(platform, this.name, config);
+    return updateMcpKey(platform, this.name, config, { logger: this.logger });
   }
 
-  installRules(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): { action: string } {
-    if (!this.rules) return { action: "skipped" };
-    return installRules(platform, { ...this.rules, dryRun: options.dryRun || false });
+  installRules(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): ArtifactResult {
+    if (!this.rules) return makeResult("rules", { attempted: false, success: true, action: "skipped" });
+    return installRules(platform, { ...this.rules, dryRun: options.dryRun || false, logger: this.logger });
   }
 
   uninstallRules(platform: DetectedPlatform, dryRun: boolean = false): boolean {
@@ -105,9 +110,13 @@ class Equip {
     return readMcpEntry(platform.configPath, platform.rootKey, this.name, platform.configFormat || "json");
   }
 
-  installHooks(platform: DetectedPlatform, options: { hookDir?: string; dryRun?: boolean } = {}): { installed: boolean; scripts: string[]; hookDir: string } | null {
-    if (!this.hookDefs) return null;
-    const opts = { ...options };
+  readMcpDetailed(platform: DetectedPlatform): ReadMcpResult {
+    return readMcpEntryDetailed(platform.configPath, platform.rootKey, this.name, platform.configFormat || "json");
+  }
+
+  installHooks(platform: DetectedPlatform, options: { hookDir?: string; dryRun?: boolean } = {}): ArtifactResult {
+    if (!this.hookDefs) return makeResult("hooks", { attempted: false, success: true, action: "skipped" });
+    const opts = { ...options, logger: this.logger };
     if (this.hookDir && !opts.hookDir) opts.hookDir = this.hookDir;
     return installHooks(platform, this.hookDefs, opts);
   }
@@ -130,9 +139,9 @@ class Equip {
     return !!this.hookDefs && this.hookDefs.length > 0 && !!getHookCapabilities(platform.platform);
   }
 
-  installSkill(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): { action: string } {
-    if (!this.skill) return { action: "skipped" };
-    return installSkill(platform, this.name, this.skill, options);
+  installSkill(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): ArtifactResult {
+    if (!this.skill) return makeResult("skills", { attempted: false, success: true, action: "skipped" });
+    return installSkill(platform, this.name, this.skill, { ...options, logger: this.logger });
   }
 
   uninstallSkill(platform: DetectedPlatform, dryRun: boolean = false): boolean {
@@ -237,7 +246,27 @@ export {
   markerPatterns,
   // CLI helpers (for consumer setup scripts)
   cli,
+  // Observability
+  NOOP_LOGGER,
+  InstallReportBuilder,
+  makeResult,
 };
 
 // Types
-export type { DetectedPlatform, PlatformDefinition, PlatformHttpShape, PlatformHookCapabilities, HookDefinition, SkillConfig, SkillFile };
+export type {
+  DetectedPlatform,
+  PlatformDefinition,
+  PlatformHttpShape,
+  PlatformHookCapabilities,
+  HookDefinition,
+  SkillConfig,
+  SkillFile,
+  ArtifactResult,
+  EquipWarning,
+  EquipLogger,
+  EquipErrorCode,
+  EquipWarningCode,
+  ArtifactType,
+  ArtifactAction,
+  ReadMcpResult,
+};

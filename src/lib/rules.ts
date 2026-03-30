@@ -7,6 +7,8 @@ import * as path from "path";
 import type { DetectedPlatform } from "./platforms";
 import { copyToClipboard } from "./cli";
 import { atomicWriteFileSync } from "./fs";
+import type { ArtifactResult, EquipLogger } from "./types";
+import { makeResult, NOOP_LOGGER } from "./types";
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -37,12 +39,13 @@ export interface InstallRulesOptions {
   fileName?: string;
   clipboardPlatforms?: string[];
   dryRun?: boolean;
+  logger?: EquipLogger;
 }
 
 /**
  * Install behavioral rules to a platform's rules file.
  */
-export function installRules(platform: DetectedPlatform, options: InstallRulesOptions): { action: string } {
+export function installRules(platform: DetectedPlatform, options: InstallRulesOptions): ArtifactResult {
   const {
     content,
     version,
@@ -50,16 +53,24 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
     fileName,
     clipboardPlatforms = ["cursor", "vscode"],
     dryRun = false,
+    logger = NOOP_LOGGER,
   } = options;
 
   if (clipboardPlatforms.includes(platform.platform)) {
+    const result = makeResult("rules", { attempted: true, success: true, action: "clipboard" });
     if (!dryRun) {
-      copyToClipboard(content);
+      const copied = copyToClipboard(content);
+      if (!copied) {
+        logger.warn("Clipboard copy failed", { platform: platform.platform });
+        result.warnings.push({ code: "WARN_CLIPBOARD_FAILED", message: "Clipboard copy failed — user may need to copy rules manually" });
+      }
     }
-    return { action: "clipboard" };
+    return result;
   }
 
-  if (!platform.rulesPath) return { action: "skipped" };
+  if (!platform.rulesPath) {
+    return makeResult("rules", { attempted: false, success: true, action: "skipped" });
+  }
 
   let rulesPath: string;
   if (fileName) {
@@ -81,22 +92,25 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
   const existingVersion = parseRulesVersion(existing, marker);
 
   if (existingVersion === version) {
-    return { action: "skipped" };
+    logger.debug("Rules already at current version", { platform: platform.platform, version });
+    return makeResult("rules", { attempted: true, success: true, action: "skipped" });
   }
 
   if (!dryRun) {
     if (existingVersion) {
       const updated = existing.replace(BLOCK_RE, content + "\n");
       atomicWriteFileSync(rulesPath, updated);
-      return { action: "updated" };
+      logger.info("Rules updated", { platform: platform.platform, from: existingVersion, to: version });
+      return makeResult("rules", { attempted: true, success: true, action: "updated" });
     }
 
     const sep = existing && !existing.endsWith("\n\n") ? (existing.endsWith("\n") ? "\n" : "\n\n") : "";
     atomicWriteFileSync(rulesPath, existing + sep + content + "\n");
-    return { action: "created" };
+    logger.info("Rules created", { platform: platform.platform, version });
+    return makeResult("rules", { attempted: true, success: true, action: "created" });
   }
 
-  return { action: existingVersion ? "updated" : "created" };
+  return makeResult("rules", { attempted: true, success: true, action: existingVersion ? "updated" : "created" });
 }
 
 /**

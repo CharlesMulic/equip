@@ -6,6 +6,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { type DetectedPlatform, getPlatform } from "./platforms";
 import { atomicWriteFileSync } from "./fs";
+import type { ArtifactResult, EquipLogger } from "./types";
+import { makeResult, NOOP_LOGGER } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -38,10 +40,16 @@ export function installSkill(
   platform: DetectedPlatform,
   toolName: string,
   skill: SkillConfig,
-  options: { dryRun?: boolean } = {},
-): { action: string } {
-  if (!platform.skillsPath) return { action: "skipped" };
-  if (!skill.files || skill.files.length === 0) return { action: "skipped" };
+  options: { dryRun?: boolean; logger?: EquipLogger } = {},
+): ArtifactResult {
+  const logger = options.logger || NOOP_LOGGER;
+
+  if (!platform.skillsPath) {
+    return makeResult("skills", { attempted: false, success: true, action: "skipped" });
+  }
+  if (!skill.files || skill.files.length === 0) {
+    return makeResult("skills", { attempted: false, success: true, action: "skipped" });
+  }
 
   const skillDir = path.join(platform.skillsPath, toolName, skill.name);
 
@@ -50,7 +58,10 @@ export function installSkill(
   if (mainFile) {
     try {
       const existing = fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf-8");
-      if (existing === mainFile.content) return { action: "skipped" };
+      if (existing === mainFile.content) {
+        logger.debug("Skill already current", { platform: platform.platform, skill: skill.name });
+        return makeResult("skills", { attempted: true, success: true, action: "skipped" });
+      }
     } catch { /* doesn't exist yet — proceed with install */ }
   }
 
@@ -61,9 +72,10 @@ export function installSkill(
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       atomicWriteFileSync(filePath, file.content);
     }
+    logger.info("Skill installed", { platform: platform.platform, skill: skill.name });
   }
 
-  return { action: "created" };
+  return makeResult("skills", { attempted: true, success: true, action: "created" });
 }
 
 // ─── Uninstall ──────────────────────────────────────────────

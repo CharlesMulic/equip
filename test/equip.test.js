@@ -821,13 +821,13 @@ describe("safeReadJsonSync", () => {
 // ─── Corrupt Config Detection ───────────────────────────────
 
 describe("installMcpJson with corrupt config", () => {
-  it("throws on corrupt existing config instead of silently overwriting", () => {
+  it("returns error result on corrupt existing config instead of silently overwriting", () => {
     const p = mockPlatform();
     fs.writeFileSync(p.configPath, "this is corrupt json {{{");
-    assert.throws(
-      () => installMcpJson(p, "myserver", { url: "https://example.com" }, false),
-      /Cannot install.*Invalid JSON/
-    );
+    const result = installMcpJson(p, "myserver", { url: "https://example.com" }, false);
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "CONFIG_CORRUPT");
+    assert.ok(result.error.includes("Invalid JSON"));
     // Verify the corrupt file was NOT overwritten
     assert.equal(fs.readFileSync(p.configPath, "utf-8"), "this is corrupt json {{{");
     cleanup(p.configPath);
@@ -1114,8 +1114,8 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
     const p = mockPlatform({ platform: "claude-code" });
 
     const result = installHooks(p, hookDefs, { hookDir });
-    assert.ok(result);
-    assert.ok(result.installed);
+    assert.ok(result.success);
+    assert.equal(result.attempted, true);
     assert.deepEqual(result.scripts, ["test-hook.js"]);
     assert.equal(result.hookDir, hookDir);
 
@@ -1131,16 +1131,18 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
     fs.rmSync(hookDir, { recursive: true, force: true });
   });
 
-  it("returns null for platforms without hook support", () => {
+  it("returns skipped for platforms without hook support", () => {
     const p = mockPlatform({ platform: "cursor" });
     const result = installHooks(p, hookDefs, { hookDir: "/tmp/hooks" });
-    assert.equal(result, null);
+    assert.equal(result.attempted, false);
+    assert.equal(result.action, "skipped");
   });
 
-  it("returns null with empty hook defs", () => {
+  it("returns skipped with empty hook defs", () => {
     const p = mockPlatform({ platform: "claude-code" });
     const result = installHooks(p, [], { hookDir: "/tmp/hooks" });
-    assert.equal(result, null);
+    assert.equal(result.attempted, false);
+    assert.equal(result.action, "skipped");
   });
 
   it("uninstallHooks removes scripts", () => {

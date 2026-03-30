@@ -6,6 +6,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } from "./fs";
+import type { ArtifactResult, EquipLogger } from "./types";
+import { makeResult, NOOP_LOGGER } from "./types";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -141,23 +143,53 @@ export function removeTomlEntry(tomlContent: string, rootKey: string, serverName
 // ─── Read ────────────────────────────────────────────────────
 
 /**
+ * Read an MCP server entry with detailed status.
+ * Distinguishes "not installed" from "file unreadable" from "file corrupt".
+ */
+export interface ReadMcpResult {
+  entry: Record<string, unknown> | null;
+  status: "ok" | "missing" | "not_found" | "corrupt" | "unreadable";
+  error?: string;
+}
+
+export function readMcpEntryDetailed(configPath: string, rootKey: string, serverName: string, configFormat: string = "json"): ReadMcpResult {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(configPath, "utf-8");
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return { entry: null, status: "missing" };
+    return { entry: null, status: "unreadable", error: (err as Error).message };
+  }
+
+  if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+
+  if (configFormat === "toml") {
+    try {
+      const entry = parseTomlServerEntry(raw, rootKey, serverName);
+      if (!entry) return { entry: null, status: "not_found" };
+      const subs = parseTomlSubTables(raw, rootKey, serverName);
+      return { entry: { ...entry, ...subs }, status: "ok" };
+    } catch (err: unknown) {
+      return { entry: null, status: "corrupt", error: (err as Error).message };
+    }
+  }
+
+  try {
+    const data = JSON.parse(raw);
+    const entry = data?.[rootKey]?.[serverName] || null;
+    return { entry, status: entry ? "ok" : "not_found" };
+  } catch (err: unknown) {
+    return { entry: null, status: "corrupt", error: (err as Error).message };
+  }
+}
+
+/**
  * Read an MCP server entry from a config file (JSON or TOML).
+ * Returns the entry or null. Use readMcpEntryDetailed() for error context.
  */
 export function readMcpEntry(configPath: string, rootKey: string, serverName: string, configFormat: string = "json"): Record<string, unknown> | null {
-  try {
-    let raw = fs.readFileSync(configPath, "utf-8");
-    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
-
-    if (configFormat === "toml") {
-      const entry = parseTomlServerEntry(raw, rootKey, serverName);
-      if (!entry) return null;
-      const subs = parseTomlSubTables(raw, rootKey, serverName);
-      return { ...entry, ...subs };
-    }
-
-    const data = JSON.parse(raw);
-    return data?.[rootKey]?.[serverName] || null;
-  } catch { return null; }
+  return readMcpEntryDetailed(configPath, rootKey, serverName, configFormat).entry;
 }
 
 // ─── Config Builders ─────────────────────────────────────────
@@ -223,48 +255,71 @@ export function buildStdioConfig(command: string, args: string[], env: Record<st
  * Install MCP config for a platform.
  * Writes directly to the platform's config file (JSON or TOML).
  */
-export function installMcp(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, options: { dryRun?: boolean; serverUrl?: string } = {}): { success: boolean; method: string } {
-  const { dryRun = false } = options;
+export function installMcp(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, options: { dryRun?: boolean; serverUrl?: string; logger?: EquipLogger } = {}): ArtifactResult {
+  const { dryRun = false, logger = NOOP_LOGGER } = options;
   if (platform.configFormat === "toml") {
-    return installMcpToml(platform, serverName, mcpEntry, dryRun);
+    return installMcpToml(platform, serverName, mcpEntry, dryRun, logger);
   }
-  return installMcpJson(platform, serverName, mcpEntry, dryRun);
+  return installMcpJson(platform, serverName, mcpEntry, dryRun, logger);
 }
 
 /**
  * Write MCP config directly to JSON file.
  * Uses atomic writes and detects corrupt config files.
  */
-export function installMcpJson(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean): { success: boolean; method: string } {
+export function installMcpJson(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger = NOOP_LOGGER): ArtifactResult {
   const { configPath, rootKey } = platform;
 
   const { data: existing, status, error } = safeReadJsonSync(configPath);
   if (status === "corrupt") {
-    throw new Error(`Cannot install to ${configPath}: ${error}. Fix the file manually or restore from ${configPath}.bak if available.`);
+    logger.error("Config file corrupt", { configPath, error });
+    return makeResult("mcp", { errorCode: "CONFIG_CORRUPT", error: `Cannot install to ${configPath}: ${error}. Fix the file manually or restore from ${configPath}.bak if available.`, method: "json" });
+  }
+  if (status === "unreadable") {
+    logger.error("Config file unreadable", { configPath, error });
+    return makeResult("mcp", { errorCode: "CONFIG_UNREADABLE", error: `Cannot read ${configPath}: ${error}`, method: "json" });
   }
 
   const config = existing || {};
   if (!config[rootKey]) config[rootKey] = {};
   (config[rootKey] as Record<string, unknown>)[serverName] = mcpEntry;
 
+  const result = makeResult("mcp", { success: true, action: existing ? "updated" : "created", method: "json" });
+
   if (!dryRun) {
-    createBackup(configPath);
+    const backedUp = createBackup(configPath);
+    if (!backedUp && status === "ok") {
+      result.warnings.push({ code: "WARN_BACKUP_SKIPPED", message: "Backup creation failed — proceeding without safety net" });
+      logger.warn("Backup creation failed", { configPath });
+    }
     atomicWriteFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
     cleanupBackup(configPath);
+    logger.info("MCP config written", { configPath, serverName, method: "json" });
   }
 
-  return { success: true, method: "json" };
+  return result;
 }
 
 /**
  * Write MCP config to TOML file (Codex).
  * Uses atomic writes.
  */
-export function installMcpToml(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean): { success: boolean; method: string } {
+export function installMcpToml(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger = NOOP_LOGGER): ArtifactResult {
   const { configPath, rootKey } = platform;
 
   let existing = "";
-  try { existing = fs.readFileSync(configPath, "utf-8"); } catch { /* file doesn't exist — start fresh */ }
+  try {
+    existing = fs.readFileSync(configPath, "utf-8");
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      // File exists but can't be read — do NOT silently overwrite
+      logger.error("TOML config unreadable", { configPath, error: (err as Error).message });
+      return makeResult("mcp", { errorCode: "TOML_READ_FAILED", error: `Cannot read ${configPath}: ${(err as Error).message}`, method: "toml" });
+    }
+    // ENOENT — file doesn't exist, start fresh
+    logger.debug("TOML config does not exist, creating fresh", { configPath });
+  }
 
   const tableHeader = `[${rootKey}.${serverName}]`;
   if (existing.includes(tableHeader)) {
@@ -278,9 +333,10 @@ export function installMcpToml(platform: DetectedPlatform, serverName: string, m
     const sep = existing && !existing.endsWith("\n\n") ? (existing.endsWith("\n") ? "\n" : "\n\n") : "";
     atomicWriteFileSync(configPath, existing + sep + newBlock + "\n");
     cleanupBackup(configPath);
+    logger.info("MCP config written", { configPath, serverName, method: "toml" });
   }
 
-  return { success: true, method: "toml" };
+  return makeResult("mcp", { success: true, action: "created", method: "toml" });
 }
 
 /**
@@ -331,9 +387,10 @@ export function uninstallMcp(platform: DetectedPlatform, serverName: string, dry
 /**
  * Update API key in existing MCP config.
  */
-export function updateMcpKey(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>): { success: boolean; method: string } {
+export function updateMcpKey(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, options: { logger?: EquipLogger } = {}): ArtifactResult {
+  const { logger = NOOP_LOGGER } = options;
   if (platform.configFormat === "toml") {
-    return installMcpToml(platform, serverName, mcpEntry, false);
+    return installMcpToml(platform, serverName, mcpEntry, false, logger);
   }
-  return installMcpJson(platform, serverName, mcpEntry, false);
+  return installMcpJson(platform, serverName, mcpEntry, false, logger);
 }

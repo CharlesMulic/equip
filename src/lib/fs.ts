@@ -23,11 +23,11 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
 // ─── Safe JSON Read ─────────────────────────────────────────
 
 export interface SafeJsonResult {
-  /** The parsed data, or null if the file doesn't exist */
+  /** The parsed data, or null if the file doesn't exist or is unreadable */
   data: Record<string, unknown> | null;
-  /** "ok" = parsed successfully, "missing" = file doesn't exist, "corrupt" = exists but unparseable */
-  status: "ok" | "missing" | "corrupt";
-  /** Error message when status is "corrupt" */
+  /** "ok" = parsed successfully, "missing" = ENOENT, "unreadable" = exists but can't read (EACCES etc), "corrupt" = read but unparseable */
+  status: "ok" | "missing" | "unreadable" | "corrupt";
+  /** Error message when status is "corrupt" or "unreadable" */
   error?: string;
 }
 
@@ -44,7 +44,7 @@ export function safeReadJsonSync(filePath: string): SafeJsonResult {
     if (code === "ENOENT") {
       return { data: null, status: "missing" };
     }
-    return { data: null, status: "corrupt", error: `Cannot read file: ${(err as Error).message}` };
+    return { data: null, status: "unreadable", error: `Cannot read file: ${(err as Error).message}` };
   }
 
   // Strip BOM
@@ -52,7 +52,7 @@ export function safeReadJsonSync(filePath: string): SafeJsonResult {
 
   try {
     const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) {
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return { data: null, status: "corrupt", error: "File contains valid JSON but is not an object" };
     }
     return { data: parsed as Record<string, unknown>, status: "ok" };

@@ -12,6 +12,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { atomicWriteFileSync, resolvePackageVersion } from "./fs";
+import type { EquipLogger } from "./types";
+import { NOOP_LOGGER } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -59,16 +61,30 @@ export function getStatePath(): string { return STATE_PATH; }
 
 // ─── Read / Write ───────────────────────────────────────────
 
-export function readState(): EquipState {
+export function readState(logger?: EquipLogger): EquipState {
+  const log = logger || NOOP_LOGGER;
+  const empty: EquipState = { equipVersion: "", lastUpdated: "", tools: {} };
+
+  let raw: string;
   try {
-    const raw = fs.readFileSync(STATE_PATH, "utf-8");
+    raw = fs.readFileSync(STATE_PATH, "utf-8");
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      log.warn("State file unreadable", { path: STATE_PATH, error: (err as Error).message });
+    }
+    return empty;
+  }
+
+  try {
     return JSON.parse(raw);
-  } catch {
-    return {
-      equipVersion: "",
-      lastUpdated: "",
-      tools: {},
-    };
+  } catch (err: unknown) {
+    // State file exists but is corrupt — back it up and warn
+    log.warn("State file corrupt, resetting", { path: STATE_PATH, error: (err as Error).message });
+    try {
+      fs.copyFileSync(STATE_PATH, STATE_PATH + ".corrupt.bak");
+    } catch { /* best effort */ }
+    return empty;
   }
 }
 

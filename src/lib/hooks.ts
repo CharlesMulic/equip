@@ -5,6 +5,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { PLATFORM_REGISTRY, type DetectedPlatform, type PlatformHookCapabilities } from "./platforms";
+import { safeReadJsonSync, atomicWriteFileSync } from "./fs";
+import type { ArtifactResult, EquipLogger } from "./types";
+import { makeResult, NOOP_LOGGER } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -62,9 +65,12 @@ export function buildHooksConfig(hookDefs: HookDefinition[], hookDir: string, pl
 /**
  * Install hook scripts to disk and register them in platform settings.
  */
-export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string; dryRun?: boolean } = {}): { installed: boolean; scripts: string[]; hookDir: string } | null {
+export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string; dryRun?: boolean; logger?: EquipLogger } = {}): ArtifactResult {
+  const logger = options.logger || NOOP_LOGGER;
   const caps = getHookCapabilities(platform.platform);
-  if (!caps || !hookDefs || hookDefs.length === 0) return null;
+  if (!caps || !hookDefs || hookDefs.length === 0) {
+    return makeResult("hooks", { attempted: false, success: true, action: "skipped" });
+  }
 
   if (!options.hookDir) throw new Error("hookDir is required");
   const hookDir = options.hookDir;
@@ -85,17 +91,35 @@ export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinitio
     installedScripts.push(def.name + ".js");
   }
 
-  if (installedScripts.length === 0) return null;
+  if (installedScripts.length === 0) {
+    return makeResult("hooks", { attempted: true, success: true, action: "skipped" });
+  }
 
   const hooksConfig = buildHooksConfig(hookDefs, hookDir, platform.platform);
-  if (!hooksConfig) return null;
+  if (!hooksConfig) {
+    return makeResult("hooks", { attempted: true, success: true, action: "skipped" });
+  }
+
+  const result = makeResult("hooks", { success: true, action: "created", scripts: installedScripts, hookDir });
 
   if (!dryRun) {
     const settingsPath = caps.settingsPath();
-    let settings: Record<string, unknown> = {};
-    try {
-      settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-    } catch { /* file doesn't exist yet */ }
+    const { data: settingsData, status, error } = safeReadJsonSync(settingsPath);
+
+    if (status === "corrupt") {
+      logger.error("Settings file corrupt — refusing to overwrite", { settingsPath, error });
+      return makeResult("hooks", { errorCode: "SETTINGS_CORRUPT", error: `Cannot install hooks: ${settingsPath} is corrupt. Fix it manually.`, scripts: installedScripts, hookDir });
+    }
+    if (status === "unreadable") {
+      logger.error("Settings file unreadable", { settingsPath, error });
+      return makeResult("hooks", { errorCode: "SETTINGS_CORRUPT", error: `Cannot read ${settingsPath}: ${error}`, scripts: installedScripts, hookDir });
+    }
+
+    const settings: Record<string, unknown> = settingsData || {};
+    if (status === "missing") {
+      result.warnings.push({ code: "WARN_SETTINGS_CREATED", message: "Settings file did not exist — created new" });
+      logger.info("Creating new settings file", { settingsPath });
+    }
 
     if (!settings.hooks) settings.hooks = {};
     const hooks = settings.hooks as Record<string, unknown[]>;
@@ -113,10 +137,11 @@ export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinitio
     }
 
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    atomicWriteFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    logger.info("Hooks registered in settings", { settingsPath, scripts: installedScripts });
   }
 
-  return { installed: true, scripts: installedScripts, hookDir };
+  return result;
 }
 
 /**
