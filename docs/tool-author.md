@@ -54,7 +54,13 @@ const platforms = equip.detect();
 for (const p of platforms) {
   const result = equip.installRules(p);
   if (result.action === "created") cli.ok(`${platformName(p.platform)}: pirate rules installed`);
-  else if (result.action === "clipboard") cli.info(`${platformName(p.platform)}: rules copied to clipboard`);
+  else if (result.action === "clipboard") {
+    // Cursor and VS Code have no writable global rules file — equip copies the rules
+    // to the clipboard instead. The user needs to paste them into their project's
+    // rules config (e.g., .cursor/rules/ or .github/copilot-instructions.md).
+    // No automatic pirates on these platforms without manual intervention.
+    cli.info(`${platformName(p.platform)}: rules copied to clipboard (paste into project rules)`);
+  }
   else if (result.action === "skipped") cli.info(`${platformName(p.platform)}: already a pirate`);
 }
 ```
@@ -65,7 +71,9 @@ Run it:
 equip ./piratehat.js
 ```
 
-That's it. Every agent on every detected platform starts talking like a pirate. Equip runs your script, then reconciles state — `equip status` and `equip doctor` will show the installed rules. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
+That's it. Every agent on every detected platform starts talking like a pirate. Equip runs your script, then reconciles state — `equip status` and `equip doctor` will show the installed rules.
+
+Fair warning: you'll want to run `unequip piratehat` before your next code review. Trust us on this one. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
 
 **How rules work across platforms:**
 - Claude Code: appended to `~/.claude/CLAUDE.md`
