@@ -61,8 +61,8 @@ Equip distributes your tool through four complementary layers:
 
 | Layer | What It Does | Reliability | Coverage |
 |---|---|---|---|
-| [MCP Config](./docs/mcp-servers.md) | Makes the tool *available* — agent can call it | Baseline | 11 platforms |
-| [Behavioral Rules](./docs/rules.md) | Teaches the agent *when* to call it | Strong | 8 platforms + clipboard |
+| [MCP Config](./docs/mcp-servers.md) | Makes the tool *available* — agent can call it | Baseline | 13 platforms |
+| [Behavioral Rules](./docs/rules.md) | Teaches the agent *when* to call it | Strong | 9 platforms + clipboard |
 | [Agent Skills](./docs/skills.md) | Gives the agent *detailed knowledge* of how to use it | Strong (varies) | 8 platforms |
 | [Lifecycle Hooks](./docs/hooks.md) | *Structurally enforces* behavior at key moments | Strongest | 1 platform (Claude Code) |
 
@@ -85,6 +85,8 @@ No layer is a silver bullet. Together, they give you the best coverage available
 | Junie | Yes | -- | -- | -- |
 | Copilot (JetBrains) | Yes | -- | -- | -- |
 | Copilot CLI | Yes | -- | -- | -- |
+| Amazon Q | Yes | -- | -- | -- |
+| Tabnine | Yes | Yes | -- | -- |
 
 See [Platforms](./docs/platforms.md) for full details — config paths, detection, and per-platform quirks.
 

@@ -1,6 +1,6 @@
 # Supported Platforms
 
-Equip supports 11 AI coding platforms. Each platform has its own config format, file paths, and feature set. Equip abstracts these differences behind a unified API.
+Equip supports 13 AI coding platforms. Each platform has its own config format, file paths, and feature set. Equip abstracts these differences behind a unified API.
 
 ## Platform List
 
@@ -17,6 +17,8 @@ Equip supports 11 AI coding platforms. Each platform has its own config format, 
 | `junie` | Junie | JSON | `mcpServers` | -- |
 | `copilot-jetbrains` | Copilot (JetBrains) | JSON | `mcpServers` | `copilot-jb` |
 | `copilot-cli` | Copilot CLI | JSON | `mcpServers` | `copilot` |
+| `amazon-q` | Amazon Q | JSON | `mcpServers` | `q`, `amazonq` |
+| `tabnine` | Tabnine | JSON | `mcpServers` | -- |
 
 ## Capability Matrix
 
@@ -35,6 +37,8 @@ Not every platform supports every feature. This table shows what equip can insta
 | Junie | Yes | No | No | No |
 | Copilot (JetBrains) | Yes | No | No | No |
 | Copilot CLI | Yes | No | No | No |
+| Amazon Q | Yes | No | No | No |
+| Tabnine | Yes | Yes (`~/.tabnine/guidelines/`) | No | No |
 
 "Clipboard only" means equip copies rules content to the system clipboard for the user to paste manually, since the platform has no writable rules file.
 
@@ -57,6 +61,8 @@ All paths are resolved at runtime relative to the user's home directory. On Wind
 | Junie | `~/.junie/mcp/mcp.json` |
 | Copilot (JetBrains) | `<github-copilot dir>/intellij/mcp.json` |
 | Copilot CLI | `~/.copilot/mcp-config.json` |
+| Amazon Q | `~/.aws/amazonq/agents/default.json` |
+| Tabnine | `~/.tabnine/mcp_servers.json` |
 
 The **VS Code User Dir** is OS-dependent:
 - **Windows:** `%APPDATA%\Code\User`
@@ -174,6 +180,8 @@ Each platform has its own field names for HTTP MCP server configuration. Equip t
 | Junie | `url` | -- | `headers` |
 | Copilot (JetBrains) | `url` | -- | `headers` |
 | Copilot CLI | `url` | `"http"` | `headers` |
+| Amazon Q | `url` | `"http"` | `headers` |
+| Tabnine | `url` | -- | `requestInit.headers` (nested) |
 
 See [mcp-servers.md](./mcp-servers.md) for details on how equip builds and writes these configs.
 
