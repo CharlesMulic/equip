@@ -164,16 +164,16 @@ Each platform has its own field names for HTTP MCP server configuration. Equip t
 | Platform | URL Field | Type Field | Headers Field |
 |---|---|---|---|
 | Claude Code | `url` | `"http"` | `headers` |
-| Cursor | `url` | `"streamable-http"` | `headers` |
+| Cursor | `url` | -- | `headers` |
 | Windsurf | `serverUrl` | -- | `headers` |
 | VS Code | `url` | `"http"` | `headers` |
 | Cline | `url` | -- | `headers` |
-| Roo Code | `url` | -- | `headers` |
+| Roo Code | `url` | `"streamable-http"` | `headers` |
 | Codex | `url` | -- | `http_headers` |
 | Gemini CLI | `httpUrl` | -- | `headers` |
 | Junie | `url` | -- | `headers` |
 | Copilot (JetBrains) | `url` | -- | `headers` |
-| Copilot CLI | `url` | -- | `headers` |
+| Copilot CLI | `url` | `"http"` | `headers` |
 
 See [mcp-servers.md](./mcp-servers.md) for details on how equip builds and writes these configs.
 

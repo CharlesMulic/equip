@@ -124,7 +124,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     rulesPath: null,
     rootKey: "mcpServers",
     configFormat: "json",
-    httpShape: { urlField: "url", typeField: "streamable-http", headersField: "headers" },
+    httpShape: { urlField: "url", headersField: "headers" },
     detection: {
       cli: "cursor",
       dirs: [() => path.join(home(), ".cursor")],
@@ -192,7 +192,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     rulesPath: () => path.join(home(), ".roo", "rules"),
     rootKey: "mcpServers",
     configFormat: "json",
-    httpShape: { urlField: "url", headersField: "headers" },
+    httpShape: { urlField: "url", typeField: "streamable-http", headersField: "headers" },
     detection: {
       cli: null,
       dirs: [],
@@ -277,7 +277,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     rulesPath: null,
     rootKey: "mcpServers",
     configFormat: "json",
-    httpShape: { urlField: "url", headersField: "headers" },
+    httpShape: { urlField: "url", typeField: "http", headersField: "headers" },
     detection: {
       cli: "copilot",
       dirs: [() => path.join(home(), ".copilot")],
