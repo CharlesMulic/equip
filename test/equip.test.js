@@ -422,8 +422,8 @@ describe("platformName", () => {
 });
 
 describe("KNOWN_PLATFORMS", () => {
-  it("includes all 12 platforms", () => {
-    assert.equal(KNOWN_PLATFORMS.length, 12);
+  it("includes all 13 platforms", () => {
+    assert.equal(KNOWN_PLATFORMS.length, 13);
     assert.ok(KNOWN_PLATFORMS.includes("claude-code"));
     assert.ok(KNOWN_PLATFORMS.includes("cursor"));
     assert.ok(KNOWN_PLATFORMS.includes("vscode"));
@@ -434,6 +434,7 @@ describe("KNOWN_PLATFORMS", () => {
     assert.ok(KNOWN_PLATFORMS.includes("junie"));
     assert.ok(KNOWN_PLATFORMS.includes("copilot-jetbrains"));
     assert.ok(KNOWN_PLATFORMS.includes("copilot-cli"));
+    assert.ok(KNOWN_PLATFORMS.includes("amazon-q"));
     assert.ok(KNOWN_PLATFORMS.includes("tabnine"));
   });
 });
@@ -1538,6 +1539,73 @@ describe("Equip class (skills)", () => {
     assert.ok(skillCheck.detail.includes("not found"));
 
     cleanup(p.configPath);
+  });
+});
+
+// ─── Amazon Q Platform ──────────────────────────────────────
+
+describe("Amazon Q", () => {
+  it("buildHttpConfig returns url with type http", () => {
+    const config = buildHttpConfig("https://api.example.com/mcp", "amazon-q");
+    assert.equal(config.url, "https://api.example.com/mcp");
+    assert.equal(config.type, "http");
+  });
+
+  it("buildHttpConfigWithAuth uses standard top-level headers", () => {
+    const config = buildHttpConfigWithAuth("https://api.example.com/mcp", "ask_test", "amazon-q");
+    assert.equal(config.url, "https://api.example.com/mcp");
+    assert.equal(config.type, "http");
+    assert.equal(config.headers.Authorization, "Bearer ask_test");
+    assert.equal(config.requestInit, undefined, "should not have requestInit wrapper");
+  });
+
+  it("installMcpJson writes correct format", () => {
+    const p = mockPlatform({ platform: "amazon-q", rootKey: "mcpServers" });
+    cleanup(p.configPath);
+    const config = buildHttpConfigWithAuth("https://api.example.com/mcp", "ask_q", "amazon-q");
+    installMcpJson(p, "prior", config, false);
+    const data = JSON.parse(fs.readFileSync(p.configPath, "utf-8"));
+    assert.ok(data.mcpServers.prior);
+    assert.equal(data.mcpServers.prior.url, "https://api.example.com/mcp");
+    assert.equal(data.mcpServers.prior.type, "http");
+    assert.equal(data.mcpServers.prior.headers.Authorization, "Bearer ask_q");
+    cleanup(p.configPath);
+  });
+
+  it("Equip class roundtrip", () => {
+    const configPath = tmpPath("amazonq-equip") + ".json";
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "amazon-q", configPath, rootKey: "mcpServers" });
+    cleanup(configPath);
+    e.installMcp(p, "ask_roundtrip");
+    const entry = e.readMcp(p);
+    assert.ok(entry);
+    assert.equal(entry.url, "https://example.com/mcp");
+    assert.equal(entry.type, "http");
+    e.uninstallMcp(p);
+    assert.equal(e.readMcp(p), null);
+    cleanup(configPath);
+  });
+
+  it("createManualPlatform returns correct config", () => {
+    const p = createManualPlatform("amazon-q");
+    assert.equal(p.platform, "amazon-q");
+    assert.ok(p.configPath.includes(".aws"), "configPath should reference .aws");
+    assert.ok(p.configPath.includes("amazonq"), "configPath should reference amazonq");
+    assert.equal(p.rootKey, "mcpServers");
+    assert.equal(p.rulesPath, null, "no rules support");
+    assert.equal(p.skillsPath, null, "no skills support");
+  });
+
+  it("resolvePlatformId handles aliases", () => {
+    const { resolvePlatformId } = require("..");
+    assert.equal(resolvePlatformId("q"), "amazon-q");
+    assert.equal(resolvePlatformId("amazonq"), "amazon-q");
+    assert.equal(resolvePlatformId("amazon-q"), "amazon-q");
+  });
+
+  it("platformName returns Amazon Q", () => {
+    assert.equal(platformName("amazon-q"), "Amazon Q");
   });
 });
 

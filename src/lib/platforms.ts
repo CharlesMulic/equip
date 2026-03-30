@@ -288,6 +288,23 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     hooks: null,
     skillsPath: null,
   }],
+  ["amazon-q", {
+    id: "amazon-q",
+    name: "Amazon Q",
+    aliases: ["q", "amazonq"],
+    configPath: () => path.join(home(), ".aws", "amazonq", "agents", "default.json"),
+    rulesPath: null,
+    rootKey: "mcpServers",
+    configFormat: "json",
+    httpShape: { urlField: "url", typeField: "http", headersField: "headers" },
+    detection: {
+      cli: "q",
+      dirs: [() => path.join(home(), ".aws", "amazonq")],
+      files: [],
+    },
+    hooks: null,
+    skillsPath: null,
+  }],
   ["tabnine", {
     id: "tabnine",
     name: "Tabnine",
