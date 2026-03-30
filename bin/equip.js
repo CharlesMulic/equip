@@ -277,7 +277,11 @@ async function directInstall(toolDef, parsedArgs) {
 
   // ── Install Loop ──
   const report = new InstallReportBuilder();
-  const totalSteps = (config.rules ? 3 : 2) + (config.skill ? 1 : 0);
+  const steps = ["MCP Server"];
+  if (config.rules) steps.push("Behavioral Rules");
+  if (config.skill) steps.push("Skills");
+  steps.push("Verification");
+  const totalSteps = steps.length;
   let stepNum = 0;
 
   // MCP Server
@@ -295,18 +299,17 @@ async function directInstall(toolDef, parsedArgs) {
     }
   }
 
-  // Rules
+  // Rules (only platforms with writable rules paths — no clipboard in direct-mode)
   if (config.rules) {
     step(++stepNum, totalSteps, "Behavioral Rules");
     for (const p of platforms) {
+      if (!p.rulesPath) {
+        if (logger) logger.debug("Skipping rules — no writable rules path", { platform: p.platform });
+        continue;
+      }
       const result = equip.installRules(p, { dryRun });
       report.addResult(p.platform, result);
-      if (result.action === "clipboard") {
-        ok(`${platformName(p.platform)}   Rules copied to clipboard`);
-        if (result.warnings.length > 0) {
-          warn(`${platformName(p.platform)}   ${result.warnings[0].message}`);
-        }
-      } else if (result.action === "created" || result.action === "updated") {
+      if (result.action === "created" || result.action === "updated") {
         ok(`${platformName(p.platform)}   Rules v${config.rules.version} ${result.action}`);
       } else if (result.action === "skipped" && result.attempted) {
         ok(`${platformName(p.platform)}   Rules already current`);

@@ -153,12 +153,16 @@ describe("fetchToolDef", () => {
     assert.ok(infos.some(c => c.msg.includes("fetched from API")));
   });
 
-  it("fetches prior from live API as package-mode", async () => {
+  it("fetches prior from live API as direct-mode", async () => {
     const def = await fetchToolDef("prior");
     assert.ok(def);
     assert.equal(def.name, "prior");
-    assert.equal(def.installMode, "package");
-    assert.equal(def.npmPackage, "@cg3/prior-node");
+    assert.equal(def.installMode, "direct");
+    assert.equal(def.serverUrl, "https://api.cg3.io/mcp");
+    assert.ok(def.rules, "Should have rules");
+    assert.equal(def.rules.marker, "prior");
+    assert.ok(def.auth, "Should have auth config");
+    assert.equal(def.auth.type, "oauth_to_api_key");
   });
 
   it("returns null for nonexistent tool", async () => {
@@ -233,24 +237,20 @@ describe("direct-mode CLI", () => {
     assert.ok(out.includes("Fetching tool definition from API"), "Should log API fetch");
   });
 
-  it("prior routes to package-mode", () => {
+  it("prior routes to direct-mode with auth", () => {
     const { execSync } = require("child_process");
-    // Verify verbose output shows Prior routed as package-mode.
-    // The npx dispatch will start but we kill it quickly via timeout.
-    try {
-      execSync("node bin/equip.js prior --verbose 2>&1", {
-        encoding: "utf-8",
-        cwd: path.join(__dirname, ".."),
-        timeout: 5000,
-        shell: true,
-      });
-    } catch (e) {
-      // Will timeout or fail (npx dispatch), but output should show routing
-      const out = e.stdout || "";
-      assert.ok(
-        out.includes("package") || out.includes("Prior Setup") || out.includes("prior"),
-        "Should route Prior through package-mode"
-      );
-    }
+    // Prior is now direct-mode. With --api-key and --dry-run we can test
+    // the full flow without OAuth or writing files.
+    const out = execSync("node bin/equip.js prior --api-key test-key --dry-run --verbose 2>&1", {
+      encoding: "utf-8",
+      cwd: path.join(__dirname, ".."),
+      timeout: 15000,
+      shell: true,
+    });
+    assert.ok(out.includes("direct"), "Should fetch as direct-mode");
+    assert.ok(out.includes("Authenticated"), "Should authenticate");
+    assert.ok(out.includes("MCP Server"), "Should install MCP");
+    assert.ok(out.includes("Behavioral Rules"), "Should install rules");
+    assert.ok(out.includes("Done."), "Should complete");
   });
 });
