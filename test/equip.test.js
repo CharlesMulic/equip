@@ -30,6 +30,7 @@ const { getHookCapabilities, buildHooksConfig, installHooks, uninstallHooks, has
 const { installSkill, uninstallSkill, hasSkill } = require("../dist/lib/skills");
 const { buildStdioConfig } = require("../dist/lib/mcp");
 const { migrateConfigs } = require("../dist/lib/migrate");
+const { checkAuth, extractAuthHeader } = require("../dist/lib/auth");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -1709,6 +1710,73 @@ describe("Tabnine (headersWrapper)", () => {
     const codex = buildHttpConfigWithAuth("https://x.com/mcp", "key", "codex");
     assert.ok(codex.http_headers, "codex should have top-level http_headers");
     assert.equal(codex.requestInit, undefined, "codex should not have requestInit");
+  });
+});
+
+// ─── Auth Checking ──────────────────────────────────────────
+
+describe("auth checking", () => {
+  it("detects missing auth header", () => {
+    const result = checkAuth({ url: "https://example.com/mcp" });
+    assert.equal(result.status, "missing");
+  });
+
+  it("detects present static API key (top-level headers)", () => {
+    const result = checkAuth({ url: "https://x.com/mcp", headers: { Authorization: "Bearer ask_abc123" } });
+    assert.equal(result.status, "present");
+  });
+
+  it("detects present API key in http_headers (Codex)", () => {
+    const result = checkAuth({ url: "https://x.com/mcp", http_headers: { Authorization: "Bearer key" } });
+    assert.equal(result.status, "present");
+  });
+
+  it("detects present API key in requestInit.headers (Tabnine)", () => {
+    const result = checkAuth({ url: "https://x.com/mcp", requestInit: { headers: { Authorization: "Bearer key" } } });
+    assert.equal(result.status, "present");
+  });
+
+  it("detects expired JWT", () => {
+    // Create a JWT with exp in the past
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "test", exp: Math.floor(Date.now() / 1000) - 3600 })).toString("base64url");
+    const sig = "fakesignature";
+    const jwt = `${header}.${payload}.${sig}`;
+
+    const result = checkAuth({ url: "https://x.com/mcp", headers: { Authorization: `Bearer ${jwt}` } });
+    assert.equal(result.status, "expired");
+    assert.ok(result.detail.includes("expired"));
+  });
+
+  it("detects valid JWT (future exp)", () => {
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "test", exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url");
+    const sig = "fakesignature";
+    const jwt = `${header}.${payload}.${sig}`;
+
+    const result = checkAuth({ url: "https://x.com/mcp", headers: { Authorization: `Bearer ${jwt}` } });
+    assert.equal(result.status, "ok");
+  });
+
+  it("treats JWT without exp as present", () => {
+    const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "test" })).toString("base64url");
+    const jwt = `${header}.${payload}.fakesig`;
+
+    const result = checkAuth({ url: "https://x.com/mcp", headers: { Authorization: `Bearer ${jwt}` } });
+    assert.equal(result.status, "present");
+  });
+
+  it("handles malformed JWT gracefully", () => {
+    const result = checkAuth({ url: "https://x.com/mcp", headers: { Authorization: "Bearer not.a.jwt!!!" } });
+    assert.equal(result.status, "present");
+  });
+
+  it("extractAuthHeader finds headers across all platform formats", () => {
+    assert.equal(extractAuthHeader({ headers: { Authorization: "Bearer a" } }), "Bearer a");
+    assert.equal(extractAuthHeader({ http_headers: { Authorization: "Bearer b" } }), "Bearer b");
+    assert.equal(extractAuthHeader({ requestInit: { headers: { Authorization: "Bearer c" } } }), "Bearer c");
+    assert.equal(extractAuthHeader({ url: "https://x.com" }), null);
   });
 });
 

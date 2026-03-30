@@ -6,6 +6,7 @@ import { readMcpEntry } from "../mcp";
 import { readState } from "../state";
 import { dirExists, fileExists } from "../detect";
 import * as cli from "../cli";
+import { checkAuth } from "../auth";
 
 export function runDoctor(): void {
   cli.log(`\n${cli.BOLD}equip doctor${cli.RESET}\n`);
@@ -69,6 +70,20 @@ export function runDoctor(): void {
         checks++;
         cli.warn(`  ${def.name}: server URL is not HTTPS (${url})`);
         issues++;
+      }
+
+      // Check auth headers
+      if (record.transport === "http") {
+        checks++;
+        const authResult = checkAuth(entry as Record<string, unknown>);
+        if (authResult.status === "missing") {
+          cli.warn(`  ${def.name}: no auth header found in config`);
+          issues++;
+        } else if (authResult.status === "expired") {
+          cli.fail(`  ${def.name}: auth token expired (${authResult.detail})`);
+          issues++;
+        }
+        // "ok" and "present" are fine — no warning needed
       }
 
       // Check rules if tracked
@@ -171,3 +186,4 @@ function sanitizePath(p: string): string {
   const home = require("os").homedir();
   return p.replace(home, "~");
 }
+
