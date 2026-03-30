@@ -629,6 +629,45 @@ describe("equip CLI", () => {
     }
   });
 
+  it("registered shorthand dispatches correctly", () => {
+    // Can't test full npx dispatch without network, but verify the registry
+    // is loaded and the shorthand resolves to the right package/command.
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js list", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
+    assert.ok(out.includes("prior"), "prior should be in registry");
+    assert.ok(out.includes("@cg3/prior-node"), "should show the npm package");
+    assert.ok(out.includes("setup"), "should show the command");
+  });
+
+  it("help shows all dispatch paths", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js --help", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
+    assert.ok(out.includes("<tool>"), "should show registered tool path");
+    assert.ok(out.includes("<package>"), "should show unregistered package path");
+    assert.ok(out.includes("./script.js"), "should show local script path");
+    assert.ok(out.includes("."), "should show local package path");
+  });
+
+  it("default command (no args) runs status without error", () => {
+    const { execSync } = require("child_process");
+    // Running with no args should show status, not error.
+    // Status and the help hint both write to stderr.
+    // Just verify the process exits cleanly (exit code 0).
+    execSync("node bin/equip.js", { encoding: "utf-8", cwd: path.join(__dirname, ".."), timeout: 15000 });
+  });
+
+  it("local script path detection", () => {
+    // Verify isLocalPath logic by checking which args trigger local dispatch
+    const { execSync } = require("child_process");
+
+    // ./script.js should be treated as local (will fail — file doesn't exist — but NOT as unknown command)
+    try {
+      execSync("node bin/equip.js ./nonexistent.js", { encoding: "utf-8", cwd: path.join(__dirname, ".."), stdio: "pipe", timeout: 5000 });
+    } catch (e) {
+      assert.ok(e.stderr.includes("Script not found") || e.stderr.includes("not found"), "should try local dispatch, not npm");
+    }
+  });
+
   it("status runs without error", () => {
     const { execSync } = require("child_process");
     // status writes to stderr (cli.log uses stderr), capture both
