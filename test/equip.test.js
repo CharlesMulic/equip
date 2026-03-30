@@ -422,8 +422,8 @@ describe("platformName", () => {
 });
 
 describe("KNOWN_PLATFORMS", () => {
-  it("includes all 13 platforms", () => {
-    assert.equal(KNOWN_PLATFORMS.length, 13);
+  it("includes expected platforms", () => {
+    assert.ok(KNOWN_PLATFORMS.length >= 13, `should have at least 13 platforms, got ${KNOWN_PLATFORMS.length}`);
     assert.ok(KNOWN_PLATFORMS.includes("claude-code"));
     assert.ok(KNOWN_PLATFORMS.includes("cursor"));
     assert.ok(KNOWN_PLATFORMS.includes("vscode"));
@@ -1325,7 +1325,7 @@ describe("edge cases", () => {
     assert.equal(uninstallMcp(p, "anything", false), false);
   });
 
-  it("createManualPlatform works for all 11 platforms", () => {
+  it("createManualPlatform works for all platforms", () => {
     for (const id of KNOWN_PLATFORMS) {
       const p = createManualPlatform(id);
       assert.equal(p.platform, id);
@@ -1335,7 +1335,7 @@ describe("edge cases", () => {
     }
   });
 
-  it("buildHttpConfig works for all 11 platforms", () => {
+  it("buildHttpConfig works for all platforms", () => {
     for (const id of KNOWN_PLATFORMS) {
       const config = buildHttpConfig("https://test.com/mcp", id);
       // Every platform should produce a config with some URL field

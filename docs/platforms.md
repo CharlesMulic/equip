@@ -1,6 +1,6 @@
 # Supported Platforms
 
-Equip supports 13 AI coding platforms. Each platform has its own config format, file paths, and feature set. Equip abstracts these differences behind a unified API.
+Equip supports the following AI coding platforms. Each platform has its own config format, file paths, and feature set. Equip abstracts these differences behind a unified API.
 
 ## Platform List
 

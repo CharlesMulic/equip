@@ -8,7 +8,7 @@ Cross-platform installer for MCP tools, behavioral rules, agent skills, and life
 
 You build an MCP tool. You want it to work on Claude Code, Cursor, VS Code, Windsurf, Cline, Roo Code, Codex, Gemini CLI, and more. Each platform has its own config format, file paths, root keys, URL fields, and quirks.
 
-Equip handles all of that. One setup script, 11 platforms.
+Equip handles all of that. One setup script, every platform.
 
 ## Install
 
@@ -61,9 +61,9 @@ Equip distributes your tool through four complementary layers:
 
 | Layer | What It Does | Reliability | Coverage |
 |---|---|---|---|
-| [MCP Config](./docs/mcp-servers.md) | Makes the tool *available* — agent can call it | Baseline | 13 platforms |
-| [Behavioral Rules](./docs/rules.md) | Teaches the agent *when* to call it | Strong | 9 platforms + clipboard |
-| [Agent Skills](./docs/skills.md) | Gives the agent *detailed knowledge* of how to use it | Strong (varies) | 8 platforms |
+| [MCP Config](./docs/mcp-servers.md) | Makes the tool *available* — agent can call it | Baseline | All platforms |
+| [Behavioral Rules](./docs/rules.md) | Teaches the agent *when* to call it | Strong | Most platforms + clipboard |
+| [Agent Skills](./docs/skills.md) | Gives the agent *detailed knowledge* of how to use it | Strong (varies) | Most platforms |
 | [Lifecycle Hooks](./docs/hooks.md) | *Structurally enforces* behavior at key moments | Strongest | 1 platform (Claude Code) |
 
 Each layer compensates for the limitations of the one before it. Tool descriptions alone don't reliably trigger behavior. Rules are stronger but can be compacted. Skills add depth but may not auto-invoke on all platforms. Hooks fire automatically, independent of the agent's memory.
