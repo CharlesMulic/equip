@@ -26,6 +26,8 @@ const { installRules } = require("../dist/lib/rules");
 const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("../dist/lib/mcp");
 const { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup, resolvePackageVersion } = require("../dist/lib/fs");
 const { reconcileState } = require("../dist/lib/reconcile");
+const { getHookCapabilities, buildHooksConfig, installHooks, uninstallHooks, hasHooks } = require("../dist/lib/hooks");
+const { buildStdioConfig } = require("../dist/lib/mcp");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -991,5 +993,305 @@ describe("equipVersionAtInstall tracking", () => {
     assert.match(record.equipVersion, /^\d+\.\d+\.\d+/);
 
     trackUninstall("version-test");
+  });
+});
+
+// ─── Hooks Subsystem ────────────────────────────────────────
+
+describe("getHookCapabilities", () => {
+  it("returns capabilities for claude-code", () => {
+    const caps = getHookCapabilities("claude-code");
+    assert.ok(caps);
+    assert.equal(caps.format, "claude-code");
+    assert.ok(Array.isArray(caps.events));
+    assert.ok(caps.events.includes("PostToolUse"));
+    assert.ok(caps.events.includes("Stop"));
+    assert.ok(typeof caps.settingsPath === "function");
+  });
+
+  it("returns null for platforms without hooks", () => {
+    assert.equal(getHookCapabilities("cursor"), null);
+    assert.equal(getHookCapabilities("vscode"), null);
+    assert.equal(getHookCapabilities("codex"), null);
+    assert.equal(getHookCapabilities("nonexistent"), null);
+  });
+});
+
+describe("buildHooksConfig", () => {
+  const hookDefs = [
+    { event: "PostToolUse", matcher: "Bash", script: "console.log('hi')", name: "test-hook" },
+    { event: "Stop", script: "console.log('bye')", name: "stop-hook" },
+  ];
+
+  it("builds claude-code format config", () => {
+    const hookDir = "/tmp/hooks";
+    const config = buildHooksConfig(hookDefs, hookDir, "claude-code");
+    assert.ok(config);
+    assert.ok(config.PostToolUse);
+    assert.ok(config.Stop);
+    assert.equal(config.PostToolUse.length, 1);
+    assert.equal(config.PostToolUse[0].matcher, "Bash");
+    assert.ok(config.PostToolUse[0].hooks[0].command.includes("test-hook.js"));
+  });
+
+  it("filters out unsupported events", () => {
+    const defs = [{ event: "FakeEvent", script: "x", name: "fake" }];
+    const config = buildHooksConfig(defs, "/tmp", "claude-code");
+    assert.equal(config, null);
+  });
+
+  it("returns null for platforms without hooks", () => {
+    assert.equal(buildHooksConfig(hookDefs, "/tmp", "cursor"), null);
+  });
+
+  it("returns null for empty hook defs", () => {
+    assert.equal(buildHooksConfig([], "/tmp", "claude-code"), null);
+  });
+});
+
+describe("installHooks / uninstallHooks / hasHooks", () => {
+  const hookDefs = [
+    { event: "PostToolUse", script: "// test hook\nconsole.log('hook ran');", name: "test-hook" },
+  ];
+
+  it("installs hook scripts and registers in settings", () => {
+    const hookDir = tmpPath("hooks-install");
+    const settingsDir = tmpPath("settings");
+    const settingsPath = path.join(settingsDir, "settings.json");
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(settingsPath, "{}");
+
+    // Mock platform with claude-code hooks pointing to our temp settings
+    const p = mockPlatform({ platform: "claude-code" });
+
+    const result = installHooks(p, hookDefs, { hookDir });
+    assert.ok(result);
+    assert.ok(result.installed);
+    assert.deepEqual(result.scripts, ["test-hook.js"]);
+    assert.equal(result.hookDir, hookDir);
+
+    // Verify script was written
+    const scriptPath = path.join(hookDir, "test-hook.js");
+    assert.ok(fs.existsSync(scriptPath));
+    assert.ok(fs.readFileSync(scriptPath, "utf-8").includes("hook ran"));
+
+    // Cleanup
+    fs.rmSync(hookDir, { recursive: true, force: true });
+    fs.rmSync(settingsDir, { recursive: true, force: true });
+  });
+
+  it("returns null for platforms without hook support", () => {
+    const p = mockPlatform({ platform: "cursor" });
+    const result = installHooks(p, hookDefs, { hookDir: "/tmp/hooks" });
+    assert.equal(result, null);
+  });
+
+  it("returns null with empty hook defs", () => {
+    const p = mockPlatform({ platform: "claude-code" });
+    const result = installHooks(p, [], { hookDir: "/tmp/hooks" });
+    assert.equal(result, null);
+  });
+
+  it("uninstallHooks removes scripts", () => {
+    const hookDir = tmpPath("hooks-uninstall");
+    fs.mkdirSync(hookDir, { recursive: true });
+    fs.writeFileSync(path.join(hookDir, "test-hook.js"), "// hook");
+
+    const p = mockPlatform({ platform: "claude-code" });
+    const removed = uninstallHooks(p, hookDefs, { hookDir });
+    assert.ok(removed);
+    assert.ok(!fs.existsSync(path.join(hookDir, "test-hook.js")));
+  });
+
+  it("uninstallHooks returns false for unsupported platform", () => {
+    const p = mockPlatform({ platform: "cursor" });
+    assert.equal(uninstallHooks(p, hookDefs, { hookDir: "/tmp" }), false);
+  });
+});
+
+// ─── buildStdioConfig ───────────────────────────────────────
+
+describe("buildStdioConfig", () => {
+  it("builds stdio config with command and args", () => {
+    const config = buildStdioConfig("npx", ["-y", "my-tool"], { API_KEY: "secret" });
+    if (process.platform === "win32") {
+      assert.equal(config.command, "cmd");
+      assert.ok(config.args.includes("/c"));
+      assert.ok(config.args.includes("npx"));
+    } else {
+      assert.equal(config.command, "npx");
+      assert.deepEqual(config.args, ["-y", "my-tool"]);
+    }
+    assert.equal(config.env.API_KEY, "secret");
+  });
+});
+
+// ─── updateMcpKey ───────────────────────────────────────────
+
+describe("Equip.updateMcpKey()", () => {
+  it("updates API key in existing JSON config", () => {
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform();
+    cleanup(p.configPath);
+    e.installMcp(p, "old-key");
+    let entry = e.readMcp(p);
+    assert.equal(entry.headers.Authorization, "Bearer old-key");
+
+    e.updateMcpKey(p, "new-key");
+    entry = e.readMcp(p);
+    assert.equal(entry.headers.Authorization, "Bearer new-key");
+    cleanup(p.configPath);
+  });
+
+  it("updates API key in TOML config", () => {
+    const configPath = tmpPath("toml-rekey") + ".toml";
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
+    cleanup(configPath);
+    e.installMcp(p, "old-key");
+    e.updateMcpKey(p, "new-key");
+    const entry = e.readMcp(p);
+    assert.equal(entry.http_headers.Authorization, "Bearer new-key");
+    cleanup(configPath);
+  });
+});
+
+// ─── resolvePlatformId ──────────────────────────────────────
+
+describe("resolvePlatformId", () => {
+  const { resolvePlatformId } = require("..");
+
+  it("resolves exact platform IDs", () => {
+    assert.equal(resolvePlatformId("claude-code"), "claude-code");
+    assert.equal(resolvePlatformId("cursor"), "cursor");
+    assert.equal(resolvePlatformId("codex"), "codex");
+  });
+
+  it("resolves aliases", () => {
+    assert.equal(resolvePlatformId("claude"), "claude-code");
+    assert.equal(resolvePlatformId("claudecode"), "claude-code");
+    assert.equal(resolvePlatformId("roo"), "roo-code");
+    assert.equal(resolvePlatformId("roocode"), "roo-code");
+    assert.equal(resolvePlatformId("gemini"), "gemini-cli");
+    assert.equal(resolvePlatformId("copilot"), "copilot-cli");
+    assert.equal(resolvePlatformId("copilot-jb"), "copilot-jetbrains");
+    assert.equal(resolvePlatformId("vs-code"), "vscode");
+    assert.equal(resolvePlatformId("code"), "vscode");
+  });
+
+  it("is case-insensitive", () => {
+    assert.equal(resolvePlatformId("Claude-Code"), "claude-code");
+    assert.equal(resolvePlatformId("CURSOR"), "cursor");
+  });
+
+  it("returns input unchanged for unknown platforms", () => {
+    assert.equal(resolvePlatformId("unknown"), "unknown");
+  });
+});
+
+// ─── Unequip CLI ────────────────────────────────────────────
+
+describe("unequip CLI", () => {
+  it("shows help with no args", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/unequip.js --help", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
+    assert.ok(out.includes("unequip"));
+    assert.ok(out.includes("Usage:"));
+  });
+
+  it("shows version", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/unequip.js --version", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
+    assert.ok(out.includes("unequip v"));
+  });
+
+  it("errors on untracked tool", () => {
+    const { execSync } = require("child_process");
+    try {
+      execSync("node bin/unequip.js nonexistent-tool-xyz", {
+        encoding: "utf-8", cwd: path.join(__dirname, ".."), stdio: "pipe"
+      });
+      assert.fail("should have exited non-zero");
+    } catch (e) {
+      assert.ok(e.stderr.includes("not tracked"));
+    }
+  });
+});
+
+// ─── Edge Cases ─────────────────────────────────────────────
+
+describe("edge cases", () => {
+  it("installMcpJson preserves non-MCP fields in config", () => {
+    const p = mockPlatform({ platform: "gemini-cli", rootKey: "mcpServers" });
+    fs.writeFileSync(p.configPath, JSON.stringify({
+      selectedAuthType: "gemini-api-key",
+      theme: "Dracula",
+      mcpServers: { existing: { command: "uvx", args: ["mcp-server-git"] } }
+    }));
+    installMcpJson(p, "prior", { httpUrl: "https://api.cg3.io/mcp" }, false);
+    const data = JSON.parse(fs.readFileSync(p.configPath, "utf-8"));
+    assert.equal(data.selectedAuthType, "gemini-api-key", "non-MCP fields preserved");
+    assert.equal(data.theme, "Dracula", "theme preserved");
+    assert.ok(data.mcpServers.existing, "existing server preserved");
+    assert.ok(data.mcpServers.prior, "new server added");
+    cleanup(p.configPath);
+  });
+
+  it("uninstallMcp deletes file when last entry removed", () => {
+    const p = mockPlatform();
+    fs.writeFileSync(p.configPath, JSON.stringify({ mcpServers: { only: { url: "x" } } }));
+    uninstallMcp(p, "only", false);
+    assert.ok(!fs.existsSync(p.configPath), "file should be deleted when empty");
+  });
+
+  it("uninstallMcp TOML deletes file when last entry removed", () => {
+    const configPath = tmpPath("toml-empty") + ".toml";
+    const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
+    fs.writeFileSync(configPath, '[mcp_servers.only]\nurl = "https://example.com"\n');
+    const removed = uninstallMcp(p, "only", false);
+    assert.ok(removed);
+    assert.ok(!fs.existsSync(configPath), "TOML file should be deleted when empty");
+  });
+
+  it("installRules handles file with no trailing newline", () => {
+    const p = mockPlatform();
+    fs.writeFileSync(p.rulesPath, "existing content without newline");
+    const result = installRules(p, {
+      content: "<!-- edge:v1.0.0 -->\ntest\n<!-- /edge -->",
+      version: "1.0.0",
+      marker: "edge",
+    });
+    assert.equal(result.action, "created");
+    const content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("existing content"), "original preserved");
+    assert.ok(content.includes("edge:v1.0.0"), "new content added");
+    // Should have proper separation
+    assert.ok(!content.includes("newline<!-- edge"), "should have separator");
+    cleanup(p.rulesPath);
+  });
+
+  it("uninstallMcp returns false for nonexistent file", () => {
+    const p = mockPlatform();
+    cleanup(p.configPath);
+    assert.equal(uninstallMcp(p, "anything", false), false);
+  });
+
+  it("createManualPlatform works for all 11 platforms", () => {
+    for (const id of KNOWN_PLATFORMS) {
+      const p = createManualPlatform(id);
+      assert.equal(p.platform, id);
+      assert.ok(p.configPath, `${id} should have configPath`);
+      assert.ok(p.rootKey, `${id} should have rootKey`);
+      assert.ok(["json", "toml"].includes(p.configFormat), `${id} configFormat should be json or toml`);
+    }
+  });
+
+  it("buildHttpConfig works for all 11 platforms", () => {
+    for (const id of KNOWN_PLATFORMS) {
+      const config = buildHttpConfig("https://test.com/mcp", id);
+      // Every platform should produce a config with some URL field
+      const hasUrl = config.url || config.serverUrl || config.httpUrl;
+      assert.ok(hasUrl, `${id} should have a URL field in HTTP config`);
+    }
   });
 });
