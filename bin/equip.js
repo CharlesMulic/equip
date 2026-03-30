@@ -39,7 +39,7 @@ function parseArgs(argv) {
 
 // ─── Built-in Commands ──────────────────────────────────────
 
-const BUILTIN_COMMANDS = new Set(["status", "doctor", "update", "list", "demo", "--help", "-h", "--version", "-v"]);
+const BUILTIN_COMMANDS = new Set(["status", "doctor", "update", "reauth", "list", "demo", "--help", "-h", "--version", "-v"]);
 
 function isBuiltin(cmd) {
   return BUILTIN_COMMANDS.has(cmd);
@@ -79,6 +79,7 @@ function cmdHelp() {
   console.log("  ./script.js      Run a local setup script (for development)");
   console.log("  .                Run current directory's package bin entry");
   console.log("  uninstall <tool> Remove an installed tool (alias: unequip)");
+  console.log("  reauth <tool>    Re-authenticate and update credentials");
   console.log("  status           Show all MCP servers across all platforms");
   console.log("  doctor           Validate config integrity and detect drift");
   console.log("  update           Update equip and migrate configs");
@@ -148,6 +149,70 @@ function cmdUpdate() {
   runUpdate();
 }
 
+async function cmdReauth(args) {
+  const toolName = args._[0];
+  if (!toolName) {
+    console.error("Usage: equip reauth <tool>");
+    process.exit(1);
+  }
+
+  const { fetchToolDef, resolveAuth, deleteStoredCredential, Equip, toolDefToEquipConfig, platformName, cli } = require("../dist/index");
+  const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
+  const logger = args.verbose ? createConsoleLogger() : undefined;
+
+  log(`\n${BOLD}equip reauth${RESET} ${toolName}\n`);
+
+  const toolDef = await fetchToolDef(toolName, { logger });
+  if (!toolDef) {
+    fail(`Tool "${toolName}" not found in registry`);
+    process.exit(1);
+  }
+
+  const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "api_key" } : null);
+  if (!authConfig || authConfig.type === "none") {
+    fail(`${toolName} does not require authentication`);
+    process.exit(1);
+  }
+
+  // Delete stored credential to force fresh auth
+  deleteStoredCredential(toolName);
+  log("  Cleared stored credentials");
+
+  const authResult = await resolveAuth({
+    toolName,
+    auth: authConfig,
+    logger,
+    apiKey: args.apiKey,
+    nonInteractive: args.nonInteractive,
+  });
+
+  if (!authResult.credential) {
+    fail(authResult.error || "Re-authentication failed");
+    process.exit(1);
+  }
+
+  ok(`New credential obtained ${DIM}(${authResult.method})${RESET}`);
+
+  // Update all platform configs with the new credential
+  if (toolDef.installMode === "direct" && toolDef.serverUrl) {
+    const config = toolDefToEquipConfig(toolDef, { logger });
+    const equip = new Equip(config);
+    const platforms = equip.detect();
+    const transport = toolDef.transport || "http";
+
+    log("\n  Updating platform configs...");
+    for (const p of platforms) {
+      const entry = equip.readMcp(p);
+      if (entry) {
+        equip.updateMcpKey(p, authResult.credential, transport);
+        ok(`${platformName(p.platform)} updated`);
+      }
+    }
+  }
+
+  log(`\n${BOLD}Done.${RESET} Credentials rotated for ${toolName}.\n`);
+}
+
 // ─── Logger ─────────────────────────────────────────────────
 
 function createConsoleLogger() {
@@ -163,7 +228,7 @@ function createConsoleLogger() {
 // ─── Direct-Mode Install ───────────────────────────────────
 
 async function directInstall(toolDef, parsedArgs) {
-  const { Equip, toolDefToEquipConfig, platformName, InstallReportBuilder, cli } = require("../dist/index");
+  const { Equip, toolDefToEquipConfig, platformName, InstallReportBuilder, resolveAuth, cli } = require("../dist/index");
   const { reconcileState } = require("../dist/lib/reconcile");
   const { log, ok, fail, warn, step, DIM, RESET, BOLD, GREEN } = cli;
 
@@ -173,69 +238,27 @@ async function directInstall(toolDef, parsedArgs) {
   log(`\n${BOLD}equip${RESET} v${EQUIP_VERSION} — installing ${toolDef.displayName || toolDef.name}`);
   if (dryRun) warn("DRY RUN — no changes will be made");
 
-  // ── Auth Resolution ──
+  // ── Auth Resolution (via AuthEngine) ──
   let apiKey = null;
-  if (toolDef.requiresAuth) {
-    // Check --api-key flag
-    if (parsedArgs.apiKey) {
-      apiKey = parsedArgs.apiKey;
-      if (logger) logger.info("Using API key from --api-key flag");
-    }
+  const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "api_key" } : { type: "none" });
 
-    // Check environment variable
-    if (!apiKey && toolDef.envKey && process.env[toolDef.envKey]) {
-      apiKey = process.env[toolDef.envKey];
-      if (logger) logger.info(`Using API key from $${toolDef.envKey}`);
-    }
+  if (authConfig.type !== "none") {
+    const authResult = await resolveAuth({
+      toolName: toolDef.name,
+      auth: authConfig,
+      logger,
+      apiKey: parsedArgs.apiKey,
+      nonInteractive: parsedArgs.nonInteractive,
+      dryRun,
+    });
 
-    // Check stored credentials
-    if (!apiKey) {
-      try {
-        const credPath = path.join(os.homedir(), ".equip", "credentials", `${toolDef.name}.json`);
-        const cred = JSON.parse(fs.readFileSync(credPath, "utf-8"));
-        if (cred.credential) {
-          apiKey = cred.credential;
-          if (logger) logger.info("Using stored credential");
-        }
-      } catch { /* no stored credential */ }
-    }
-
-    // Interactive prompt
-    if (!apiKey && !parsedArgs.nonInteractive) {
-      const prompt = toolDef.auth?.keyPrompt || `Enter your ${toolDef.displayName || toolDef.name} API key`;
-      if (toolDef.auth?.keyHelpUrl) {
-        log(`  ${DIM}Get a key at: ${toolDef.auth.keyHelpUrl}${RESET}`);
-      }
-      apiKey = await cli.prompt(`  ${prompt}: `);
-      if (!apiKey) {
-        fail("No API key provided");
-        process.exit(1);
-      }
-    }
-
-    if (!apiKey) {
-      fail(`${toolDef.name} requires authentication. Use --api-key or set ${toolDef.envKey || "the key"}`);
+    if (!authResult.credential) {
+      fail(authResult.error || `${toolDef.name} requires authentication`);
       process.exit(1);
     }
 
-    // Store credential for future use
-    if (apiKey && !parsedArgs.dryRun) {
-      try {
-        const credDir = path.join(os.homedir(), ".equip", "credentials");
-        if (!fs.existsSync(credDir)) fs.mkdirSync(credDir, { recursive: true });
-        const credPath = path.join(credDir, `${toolDef.name}.json`);
-        fs.writeFileSync(credPath, JSON.stringify({
-          authType: "api_key",
-          credential: apiKey,
-          toolName: toolDef.name,
-          storedAt: new Date().toISOString(),
-        }, null, 2));
-        // Set restrictive permissions on Unix
-        if (process.platform !== "win32") {
-          fs.chmodSync(credPath, 0o600);
-        }
-      } catch { /* best effort */ }
-    }
+    apiKey = authResult.credential;
+    ok(`Authenticated ${DIM}(${authResult.method})${RESET}`);
   }
 
   // ── Platform Detection ──
@@ -556,6 +579,7 @@ async function main() {
     case "list":      cmdList(); break;
     case "demo":      cmdDemo(parsedArgs._); break;
     case "uninstall": cmdUninstall(parsedArgs._); break;
+    case "reauth":    await cmdReauth(parsedArgs); break;
     default:          await dispatchTool(cmd, parsedArgs); break;
   }
 }

@@ -10,6 +10,7 @@ import type { HookDefinition } from "./hooks";
 import type { SkillConfig, SkillFile } from "./skills";
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
+import type { AuthConfig } from "./auth-engine";
 
 // ─── API Configuration ─────────────────────────────────────
 
@@ -61,14 +62,8 @@ export interface ToolDefinition {
   // Platform compatibility
   platforms?: Record<string, unknown>;
 
-  // Auth (Phase 2 — not yet implemented in backend)
-  auth?: {
-    type: "none" | "api_key" | "oauth" | "oauth_to_api_key";
-    keyEnvVar?: string;
-    keyPrefix?: string;
-    keyPrompt?: string;
-    keyHelpUrl?: string;
-  };
+  // Auth configuration — declares what auth flow the tool needs
+  auth?: AuthConfig;
 }
 
 // ─── Local Registry Entry ──────────────────────────────────
