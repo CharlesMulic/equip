@@ -39,7 +39,7 @@ function parseArgs(argv) {
 
 // ─── Built-in Commands ──────────────────────────────────────
 
-const BUILTIN_COMMANDS = new Set(["status", "doctor", "update", "reauth", "list", "demo", "--help", "-h", "--version", "-v"]);
+const BUILTIN_COMMANDS = new Set(["status", "doctor", "update", "reauth", "refresh", "list", "demo", "--help", "-h", "--version", "-v"]);
 
 function isBuiltin(cmd) {
   return BUILTIN_COMMANDS.has(cmd);
@@ -80,6 +80,7 @@ function cmdHelp() {
   console.log("  .                Run current directory's package bin entry");
   console.log("  uninstall <tool> Remove an installed tool (alias: unequip)");
   console.log("  reauth <tool>    Re-authenticate and update credentials");
+  console.log("  refresh [tool]   Refresh expired OAuth tokens");
   console.log("  status           Show all MCP servers across all platforms");
   console.log("  doctor           Validate config integrity and detect drift");
   console.log("  update           Update equip and migrate configs");
@@ -211,6 +212,104 @@ async function cmdReauth(args) {
   }
 
   log(`\n${BOLD}Done.${RESET} Credentials rotated for ${toolName}.\n`);
+}
+
+async function cmdRefresh(args) {
+  const { refreshCredential, refreshAllExpired, readStoredCredential, isCredentialExpired, listStoredCredentials, cli } = require("../dist/index");
+  const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
+  const logger = args.verbose ? createConsoleLogger() : undefined;
+
+  const toolName = args._[0];
+
+  if (toolName) {
+    // Refresh a specific tool
+    log(`\n${BOLD}equip refresh${RESET} ${toolName}\n`);
+
+    const cred = readStoredCredential(toolName);
+    if (!cred) {
+      fail(`No stored credentials for ${toolName}`);
+      process.exit(1);
+    }
+
+    if (!cred.oauth || !cred.oauth.refreshToken) {
+      fail(`${toolName} has no OAuth refresh token — use 'equip reauth ${toolName}' instead`);
+      process.exit(1);
+    }
+
+    const expired = isCredentialExpired(cred);
+    if (!expired) {
+      ok(`${toolName}: OAuth token is still valid`);
+      if (cred.oauth.expiresAt) {
+        const remaining = new Date(cred.oauth.expiresAt).getTime() - Date.now();
+        const mins = Math.floor(remaining / 60000);
+        log(`  ${DIM}Expires in ${mins} minute${mins === 1 ? "" : "s"}${RESET}`);
+      }
+      return;
+    }
+
+    const result = await refreshCredential(toolName, { logger, updateConfigs: true });
+    if (result.success) {
+      ok(`${toolName}: token refreshed`);
+      if (result.configsUpdated && result.configsUpdated > 0) {
+        ok(`${result.configsUpdated} platform config${result.configsUpdated === 1 ? "" : "s"} updated`);
+      }
+    } else {
+      fail(`${toolName}: ${result.error}`);
+      log(`  ${DIM}Try: equip reauth ${toolName}${RESET}`);
+    }
+  } else {
+    // Refresh all expired credentials
+    log(`\n${BOLD}equip refresh${RESET}\n`);
+
+    const tools = listStoredCredentials();
+    if (tools.length === 0) {
+      log(`  ${DIM}No stored credentials found.${RESET}\n`);
+      return;
+    }
+
+    let anyExpired = false;
+    for (const name of tools) {
+      const cred = readStoredCredential(name);
+      if (!cred || !cred.oauth?.refreshToken) continue;
+      if (!isCredentialExpired(cred)) {
+        ok(`${name}: token valid`);
+        continue;
+      }
+
+      anyExpired = true;
+      const result = await refreshCredential(name, { logger, updateConfigs: true });
+      if (result.success) {
+        ok(`${name}: token refreshed${result.configsUpdated ? ` (${result.configsUpdated} config${result.configsUpdated === 1 ? "" : "s"} updated)` : ""}`);
+      } else {
+        fail(`${name}: ${result.error}`);
+        log(`  ${DIM}Try: equip reauth ${name}${RESET}`);
+      }
+    }
+
+    if (!anyExpired) {
+      log(`  ${DIM}All tokens are current.${RESET}`);
+    }
+  }
+  log("");
+}
+
+// ─── Auto-Refresh ──────────────────────────────────────────
+
+async function autoRefreshExpired(verbose) {
+  try {
+    const { refreshAllExpired } = require("../dist/index");
+    const logger = verbose ? createConsoleLogger() : undefined;
+    const results = await refreshAllExpired({ logger });
+
+    if (results.size > 0 && !verbose) {
+      const { cli } = require("../dist/index");
+      for (const [name, result] of results) {
+        if (result.success) {
+          cli.ok(`Auto-refreshed token for ${name}`);
+        }
+      }
+    }
+  } catch { /* best effort — don't block the command */ }
 }
 
 // ─── Logger ─────────────────────────────────────────────────
@@ -575,6 +674,11 @@ async function main() {
   // Parse remaining args (after the command)
   const parsedArgs = parseArgs(rawArgs.slice(1));
 
+  // Auto-refresh expired OAuth tokens (best effort, non-blocking for fast commands)
+  if (cmd !== "refresh" && cmd !== "reauth" && cmd !== "list" && cmd !== "demo") {
+    await autoRefreshExpired(parsedArgs.verbose);
+  }
+
   switch (cmd) {
     case "status":    cmdStatus(); break;
     case "doctor":    cmdDoctor(); break;
@@ -583,6 +687,7 @@ async function main() {
     case "demo":      cmdDemo(parsedArgs._); break;
     case "uninstall": cmdUninstall(parsedArgs._); break;
     case "reauth":    await cmdReauth(parsedArgs); break;
+    case "refresh":   await cmdRefresh(parsedArgs); break;
     default:          await dispatchTool(cmd, parsedArgs); break;
   }
 }

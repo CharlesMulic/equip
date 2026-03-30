@@ -15,7 +15,7 @@ import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFil
 import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, type EquipWarning, type EquipLogger, type EquipErrorCode, type EquipWarningCode, type ArtifactType, type ArtifactAction } from "./lib/types";
 import type { ReadMcpResult } from "./lib/mcp";
 import { fetchToolDef, toolDefToEquipConfig, type ToolDefinition, type LocalRegistryEntry } from "./lib/registry";
-import { resolveAuth, readStoredCredential, writeStoredCredential, deleteStoredCredential, type AuthConfig, type StoredCredential, type AuthResult } from "./lib/auth-engine";
+import { resolveAuth, readStoredCredential, writeStoredCredential, deleteStoredCredential, listStoredCredentials, isCredentialExpired, refreshCredential, refreshAllExpired, type AuthConfig, type StoredCredential, type AuthResult, type RefreshResult } from "./lib/auth-engine";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -260,6 +260,10 @@ export {
   readStoredCredential,
   writeStoredCredential,
   deleteStoredCredential,
+  listStoredCredentials,
+  isCredentialExpired,
+  refreshCredential,
+  refreshAllExpired,
 };
 
 // Types
@@ -284,4 +288,5 @@ export type {
   AuthConfig,
   StoredCredential,
   AuthResult,
+  RefreshResult,
 };

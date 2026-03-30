@@ -14,6 +14,9 @@ const {
   readStoredCredential,
   writeStoredCredential,
   deleteStoredCredential,
+  listStoredCredentials,
+  isCredentialExpired,
+  refreshCredential,
   resolveAuth,
 } = require("../dist/lib/auth-engine");
 
@@ -299,7 +302,203 @@ describe("resolveAuth", () => {
   });
 });
 
-// ─── CLI reauth command ────────────────────────────────────
+// ─── isCredentialExpired ────────────────────────────────────
+
+describe("isCredentialExpired", () => {
+  it("returns false for credential without oauth", () => {
+    const cred = {
+      authType: "api_key",
+      credential: "test",
+      toolName: "test",
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    assert.equal(isCredentialExpired(cred), false);
+  });
+
+  it("returns false for credential with future expiresAt", () => {
+    const cred = {
+      authType: "oauth",
+      credential: "test",
+      toolName: "test",
+      oauth: {
+        accessToken: "test",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        tokenUrl: "https://example.com/token",
+        clientId: "test",
+      },
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    assert.equal(isCredentialExpired(cred), false);
+  });
+
+  it("returns true for credential with past expiresAt", () => {
+    const cred = {
+      authType: "oauth",
+      credential: "test",
+      toolName: "test",
+      oauth: {
+        accessToken: "test",
+        expiresAt: new Date(Date.now() - 3600000).toISOString(),
+        tokenUrl: "https://example.com/token",
+        clientId: "test",
+      },
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    assert.equal(isCredentialExpired(cred), true);
+  });
+
+  it("detects expiry from JWT exp claim", () => {
+    // Create a JWT with exp in the past
+    const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) - 3600 })).toString("base64url");
+    const sig = "fakesig";
+    const expiredJwt = `${header}.${payload}.${sig}`;
+
+    const cred = {
+      authType: "oauth",
+      credential: expiredJwt,
+      toolName: "test",
+      oauth: {
+        accessToken: expiredJwt,
+        tokenUrl: "https://example.com/token",
+        clientId: "test",
+      },
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    assert.equal(isCredentialExpired(cred), true);
+  });
+
+  it("returns false for JWT with future exp", () => {
+    const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url");
+    const sig = "fakesig";
+    const validJwt = `${header}.${payload}.${sig}`;
+
+    const cred = {
+      authType: "oauth",
+      credential: validJwt,
+      toolName: "test",
+      oauth: {
+        accessToken: validJwt,
+        tokenUrl: "https://example.com/token",
+        clientId: "test",
+      },
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    assert.equal(isCredentialExpired(cred), false);
+  });
+});
+
+// ─── refreshCredential ─────────────────────────────────────
+
+describe("refreshCredential", () => {
+  it("returns error when no stored credential", async () => {
+    const result = await refreshCredential("nonexistent-tool-xyz");
+    assert.equal(result.success, false);
+    assert.ok(result.error.includes("No stored credential"));
+  });
+
+  it("returns error when no refresh token", async () => {
+    const name = testToolName();
+    writeStoredCredential({
+      authType: "api_key",
+      credential: "test-key",
+      toolName: name,
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const result = await refreshCredential(name);
+    assert.equal(result.success, false);
+    assert.ok(result.error.includes("No refresh token"));
+
+    deleteStoredCredential(name);
+  });
+
+  it("returns error when missing tokenUrl", async () => {
+    const name = testToolName();
+    writeStoredCredential({
+      authType: "oauth",
+      credential: "test",
+      toolName: name,
+      oauth: {
+        accessToken: "test",
+        refreshToken: "rt_test",
+        // tokenUrl and clientId missing
+      },
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const result = await refreshCredential(name);
+    assert.equal(result.success, false);
+    assert.ok(result.error.includes("Missing tokenUrl"));
+
+    deleteStoredCredential(name);
+  });
+
+  it("logs refresh attempt with logger", async () => {
+    const name = testToolName();
+    const logger = recordingLogger();
+    writeStoredCredential({
+      authType: "oauth",
+      credential: "test",
+      toolName: name,
+      oauth: {
+        accessToken: "test",
+        refreshToken: "rt_test",
+        tokenUrl: "https://httpbin.org/status/401",
+        clientId: "test",
+      },
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await refreshCredential(name, { logger });
+
+    const infos = logger.calls.filter(c => c.level === "info");
+    assert.ok(infos.some(c => c.msg.includes("Refreshing")), "Should log refresh attempt");
+
+    deleteStoredCredential(name);
+  });
+});
+
+// ─── listStoredCredentials ─────────────────────────────────
+
+describe("listStoredCredentials", () => {
+  it("lists stored credential tool names", () => {
+    const name1 = testToolName();
+    const name2 = testToolName();
+    writeStoredCredential({
+      authType: "api_key",
+      credential: "test1",
+      toolName: name1,
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    writeStoredCredential({
+      authType: "api_key",
+      credential: "test2",
+      toolName: name2,
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const list = listStoredCredentials();
+    assert.ok(list.includes(name1));
+    assert.ok(list.includes(name2));
+
+    deleteStoredCredential(name1);
+    deleteStoredCredential(name2);
+  });
+});
+
+// ─── CLI commands ──────────────────────────────────────────
 
 describe("equip reauth", () => {
   it("shows usage when no tool name provided", () => {
@@ -315,5 +514,33 @@ describe("equip reauth", () => {
     } catch (e) {
       assert.ok(e.stdout.includes("Usage") || e.status !== 0);
     }
+  });
+});
+
+describe("equip refresh", () => {
+  it("reports no credentials when none stored", () => {
+    // Run refresh for a tool that has no credential
+    const { execSync } = require("child_process");
+    try {
+      execSync("node bin/equip.js refresh nonexistent-xyz 2>&1", {
+        encoding: "utf-8",
+        cwd: path.join(__dirname, ".."),
+        timeout: 10000,
+        shell: true,
+      });
+      assert.fail("Should have exited with error");
+    } catch (e) {
+      assert.ok(e.stdout.includes("No stored credentials") || e.status !== 0);
+    }
+  });
+
+  it("help text includes refresh command", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js --help", {
+      encoding: "utf-8",
+      cwd: path.join(__dirname, ".."),
+      timeout: 10000,
+    });
+    assert.ok(out.includes("refresh"), "Help should mention refresh command");
   });
 });

@@ -7,6 +7,7 @@ import { readState } from "../state";
 import { dirExists, fileExists } from "../detect";
 import * as cli from "../cli";
 import { checkAuth } from "../auth";
+import { readStoredCredential, isCredentialExpired, listStoredCredentials } from "../auth-engine";
 
 export function runDoctor(): void {
   cli.log(`\n${cli.BOLD}equip doctor${cli.RESET}\n`);
@@ -160,7 +161,38 @@ export function runDoctor(): void {
     }
   }
 
-  // Check 3: Config file parse health for all detected platforms
+  // Check 3: Stored credential health
+  const credTools = listStoredCredentials();
+  if (credTools.length > 0) {
+    cli.log(`\n${cli.BOLD}Credential health${cli.RESET}`);
+    for (const credTool of credTools) {
+      checks++;
+      const cred = readStoredCredential(credTool);
+      if (!cred) continue;
+
+      if (cred.oauth?.refreshToken) {
+        if (isCredentialExpired(cred)) {
+          cli.warn(`  ${credTool}: OAuth token expired — run 'equip refresh ${credTool}'`);
+          issues++;
+        } else if (cred.oauth.expiresAt) {
+          const remaining = new Date(cred.oauth.expiresAt).getTime() - Date.now();
+          const mins = Math.floor(remaining / 60000);
+          if (mins < 10) {
+            cli.warn(`  ${credTool}: OAuth token expires in ${mins} minute${mins === 1 ? "" : "s"}`);
+            issues++;
+          } else {
+            cli.ok(`  ${credTool}: OAuth token valid (${mins}m remaining)`);
+          }
+        } else {
+          cli.ok(`  ${credTool}: credential stored (${cred.authType})`);
+        }
+      } else {
+        cli.ok(`  ${credTool}: credential stored (${cred.authType})`);
+      }
+    }
+  }
+
+  // Check 4: Config file parse health for all detected platforms
   cli.log(`\n${cli.BOLD}Config file health${cli.RESET}`);
   for (const [id, def] of PLATFORM_REGISTRY) {
     const configPath = def.configPath();

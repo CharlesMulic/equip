@@ -106,6 +106,210 @@ export function deleteStoredCredential(toolName: string): void {
   try { fs.unlinkSync(credentialPath(toolName)); } catch {}
 }
 
+/**
+ * List all stored credential tool names.
+ */
+export function listStoredCredentials(): string[] {
+  try {
+    return fs.readdirSync(CREDENTIALS_DIR)
+      .filter(f => f.endsWith(".json"))
+      .map(f => f.replace(/\.json$/, ""));
+  } catch {
+    return [];
+  }
+}
+
+// ─── Token Expiry ──────────────────────────────────────────
+
+/**
+ * Check if a stored credential's OAuth token is expired.
+ * Returns true if:
+ * - The credential has an expiresAt field and it's in the past
+ * - The access token is a JWT with an expired exp claim
+ * Returns false if no expiry information is available.
+ */
+export function isCredentialExpired(cred: StoredCredential): boolean {
+  if (!cred.oauth) return false;
+
+  // Check explicit expiresAt field
+  if (cred.oauth.expiresAt) {
+    const expiresAt = new Date(cred.oauth.expiresAt).getTime();
+    if (expiresAt < Date.now()) return true;
+  }
+
+  // Check JWT exp claim in access token
+  if (cred.oauth.accessToken) {
+    const parts = cred.oauth.accessToken.split(".");
+    if (parts.length === 3) {
+      try {
+        const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+        const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf-8"));
+        if (typeof payload.exp === "number" && payload.exp < Math.floor(Date.now() / 1000)) {
+          return true;
+        }
+      } catch { /* can't decode — assume not expired */ }
+    }
+  }
+
+  return false;
+}
+
+// ─── Token Refresh ─────────────────────────────────────────
+
+export interface RefreshResult {
+  success: boolean;
+  newAccessToken?: string;
+  error?: string;
+  configsUpdated?: number;
+}
+
+/**
+ * Refresh an expired OAuth credential.
+ * - For 'oauth' type: refreshes access token + updates platform MCP configs.
+ * - For 'oauth_to_api_key': refreshes OAuth tokens (API key stays the same).
+ * - For other types: returns { success: false, error }.
+ */
+export async function refreshCredential(
+  toolName: string,
+  options: { logger?: EquipLogger; updateConfigs?: boolean } = {},
+): Promise<RefreshResult> {
+  const logger = options.logger || NOOP_LOGGER;
+  const cred = readStoredCredential(toolName);
+
+  if (!cred) {
+    return { success: false, error: `No stored credential for ${toolName}` };
+  }
+
+  if (!cred.oauth?.refreshToken) {
+    return { success: false, error: `No refresh token stored for ${toolName}` };
+  }
+
+  if (!cred.oauth.tokenUrl || !cred.oauth.clientId) {
+    return { success: false, error: `Missing tokenUrl or clientId for ${toolName}` };
+  }
+
+  logger.info("Refreshing OAuth token", { toolName, tokenUrl: cred.oauth.tokenUrl });
+
+  try {
+    const res = await fetch(cred.oauth.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: cred.oauth.refreshToken,
+        client_id: cred.oauth.clientId,
+      }).toString(),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const data = await res.json() as Record<string, unknown>;
+
+    if (!data.access_token) {
+      const errMsg = (data.error_description || data.error || "No access_token in response") as string;
+      logger.error("Token refresh failed", { error: errMsg });
+      return { success: false, error: `Refresh failed: ${errMsg}` };
+    }
+
+    const newAccessToken = data.access_token as string;
+    const newRefreshToken = (data.refresh_token as string) || cred.oauth.refreshToken;
+    const expiresIn = data.expires_in as number | undefined;
+    const newExpiresAt = expiresIn
+      ? new Date(Date.now() + expiresIn * 1000).toISOString()
+      : undefined;
+
+    // Update stored credential
+    cred.oauth.accessToken = newAccessToken;
+    cred.oauth.refreshToken = newRefreshToken;
+    cred.oauth.expiresAt = newExpiresAt;
+    cred.updatedAt = new Date().toISOString();
+
+    // For 'oauth' type, the access token IS the credential written to configs
+    if (cred.authType === "oauth") {
+      cred.credential = newAccessToken;
+    }
+
+    writeStoredCredential(cred);
+    logger.info("OAuth token refreshed", { toolName, expiresAt: newExpiresAt });
+
+    // Update platform configs if this is an 'oauth' type (token directly in config)
+    let configsUpdated = 0;
+    if (cred.authType === "oauth" && options.updateConfigs !== false) {
+      configsUpdated = updatePlatformConfigs(toolName, newAccessToken, logger);
+    }
+
+    return { success: true, newAccessToken, configsUpdated };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error("Token refresh error", { toolName, error: msg });
+    return { success: false, error: `Refresh error: ${msg}` };
+  }
+}
+
+/**
+ * Scan all stored credentials and refresh any with expired OAuth tokens.
+ * Returns a map of tool name → RefreshResult for any tools that were refreshed.
+ */
+export async function refreshAllExpired(
+  options: { logger?: EquipLogger } = {},
+): Promise<Map<string, RefreshResult>> {
+  const logger = options.logger || NOOP_LOGGER;
+  const results = new Map<string, RefreshResult>();
+  const tools = listStoredCredentials();
+
+  for (const toolName of tools) {
+    const cred = readStoredCredential(toolName);
+    if (!cred || !cred.oauth?.refreshToken) continue;
+    if (!isCredentialExpired(cred)) continue;
+
+    logger.info("Auto-refreshing expired token", { toolName });
+    const result = await refreshCredential(toolName, { logger, updateConfigs: true });
+    results.set(toolName, result);
+  }
+
+  return results;
+}
+
+/**
+ * Update MCP config entries across all detected platforms for a tool.
+ * Used when the credential (access token) changes via refresh.
+ */
+function updatePlatformConfigs(toolName: string, newToken: string, logger: EquipLogger): number {
+  try {
+    // Import dynamically to avoid circular dependency
+    const { detectPlatforms } = require("./detect");
+    const { readMcpEntry } = require("./mcp");
+    const { buildHttpConfigWithAuth } = require("./mcp");
+    const { installMcp } = require("./mcp");
+
+    const platforms = detectPlatforms(toolName);
+    let updated = 0;
+
+    for (const p of platforms) {
+      const entry = readMcpEntry(p.configPath, p.rootKey, toolName, p.configFormat || "json");
+      if (!entry) continue;
+
+      // Extract server URL from existing config
+      const serverUrl = (entry as Record<string, unknown>).url
+        || (entry as Record<string, unknown>).serverUrl
+        || (entry as Record<string, unknown>).httpUrl;
+      if (!serverUrl || typeof serverUrl !== "string") continue;
+
+      const newConfig = buildHttpConfigWithAuth(serverUrl, newToken, p.platform);
+      installMcp(p, toolName, newConfig, { logger });
+      updated++;
+    }
+
+    if (updated > 0) {
+      logger.info("Platform configs updated with refreshed token", { toolName, platforms: updated });
+    }
+    return updated;
+  } catch (e: unknown) {
+    logger.warn("Failed to update platform configs", { toolName, error: (e as Error).message });
+    return 0;
+  }
+}
+
 // ─── Main Resolve Function ─────────────────────────────────
 
 /**
