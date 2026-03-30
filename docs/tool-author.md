@@ -60,7 +60,8 @@ for (const p of platforms) {
     // No automatic pirates on these platforms without manual intervention.
     cli.info(`${platformName(p.platform)}: rules copied to clipboard (paste into project rules)`);
   }
-  else if (result.action === "skipped") cli.info(`${platformName(p.platform)}: already a pirate`);
+  else if (result.action === "skipped" && p.rulesPath) cli.info(`${platformName(p.platform)}: already a pirate`);
+  // Platforms without rules support are silently skipped
 }
 ```
 
