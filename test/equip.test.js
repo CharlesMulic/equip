@@ -422,8 +422,8 @@ describe("platformName", () => {
 });
 
 describe("KNOWN_PLATFORMS", () => {
-  it("includes all 11 platforms", () => {
-    assert.equal(KNOWN_PLATFORMS.length, 11);
+  it("includes all 12 platforms", () => {
+    assert.equal(KNOWN_PLATFORMS.length, 12);
     assert.ok(KNOWN_PLATFORMS.includes("claude-code"));
     assert.ok(KNOWN_PLATFORMS.includes("cursor"));
     assert.ok(KNOWN_PLATFORMS.includes("vscode"));
@@ -434,6 +434,7 @@ describe("KNOWN_PLATFORMS", () => {
     assert.ok(KNOWN_PLATFORMS.includes("junie"));
     assert.ok(KNOWN_PLATFORMS.includes("copilot-jetbrains"));
     assert.ok(KNOWN_PLATFORMS.includes("copilot-cli"));
+    assert.ok(KNOWN_PLATFORMS.includes("tabnine"));
   });
 });
 
@@ -1537,5 +1538,107 @@ describe("Equip class (skills)", () => {
     assert.ok(skillCheck.detail.includes("not found"));
 
     cleanup(p.configPath);
+  });
+});
+
+// ─── Tabnine Platform ───────────────────────────────────────
+// Tabnine uses a unique nested headers format: { requestInit: { headers: {...} } }
+// These tests verify the headersWrapper mechanism works correctly.
+
+describe("Tabnine (headersWrapper)", () => {
+  it("buildHttpConfig returns url without type for tabnine", () => {
+    const config = buildHttpConfig("https://api.example.com/mcp", "tabnine");
+    assert.equal(config.url, "https://api.example.com/mcp");
+    assert.equal(config.type, undefined, "tabnine should have no type field");
+  });
+
+  it("buildHttpConfigWithAuth nests headers in requestInit", () => {
+    const config = buildHttpConfigWithAuth("https://api.example.com/mcp", "ask_test123", "tabnine");
+    assert.equal(config.url, "https://api.example.com/mcp");
+    // Headers should be nested: { requestInit: { headers: { Authorization: "..." } } }
+    assert.ok(config.requestInit, "should have requestInit wrapper");
+    assert.ok(config.requestInit.headers, "should have headers inside requestInit");
+    assert.equal(config.requestInit.headers.Authorization, "Bearer ask_test123");
+    // Should NOT have top-level headers
+    assert.equal(config.headers, undefined, "should not have top-level headers");
+  });
+
+  it("buildHttpConfigWithAuth includes extra headers in requestInit", () => {
+    const config = buildHttpConfigWithAuth("https://api.example.com/mcp", "ask_test", "tabnine", { "X-Custom": "value" });
+    assert.equal(config.requestInit.headers.Authorization, "Bearer ask_test");
+    assert.equal(config.requestInit.headers["X-Custom"], "value");
+  });
+
+  it("installMcpJson writes tabnine format correctly", () => {
+    const p = mockPlatform({ platform: "tabnine", rootKey: "mcpServers" });
+    cleanup(p.configPath);
+    const config = buildHttpConfigWithAuth("https://api.example.com/mcp", "ask_tabnine", "tabnine");
+    installMcpJson(p, "prior", config, false);
+    const data = JSON.parse(fs.readFileSync(p.configPath, "utf-8"));
+    assert.ok(data.mcpServers.prior, "should have prior entry");
+    assert.equal(data.mcpServers.prior.url, "https://api.example.com/mcp");
+    assert.ok(data.mcpServers.prior.requestInit, "should have requestInit");
+    assert.ok(data.mcpServers.prior.requestInit.headers, "should have nested headers");
+    assert.equal(data.mcpServers.prior.requestInit.headers.Authorization, "Bearer ask_tabnine");
+    cleanup(p.configPath);
+  });
+
+  it("installMcpJson preserves existing tabnine entries", () => {
+    const p = mockPlatform({ platform: "tabnine", rootKey: "mcpServers" });
+    fs.writeFileSync(p.configPath, JSON.stringify({
+      mcpServers: {
+        existing: {
+          url: "https://other.com/mcp",
+          requestInit: { headers: { "X-Key": "abc" } }
+        }
+      }
+    }));
+    const config = buildHttpConfigWithAuth("https://api.example.com/mcp", "ask_new", "tabnine");
+    installMcpJson(p, "prior", config, false);
+    const data = JSON.parse(fs.readFileSync(p.configPath, "utf-8"));
+    assert.ok(data.mcpServers.existing, "existing server should be preserved");
+    assert.ok(data.mcpServers.prior, "new server should be added");
+    assert.equal(data.mcpServers.existing.requestInit.headers["X-Key"], "abc", "existing headers preserved");
+    cleanup(p.configPath);
+  });
+
+  it("Equip class full roundtrip for tabnine", () => {
+    const configPath = tmpPath("tabnine-equip") + ".json";
+    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ platform: "tabnine", configPath, rootKey: "mcpServers" });
+    cleanup(configPath);
+    e.installMcp(p, "ask_roundtrip");
+    const entry = e.readMcp(p);
+    assert.ok(entry, "should read back entry");
+    assert.equal(entry.url, "https://example.com/mcp");
+    assert.ok(entry.requestInit, "should have requestInit in stored config");
+    e.uninstallMcp(p);
+    assert.equal(e.readMcp(p), null, "should be removed");
+    cleanup(configPath);
+  });
+
+  it("createManualPlatform returns correct tabnine config", () => {
+    const p = createManualPlatform("tabnine");
+    assert.equal(p.platform, "tabnine");
+    assert.ok(p.configPath.includes(".tabnine"), "configPath should reference .tabnine");
+    assert.equal(p.rootKey, "mcpServers");
+    assert.equal(p.configFormat, "json");
+    assert.ok(p.rulesPath, "tabnine should have rulesPath (guidelines)");
+    assert.ok(p.rulesPath.includes("guidelines"), "rulesPath should reference guidelines");
+    assert.equal(p.skillsPath, null, "tabnine should not have skillsPath");
+  });
+
+  it("platformName returns Tabnine", () => {
+    assert.equal(platformName("tabnine"), "Tabnine");
+  });
+
+  it("non-tabnine platforms still use top-level headers", () => {
+    const claude = buildHttpConfigWithAuth("https://x.com/mcp", "key", "claude-code");
+    assert.ok(claude.headers, "claude-code should have top-level headers");
+    assert.equal(claude.requestInit, undefined, "claude-code should not have requestInit");
+
+    const codex = buildHttpConfigWithAuth("https://x.com/mcp", "key", "codex");
+    assert.ok(codex.http_headers, "codex should have top-level http_headers");
+    assert.equal(codex.requestInit, undefined, "codex should not have requestInit");
   });
 });

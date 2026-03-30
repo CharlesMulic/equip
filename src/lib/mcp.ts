@@ -186,13 +186,24 @@ export function buildHttpConfigWithAuth(serverUrl: string, apiKey: string, platf
   const base = buildHttpConfig(serverUrl, platform);
   const def = PLATFORM_REGISTRY.get(platform);
   const headersField = def?.httpShape.headersField ?? "headers";
+  const headersWrapper = def?.httpShape.headersWrapper;
+
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    ...extraHeaders,
+  };
+
+  if (headersWrapper) {
+    // Nested headers: e.g., Tabnine uses { requestInit: { headers: {...} } }
+    return {
+      ...base,
+      [headersWrapper]: { [headersField]: headers },
+    };
+  }
 
   return {
     ...base,
-    [headersField]: {
-      Authorization: `Bearer ${apiKey}`,
-      ...extraHeaders,
-    },
+    [headersField]: headers,
   };
 }
 

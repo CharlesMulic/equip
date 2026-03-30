@@ -13,6 +13,8 @@ export interface PlatformHttpShape {
   typeField?: string;
   /** Key name for auth headers */
   headersField: "headers" | "http_headers";
+  /** Optional wrapper key for headers (e.g., "requestInit" → { requestInit: { headers: {...} } }) */
+  headersWrapper?: string;
 }
 
 export interface PlatformDetection {
@@ -281,6 +283,23 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     detection: {
       cli: "copilot",
       dirs: [() => path.join(home(), ".copilot")],
+      files: [],
+    },
+    hooks: null,
+    skillsPath: null,
+  }],
+  ["tabnine", {
+    id: "tabnine",
+    name: "Tabnine",
+    aliases: [],
+    configPath: () => path.join(home(), ".tabnine", "mcp_servers.json"),
+    rulesPath: () => path.join(home(), ".tabnine", "guidelines"),
+    rootKey: "mcpServers",
+    configFormat: "json",
+    httpShape: { urlField: "url", headersField: "headers", headersWrapper: "requestInit" },
+    detection: {
+      cli: null,
+      dirs: [() => path.join(home(), ".tabnine")],
       files: [],
     },
     hooks: null,
