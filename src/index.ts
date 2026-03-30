@@ -49,7 +49,6 @@ class Equip {
 
   constructor(config: EquipConfig) {
     if (!config.name) throw new Error("Equip: name is required");
-    if (!config.serverUrl && !config.stdio) throw new Error("Equip: serverUrl or stdio is required");
 
     this.name = config.name;
     this.serverUrl = config.serverUrl;
@@ -69,7 +68,8 @@ class Equip {
       const env = { [this.stdio.envKey]: apiKey };
       return buildStdioConfig(this.stdio.command, this.stdio.args, env);
     }
-    return buildHttpConfigWithAuth(this.serverUrl!, apiKey, platformId);
+    if (!this.serverUrl) throw new Error("Equip: serverUrl is required for MCP installation");
+    return buildHttpConfigWithAuth(this.serverUrl, apiKey, platformId);
   }
 
   installMcp(platform: DetectedPlatform, apiKey: string, options: { transport?: string; dryRun?: boolean } = {}): { success: boolean; method: string } {

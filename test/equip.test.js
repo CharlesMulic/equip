@@ -67,8 +67,16 @@ describe("Equip class", () => {
     assert.throws(() => new Equip({}), /name is required/);
   });
 
-  it("requires serverUrl or stdio", () => {
-    assert.throws(() => new Equip({ name: "test" }), /serverUrl or stdio/);
+  it("works without serverUrl (rules/skills only)", () => {
+    const e = new Equip({ name: "test" });
+    assert.equal(e.name, "test");
+    assert.equal(e.serverUrl, undefined);
+  });
+
+  it("throws on installMcp without serverUrl", () => {
+    const e = new Equip({ name: "test" });
+    const p = mockPlatform();
+    assert.throws(() => e.installMcp(p, "key"), /serverUrl is required/);
   });
 
   it("creates instance with serverUrl", () => {

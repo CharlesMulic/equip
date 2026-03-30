@@ -38,7 +38,6 @@ const { Equip, platformName, cli } = require("@cg3/equip");
 
 const equip = new Equip({
   name: "piratehat",
-  serverUrl: "https://example.com/unused",  // Required but unused when only installing rules
   rules: {
     content: `<!-- piratehat:v1.0.0 -->
 ## Pirate Mode
@@ -99,7 +98,6 @@ A skill gives agents deeper knowledge — procedural instructions they load on d
 ```js
 const equip = new Equip({
   name: "piratehat",
-  serverUrl: "https://example.com/unused",
   rules: {
     // ... same as above ...
   },

@@ -56,7 +56,6 @@ const { Equip, platformName, cli } = require("@cg3/equip");
 
 const equip = new Equip({
   name: "piratehat",
-  serverUrl: "https://example.com/unused",
   rules: {
     content: \`<!-- piratehat:v1.0.0 -->
 ## Pirate Mode
@@ -143,7 +142,6 @@ const { Equip, platformName, cli } = require("@cg3/equip");
 
 const equip = new Equip({
   name: "piratehat",
-  serverUrl: "https://example.com/unused",
   rules: {
     content: \`<!-- piratehat:v1.0.0 -->
 ## Pirate Mode
@@ -266,7 +264,6 @@ describe("docs/tool-author.md — equip . (local package)", () => {
 const { Equip, cli } = require("@cg3/equip");
 const equip = new Equip({
   name: "test-local-pkg",
-  serverUrl: "https://example.com/unused",
   rules: {
     content: "<!-- test-local-pkg:v1.0.0 -->\\nTest rule\\n<!-- /test-local-pkg -->",
     version: "1.0.0",
