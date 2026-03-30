@@ -1,99 +1,32 @@
 # @cg3/equip
 
-Universal MCP server + behavioral rules installer for AI coding agents.
+Cross-platform installer for MCP tools, behavioral rules, agent skills, and lifecycle hooks.
 
-[Join the Discord](https://discord.gg/bBcRHT4J) — bug reports, feedback, share what you're building.
+[Join the Discord](https://discord.gg/bBcRHT4J) | [Tool Author Guide](./docs/tool-author.md)
 
-Equip handles the hard part of distributing your MCP tool: detecting which AI coding platforms are installed, writing the correct config format for each one, and managing versioned behavioral rules — all with zero dependencies.
+## What It Does
 
-## Run the Demo
+You build an MCP tool. You want it to work on Claude Code, Cursor, VS Code, Windsurf, Cline, Roo Code, Codex, Gemini CLI, and more. Each platform has its own config format, file paths, root keys, URL fields, and quirks.
 
-```bash
-npx @cg3/equip demo
-```
+Equip handles all of that. One setup script, 11 platforms.
 
-A self-contained, inline-documented setup script that walks through every equip feature — platform detection, MCP config, behavioral rules, and uninstallation. Runs in dry-run mode by default (no files touched). See [`demo/setup.js`](./demo/setup.js) for the full source.
+## Install
 
 ```bash
-npx @cg3/equip demo --live        # actually write config files
-npx @cg3/equip demo --uninstall   # clean up demo files
+npm install -g @cg3/equip
 ```
-
-## Supported Platforms
-
-Equip supports **11 platforms** across two tiers, depending on whether the platform has a writable location for behavioral rules.
-
-### Full Support — MCP + Behavioral Rules
-
-These platforms get both MCP server config *and* auto-installed behavioral rules. Rules teach agents *when* to use your tool (e.g., "search before debugging") and are versioned for idempotent updates.
-
-| Platform | MCP Config | Rules |
-|---|---|---|
-| Claude Code | `~/.claude.json` (JSON, `mcpServers`) | `~/.claude/CLAUDE.md` (append) |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` (JSON, `mcpServers`, `serverUrl`) | `~/.codeium/windsurf/memories/global_rules.md` (append) |
-| Cline | `globalStorage/.../cline_mcp_settings.json` (JSON, `mcpServers`) | `~/Documents/Cline/Rules/` (standalone file) |
-| Roo Code | `globalStorage/.../cline_mcp_settings.json` (JSON, `mcpServers`) | `~/.roo/rules/` (standalone file) |
-| Codex | `~/.codex/config.toml` (TOML, `mcp_servers`) | `~/.codex/AGENTS.md` (append) |
-| Gemini CLI | `~/.gemini/settings.json` (JSON, `mcpServers`, `httpUrl`) | `~/.gemini/GEMINI.md` (append) |
-
-### MCP Only — No Writable Rules Path
-
-These platforms get MCP server config but don't have a writable global rules file (`rulesPath: null`). The MCP tools work fine — but equip can't auto-install behavioral rules.
-
-| Platform | MCP Config |
-|---|---|
-| Cursor | `~/.cursor/mcp.json` (JSON, `mcpServers`, `type: "streamable-http"`) |
-| VS Code | `Code/User/mcp.json` (JSON, `servers`, `type: "http"`) |
-| Junie (JetBrains) | `~/.junie/mcp/mcp.json` (JSON, `mcpServers`) |
-| Copilot (JetBrains) | `~/.config/github-copilot/intellij/mcp.json` (JSON, `mcpServers`) |
-| Copilot CLI | `~/.copilot/mcp-config.json` (JSON, `mcpServers`) |
-
-For these platforms, `installRules()` returns `{ action: "clipboard" }` if the platform is in the configurable `clipboardPlatforms` list (default: `["cursor", "vscode"]`) and automatically copies the rules content to the system clipboard. For platforms with no rules path and not in `clipboardPlatforms`, it returns `{ action: "skipped" }`.
-
-### Hooks — Structural Enforcement
-
-Some platforms support **lifecycle hooks** — scripts that run automatically at key moments (e.g., after a tool fails, when the agent finishes responding). Hooks provide structural enforcement that behavioral rules alone cannot:
-
-| Platform | Hooks Support | Events |
-|---|---|---|
-| Claude Code | ✅ | `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `Notification`, `SubagentStart`, `SubagentStop`, `PreCompact`, `TaskCompleted` |
-| All others | ❌ | — |
-
-When hooks are supported, equip writes the consumer-provided scripts to a configurable directory (default: `~/.${name}/hooks/`) and registers them in the platform's settings. Hooks are a **silent enhancement** — if the platform doesn't support them, equip installs only MCP + rules without any error or warning.
-
-Hook scripts and event bindings are defined by the consumer (your package), not by equip. Equip provides only the installation infrastructure — capabilities detection, file writing, settings registration, and cleanup. As more platforms add hook support, equip can enable them without consumer code changes.
 
 ## Quick Start
 
 ```bash
-npx @cg3/equip prior
+equip prior                    # Install a tool
+equip status                   # See what's installed across all platforms
+equip doctor                   # Validate config integrity
+equip update                   # Update equip + migrate configs
+unequip prior                  # Remove a tool
 ```
 
-That's it. Detects your platforms, authenticates, installs MCP + rules, and verifies — all in one command. Pass `--dry-run` to preview without writing files.
-
-## CLI Usage
-
-You can invoke any npm package that has an equip-based setup command:
-
-```bash
-# Full package name + command
-npx @cg3/equip @cg3/prior-node setup
-
-# Shorthand (if registered)
-npx @cg3/equip prior
-```
-
-The CLI runs `npx -y <package>@latest <command>` with any extra args forwarded (e.g. `--dry-run`, `--platform codex`).
-
-### Shorthand Registry
-
-Registered shorthands save typing. Open a PR to [`registry.json`](./registry.json) to add yours:
-
-| Shorthand | Expands to |
-|---|---|
-| `prior` | `@cg3/prior-node setup` |
-
-## Programmatic Usage
+## For Tool Authors
 
 ```js
 const { Equip } = require("@cg3/equip");
@@ -105,103 +38,106 @@ const equip = new Equip({
     content: `<!-- my-tool:v1.0.0 -->\n## My Tool\nAlways check My Tool first.\n<!-- /my-tool -->`,
     version: "1.0.0",
     marker: "my-tool",
-    fileName: "my-tool.md",  // For platforms with rules directories
+  },
+  skill: {
+    name: "lookup",
+    files: [{ path: "SKILL.md", content: "---\nname: lookup\ndescription: Look up docs\n---\n\n# Lookup\n" }],
   },
 });
 
-// Detect installed platforms
 const platforms = equip.detect();
-
-// Install MCP + rules on all detected platforms
 for (const p of platforms) {
   equip.installMcp(p, "api_key_here");
   equip.installRules(p);
-}
-
-// Uninstall
-for (const p of platforms) {
-  equip.uninstallMcp(p);
-  equip.uninstallRules(p);
+  equip.installSkill(p);
 }
 ```
 
-## API
+See the [Tool Author Guide](./docs/tool-author.md) for the complete walkthrough, or run `equip demo` for an interactive example.
 
-### `new Equip(config)`
+## The Four Layers
 
-- `config.name` — Server name in MCP configs (required)
-- `config.serverUrl` — Remote MCP server URL (required unless `stdio` provided)
-- `config.rules` — Behavioral rules config (optional)
-  - `content` — Markdown content with version markers
-  - `version` — Version string for idempotency tracking
-  - `marker` — Marker name used in `<!-- marker:vX.X -->` comments
-  - `fileName` — Standalone filename for directory-based platforms
-  - `clipboardPlatforms` — Platform IDs that use clipboard (default: `["cursor", "vscode"]`)
-- `config.stdio` — Stdio transport config (optional, alternative to HTTP)
-  - `command`, `args`, `envKey`
-- `config.hooks` — Lifecycle hook definitions (optional, array)
-  - `event` — Hook event name (e.g., `"PostToolUseFailure"`)
-  - `matcher` — Regex matcher for event filtering (optional, e.g., `"Bash"`)
-  - `script` — Hook script content (Node.js)
-  - `name` — Script filename (without `.js` extension)
-- `config.hookDir` — Directory for hook scripts (default: `~/.${name}/hooks/`)
+Equip distributes your tool through four complementary layers:
 
-### Instance Methods
+| Layer | What It Does | Reliability | Coverage |
+|---|---|---|---|
+| [MCP Config](./docs/mcp-servers.md) | Makes the tool *available* — agent can call it | Baseline | 11 platforms |
+| [Behavioral Rules](./docs/rules.md) | Teaches the agent *when* to call it | Strong | 8 platforms + clipboard |
+| [Agent Skills](./docs/skills.md) | Gives the agent *detailed knowledge* of how to use it | Strong (varies) | 8 platforms |
+| [Lifecycle Hooks](./docs/hooks.md) | *Structurally enforces* behavior at key moments | Strongest | 1 platform (Claude Code) |
 
-- `equip.detect()` — Returns array of detected platform objects
-- `equip.installMcp(platform, apiKey, options?)` — Install MCP config
-- `equip.uninstallMcp(platform, dryRun?)` — Remove MCP config
-- `equip.updateMcpKey(platform, apiKey, transport?)` — Update API key
-- `equip.installRules(platform, options?)` — Install behavioral rules
-- `equip.uninstallRules(platform, dryRun?)` — Remove behavioral rules
-- `equip.readMcp(platform)` — Check if MCP is configured
-- `equip.buildConfig(platformId, apiKey, transport?)` — Build MCP config object
-- `equip.installHooks(platform, options?)` — Install lifecycle hooks (if supported)
-- `equip.uninstallHooks(platform, options?)` — Remove hooks
-- `equip.hasHooks(platform, options?)` — Check if hooks are installed
-- `equip.supportsHooks(platform)` — Check if platform supports hooks
+Each layer compensates for the limitations of the one before it. Tool descriptions alone don't reliably trigger behavior. Rules are stronger but can be compacted. Skills add depth but may not auto-invoke on all platforms. Hooks fire automatically, independent of the agent's memory.
 
-### Utilities
+No layer is a silver bullet. Together, they give you the best coverage available.
 
-```js
-const { createManualPlatform, platformName, resolvePlatformId, parseRulesVersion, markerPatterns, cli, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform } = require("@cg3/equip");
+## Supported Platforms
+
+| Platform | MCP | Rules | Skills | Hooks |
+|---|---|---|---|---|
+| Claude Code | Yes | Yes | Yes | Yes |
+| Cursor | Yes | clipboard | Yes | -- |
+| VS Code / Copilot | Yes | clipboard | Yes | -- |
+| Windsurf | Yes | Yes | Yes | -- |
+| Cline | Yes | Yes | Yes | -- |
+| Roo Code | Yes | Yes | Yes | -- |
+| Codex | Yes | Yes | Yes | -- |
+| Gemini CLI | Yes | Yes | Yes | -- |
+| Junie | Yes | -- | -- | -- |
+| Copilot (JetBrains) | Yes | -- | -- | -- |
+| Copilot CLI | Yes | -- | -- | -- |
+
+See [Platforms](./docs/platforms.md) for full details — config paths, detection, and per-platform quirks.
+
+## CLI Commands
+
+| Command | Description |
+|---|---|
+| `equip <tool>` | Install an MCP tool |
+| `equip status` | Cross-platform MCP server inventory |
+| `equip doctor` | Validate config integrity, detect drift |
+| `equip update` | Update equip and migrate configs |
+| `equip list` | Show registered tools |
+| `equip uninstall <tool>` | Remove a tool (alias: `unequip`) |
+| `equip demo` | Run the interactive demo |
+
+See [CLI Reference](./docs/cli.md) for details.
+
+## Documentation
+
+| Guide | Audience |
+|---|---|
+| [Tool Author Guide](./docs/tool-author.md) | Building a setup script with equip |
+| [Platforms](./docs/platforms.md) | Supported platforms, capabilities, paths |
+| [MCP Servers](./docs/mcp-servers.md) | Config format translation, API reference |
+| [Behavioral Rules](./docs/rules.md) | Marker-based versioned instructions |
+| [Agent Skills](./docs/skills.md) | SKILL.md format, cross-platform distribution |
+| [Lifecycle Hooks](./docs/hooks.md) | Event-driven enforcement scripts |
+| [CLI Reference](./docs/cli.md) | Commands, state tracking, tool registry |
+
+## Key Design Decisions
+
+- **Zero runtime dependencies** — installs fast, no supply chain risk
+- **Platform registry as single source of truth** — one place for all platform knowledge
+- **Atomic file writes** — crash-safe config modifications
+- **State reconciliation from disk** — CLI scans what's actually installed, no stale cache
+- **Corrupt config detection** — throws instead of silently overwriting
+
+## Tool Registry
+
+Register a shorthand for your tool so users can run `equip <name>`. Open a PR to [`registry.json`](./registry.json):
+
+```json
+{
+  "my-tool": {
+    "package": "@myorg/my-tool",
+    "command": "setup",
+    "description": "What my tool does",
+    "marker": "my-tool",
+    "hookDir": "~/.my-tool/hooks",
+    "skillName": "my-skill"
+  }
+}
 ```
-
-- `createManualPlatform(id)` — Create a platform object for a specific platform ID (bypasses detection)
-- `platformName(id)` — Human-readable display name for a platform ID
-- `resolvePlatformId(input)` — Resolve a friendly name or alias to a canonical platform ID (e.g., `"claude"` → `"claude-code"`, `"roo"` → `"roo-code"`)
-- `parseRulesVersion(content, marker)` — Extract version from a marker block in content
-- `markerPatterns(marker)` — Get regex patterns for a marker name
-- `KNOWN_PLATFORMS` — Array of all supported platform IDs
-- `PLATFORM_REGISTRY` — Map of platform definitions (for advanced use)
-- `getPlatform(id)` — Get a platform definition by ID (throws if unknown)
-- `cli` — Output helpers: `log`, `ok`, `fail`, `warn`, `info`, `step`, `prompt`, `copyToClipboard`, color constants
-
-## Key Features
-
-- **Zero dependencies** — Pure Node.js, works with Node 18+
-- **11 platforms** — Covers ~80% of active AI coding tool users
-- **Platform-aware** — Handles each platform's config quirks (JSON vs TOML, root keys, URL fields, type requirements)
-- **Non-destructive** — Merges into existing configs, creates backups, preserves other servers
-- **Versioned rules** — Marker-based blocks enable idempotent updates without clobbering user content
-- **Dry-run support** — Preview changes without writing files
-- **CLI helpers** — Colored output, prompts, clipboard utilities included
-
-## How the Layers Work Together
-
-Equip distributes your MCP tool through three complementary layers, each stronger than the last:
-
-1. **MCP config** — Makes the tool available. The agent *can* call it.
-2. **Behavioral rules** — Teaches the agent *when* to call it. Rules live in the agent's system prompt or project context, close to where decisions happen.
-3. **Lifecycle hooks** — Structurally enforces behavior at key moments (e.g., after an error, on task completion). Hooks inject context into the agent's reasoning at exactly the right time, without relying on the agent remembering its rules.
-
-Each layer compensates for the limitations of the one before it:
-
-- **Tool descriptions alone** don't reliably trigger behavior. [Research on 856 MCP tools](https://arxiv.org/abs/2602.14878) found that even fully optimized descriptions only improve task success by ~6 percentage points.
-- **Behavioral rules** are stronger, but can be dropped during context window compaction in long sessions, and the agent can still rationalize skipping them.
-- **Lifecycle hooks** are the strongest available enforcement — they fire automatically at the platform level, independent of the agent's memory or reasoning. Not all platforms support hooks yet, but equip installs them where available and silently skips where not.
-
-No layer is a silver bullet. Together, they give you the best coverage available today across the broadest set of platforms.
 
 ## License
 
