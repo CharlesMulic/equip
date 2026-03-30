@@ -59,7 +59,8 @@ function cmdHelp() {
   console.log("Usage: equip <command> [options]");
   console.log("");
   console.log("Commands:");
-  console.log("  <tool>           Install an MCP tool (e.g. equip prior)");
+  console.log("  <tool>           Install a registered tool (e.g. equip prior)");
+  console.log("  <package>        Install any npm package (e.g. equip my-docs)");
   console.log("  ./script.js      Run a local setup script (for development)");
   console.log("  .                Run current directory's package bin entry");
   console.log("  uninstall <tool> Remove an installed tool (alias: unequip)");
@@ -156,15 +157,14 @@ function dispatchTool(alias, extraArgs) {
   const entry = TOOLS[alias];
 
   if (!entry) {
-    // No registry match — treat as a package name (e.g. "equip @scope/pkg setup")
+    // No registry match — treat as a package name
+    // equip my-docs setup   → npx -y my-docs@latest setup
+    // equip my-docs          → npx -y my-docs@latest setup (default command)
     const pkg = alias;
-    const command = extraArgs.shift();
-    if (!command) {
-      console.error(`Unknown command: ${alias}`);
-      console.error(`Run "equip --help" for usage.`);
-      process.exit(1);
-    }
-    spawnTool(pkg, command, extraArgs, null);
+    const command = extraArgs.length > 0 ? extraArgs.shift() : "setup";
+    // Infer tool name from package (strip scope: @myorg/my-docs → my-docs)
+    const inferredName = pkg.includes("/") ? pkg.split("/").pop() : pkg;
+    spawnTool(pkg, command, extraArgs, inferredName);
     return;
   }
 

@@ -617,13 +617,15 @@ describe("equip CLI", () => {
     assert.ok(out.includes("equip v"));
   });
 
-  it("errors on unknown tool without command", () => {
+  it("unregistered package defaults command to setup", () => {
     const { execSync } = require("child_process");
+    // equip nonexistent-pkg-xyz → tries npx -y nonexistent-pkg-xyz@latest setup
+    // This fails with a 404 since the package doesn't exist, which is expected.
     try {
-      execSync("node bin/equip.js nonexistent", { encoding: "utf-8", cwd: path.join(__dirname, ".."), stdio: "pipe" });
-      assert.fail("should have thrown");
+      execSync("node bin/equip.js nonexistent-pkg-xyz-12345", { encoding: "utf-8", cwd: path.join(__dirname, ".."), stdio: "pipe", timeout: 15000 });
     } catch (e) {
-      assert.ok(e.stderr.includes("Unknown command:"));
+      // Should fail with npm 404, NOT with "Unknown command"
+      assert.ok(!e.stderr.includes("Unknown command"), "should attempt npx dispatch, not error on missing command");
     }
   });
 
