@@ -80,6 +80,23 @@ export function reconcileState(options: ReconcileOptions): number {
       } catch { /* hook dir may not exist */ }
     }
 
+    // Check for skills (only on platforms that support skills)
+    if (def.skillsPath) {
+      const skillsBasePath = def.skillsPath();
+      const toolSkillDir = path.join(skillsBasePath, toolName);
+      try {
+        const skillDirs = fs.readdirSync(toolSkillDir);
+        const skillWithMd = skillDirs.find(s => {
+          try { return fs.statSync(path.join(toolSkillDir, s, "SKILL.md")).isFile(); }
+          catch { return false; }
+        });
+        if (skillWithMd) {
+          record.skillsPath = toolSkillDir;
+          record.skillName = skillWithMd;
+        }
+      } catch { /* skill dir may not exist */ }
+    }
+
     trackInstall(toolName, pkg, id, record);
     count++;
   }

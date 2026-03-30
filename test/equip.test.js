@@ -27,6 +27,7 @@ const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntr
 const { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup, resolvePackageVersion } = require("../dist/lib/fs");
 const { reconcileState } = require("../dist/lib/reconcile");
 const { getHookCapabilities, buildHooksConfig, installHooks, uninstallHooks, hasHooks } = require("../dist/lib/hooks");
+const { installSkill, uninstallSkill, hasSkill } = require("../dist/lib/skills");
 const { buildStdioConfig } = require("../dist/lib/mcp");
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -1293,5 +1294,202 @@ describe("edge cases", () => {
       const hasUrl = config.url || config.serverUrl || config.httpUrl;
       assert.ok(hasUrl, `${id} should have a URL field in HTTP config`);
     }
+  });
+
+  it("createManualPlatform includes skillsPath for supported platforms", () => {
+    const cc = createManualPlatform("claude-code");
+    assert.ok(cc.skillsPath, "claude-code should have skillsPath");
+    assert.ok(cc.skillsPath.includes(".claude"), "claude-code skillsPath should be under .claude");
+
+    const cursor = createManualPlatform("cursor");
+    assert.ok(cursor.skillsPath, "cursor should have skillsPath");
+
+    const junie = createManualPlatform("junie");
+    assert.equal(junie.skillsPath, null, "junie should have null skillsPath");
+  });
+});
+
+// ─── Skills Module ──────────────────────────────────────────
+
+describe("skills.ts", () => {
+  const DEMO_SKILL = {
+    name: "test-skill",
+    files: [
+      { path: "SKILL.md", content: "---\nname: test-skill\ndescription: A test skill\n---\n\n# Test Skill\nDo the thing.\n" },
+    ],
+  };
+
+  it("installSkill creates skill directory and SKILL.md", () => {
+    const skillsDir = tmpPath("skills-test");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    const result = installSkill(p, "myserver", DEMO_SKILL);
+    assert.equal(result.action, "created");
+    const skillMd = path.join(skillsDir, "myserver", "test-skill", "SKILL.md");
+    assert.ok(fs.existsSync(skillMd));
+    assert.ok(fs.readFileSync(skillMd, "utf-8").includes("test-skill"));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("installSkill is idempotent (skips when content matches)", () => {
+    const skillsDir = tmpPath("skills-idem");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    installSkill(p, "myserver", DEMO_SKILL);
+    const result = installSkill(p, "myserver", DEMO_SKILL);
+    assert.equal(result.action, "skipped");
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("installSkill updates when content changes", () => {
+    const skillsDir = tmpPath("skills-update");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    installSkill(p, "myserver", DEMO_SKILL);
+    const updatedSkill = {
+      name: "test-skill",
+      files: [{ path: "SKILL.md", content: "---\nname: test-skill\ndescription: Updated\n---\n\n# Updated\n" }],
+    };
+    const result = installSkill(p, "myserver", updatedSkill);
+    assert.equal(result.action, "created");
+    const content = fs.readFileSync(path.join(skillsDir, "myserver", "test-skill", "SKILL.md"), "utf-8");
+    assert.ok(content.includes("Updated"));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("installSkill handles multi-file skills", () => {
+    const skillsDir = tmpPath("skills-multi");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    const multiSkill = {
+      name: "multi",
+      files: [
+        { path: "SKILL.md", content: "# Multi\n" },
+        { path: "scripts/helper.sh", content: "#!/bin/bash\necho hi\n" },
+        { path: "references/API.md", content: "# API\n" },
+      ],
+    };
+    installSkill(p, "myserver", multiSkill);
+    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "scripts", "helper.sh")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "references", "API.md")));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("installSkill returns skipped when skillsPath is null", () => {
+    const p = mockPlatform({ skillsPath: null });
+    const result = installSkill(p, "myserver", DEMO_SKILL);
+    assert.equal(result.action, "skipped");
+  });
+
+  it("uninstallSkill removes skill directory", () => {
+    const skillsDir = tmpPath("skills-uninst");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    installSkill(p, "myserver", DEMO_SKILL);
+    assert.ok(hasSkill(p, "myserver", "test-skill"));
+    const removed = uninstallSkill(p, "myserver", "test-skill");
+    assert.ok(removed);
+    assert.ok(!hasSkill(p, "myserver", "test-skill"));
+    // Parent tool dir should be cleaned up too
+    assert.ok(!fs.existsSync(path.join(skillsDir, "myserver")));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("uninstallSkill returns false when skill doesn't exist", () => {
+    const p = mockPlatform({ skillsPath: "/tmp/nonexistent-" + Date.now() });
+    assert.equal(uninstallSkill(p, "myserver", "nope"), false);
+  });
+
+  it("uninstallSkill returns false when skillsPath is null", () => {
+    const p = mockPlatform({ skillsPath: null });
+    assert.equal(uninstallSkill(p, "myserver", "nope"), false);
+  });
+
+  it("hasSkill returns true when SKILL.md exists", () => {
+    const skillsDir = tmpPath("skills-has");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    installSkill(p, "myserver", DEMO_SKILL);
+    assert.ok(hasSkill(p, "myserver", "test-skill"));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("hasSkill returns false when SKILL.md missing", () => {
+    const p = mockPlatform({ skillsPath: "/tmp/nonexistent-" + Date.now() });
+    assert.ok(!hasSkill(p, "myserver", "test-skill"));
+  });
+});
+
+// ─── Equip Class Skills Integration ─────────────────────────
+
+describe("Equip class (skills)", () => {
+  const SKILL_CONFIG = {
+    name: "lookup",
+    files: [{ path: "SKILL.md", content: "---\nname: lookup\ndescription: Look up docs\n---\n\n# Lookup\n" }],
+  };
+
+  it("installSkill and uninstallSkill roundtrip", () => {
+    const skillsDir = tmpPath("equip-skill");
+    const e = new Equip({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skill: SKILL_CONFIG,
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+
+    const r1 = e.installSkill(p);
+    assert.equal(r1.action, "created");
+    assert.ok(e.hasSkill(p));
+
+    e.uninstallSkill(p);
+    assert.ok(!e.hasSkill(p));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("installSkill skips without skill config", () => {
+    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const p = mockPlatform({ skillsPath: tmpPath("no-skill") });
+    assert.equal(e.installSkill(p).action, "skipped");
+  });
+
+  it("verify includes skills check", () => {
+    const skillsDir = tmpPath("equip-verify-skill");
+    const e = new Equip({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skill: SKILL_CONFIG,
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+    cleanup(p.configPath);
+
+    // Install MCP + skill
+    e.installMcp(p, "key");
+    e.installSkill(p);
+
+    const result = e.verify(p);
+    assert.ok(result.ok);
+    const skillCheck = result.checks.find(c => c.name === "skills");
+    assert.ok(skillCheck);
+    assert.ok(skillCheck.ok);
+    assert.ok(skillCheck.detail.includes("lookup"));
+
+    cleanup(p.configPath);
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("verify detects missing skill", () => {
+    const e = new Equip({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skill: SKILL_CONFIG,
+    });
+    const p = mockPlatform({ skillsPath: tmpPath("empty-skills") });
+    cleanup(p.configPath);
+    e.installMcp(p, "key");
+    // Don't install skill
+
+    const result = e.verify(p);
+    assert.ok(!result.ok);
+    const skillCheck = result.checks.find(c => c.name === "skills");
+    assert.ok(skillCheck);
+    assert.ok(!skillCheck.ok);
+    assert.ok(skillCheck.detail.includes("not found"));
+
+    cleanup(p.configPath);
   });
 });

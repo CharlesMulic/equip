@@ -28,6 +28,10 @@ export interface ToolPlatformRecord {
   hookDir?: string;
   /** List of installed hook script filenames */
   hookScripts?: string[];
+  /** Directory where skills were installed */
+  skillsPath?: string;
+  /** Skill directory name (e.g., "search") */
+  skillName?: string;
   /** Equip version that wrote this record */
   equipVersion?: string;
 }

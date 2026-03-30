@@ -51,11 +51,13 @@ export function detectPlatforms(serverName?: string): DetectedPlatform[] {
 
     const configPath = def.configPath();
     const rulesPath = def.rulesPath ? def.rulesPath() : null;
+    const skillsPath = def.skillsPath ? def.skillsPath() : null;
 
     platforms.push({
       platform: def.id,
       configPath,
       rulesPath,
+      skillsPath,
       existingMcp: serverName ? readMcpEntry(configPath, def.rootKey, serverName, def.configFormat) : null,
       rootKey: def.rootKey,
       configFormat: def.configFormat,

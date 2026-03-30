@@ -114,11 +114,24 @@ export function runDoctor(): void {
         }
       }
 
+      // Check skills if tracked
+      let skillsOk = true;
+      if (record.skillsPath && record.skillName) {
+        checks++;
+        const skillMd = require("path").join(record.skillsPath, record.skillName, "SKILL.md");
+        if (!fileExists(skillMd)) {
+          cli.warn(`  ${def.name}: skill "${record.skillName}" missing (${sanitizePath(skillMd)})`);
+          issues++;
+          skillsOk = false;
+        }
+      }
+
       // Summary line for this platform
       const parts: string[] = ["config"];
       if (record.rulesVersion && rulesOk) parts.push(`rules v${record.rulesVersion}`);
       if (record.hookScripts && record.hookScripts.length > 0 && hooksOk) parts.push(`${record.hookScripts.length} hook${record.hookScripts.length === 1 ? "" : "s"}`);
-      if (rulesOk && hooksOk) {
+      if (record.skillName && skillsOk) parts.push(`skill "${record.skillName}"`);
+      if (rulesOk && hooksOk && skillsOk) {
         cli.ok(`  ${def.name}: ${parts.join(" + ")}`);
       }
     }

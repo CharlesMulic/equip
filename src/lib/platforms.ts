@@ -43,6 +43,7 @@ export interface PlatformDefinition {
   httpShape: PlatformHttpShape;
   detection: PlatformDetection;
   hooks: PlatformHookCapabilities | null;
+  skillsPath: (() => string) | null;
 }
 
 /** The shape returned by detect() and createManualPlatform() */
@@ -50,6 +51,7 @@ export interface DetectedPlatform {
   platform: string;
   configPath: string;
   rulesPath: string | null;
+  skillsPath: string | null;
   existingMcp: Record<string, unknown> | null;
   rootKey: string;
   configFormat: "json" | "toml";
@@ -112,6 +114,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       events: CLAUDE_CODE_HOOKS_EVENTS,
       format: "claude-code",
     },
+    skillsPath: () => path.join(home(), ".claude", "skills"),
   }],
   ["cursor", {
     id: "cursor",
@@ -128,6 +131,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
+    skillsPath: () => path.join(home(), ".cursor", "skills"),
   }],
   ["windsurf", {
     id: "windsurf",
@@ -144,6 +148,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
+    skillsPath: () => path.join(home(), ".agents", "skills"),
   }],
   ["vscode", {
     id: "vscode",
@@ -160,6 +165,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [() => path.join(vsCodeUserDir(), "mcp.json")],
     },
     hooks: null,
+    skillsPath: () => path.join(home(), ".agents", "skills"),
   }],
   ["cline", {
     id: "cline",
@@ -176,6 +182,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [() => path.join(vsCodeUserDir(), "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")],
     },
     hooks: null,
+    skillsPath: () => path.join(home(), ".cline", "skills"),
   }],
   ["roo-code", {
     id: "roo-code",
@@ -192,6 +199,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [() => path.join(vsCodeUserDir(), "globalStorage", "rooveterinaryinc.roo-cline", "settings", "cline_mcp_settings.json")],
     },
     hooks: null,
+    skillsPath: () => path.join(home(), ".roo", "skills"),
   }],
   ["codex", {
     id: "codex",
@@ -208,6 +216,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
+    skillsPath: () => path.join(home(), ".agents", "skills"),
   }],
   ["gemini-cli", {
     id: "gemini-cli",
@@ -224,6 +233,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
+    skillsPath: () => path.join(home(), ".gemini", "skills"),
   }],
   ["junie", {
     id: "junie",
@@ -240,6 +250,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
+    skillsPath: null,
   }],
   ["copilot-jetbrains", {
     id: "copilot-jetbrains",
@@ -256,6 +267,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
+    skillsPath: null,
   }],
   ["copilot-cli", {
     id: "copilot-cli",
@@ -272,6 +284,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       files: [],
     },
     hooks: null,
+    skillsPath: null,
   }],
 ]);
 
@@ -304,6 +317,7 @@ export function createManualPlatform(platformId: string): DetectedPlatform {
     platform: def.id,
     configPath: def.configPath(),
     rulesPath: def.rulesPath ? def.rulesPath() : null,
+    skillsPath: def.skillsPath ? def.skillsPath() : null,
     existingMcp: null,
     rootKey: def.rootKey,
     configFormat: def.configFormat,

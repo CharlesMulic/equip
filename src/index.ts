@@ -11,6 +11,7 @@ import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
 import * as cli from "./lib/cli";
+import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile } from "./lib/skills";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ export interface EquipConfig {
   };
   hooks?: HookDefinition[];
   hookDir?: string;
+  skill?: SkillConfig;
 }
 
 /**
@@ -43,6 +45,7 @@ class Equip {
   stdio: EquipConfig["stdio"] | null;
   hookDefs: HookDefinition[] | null;
   hookDir: string;
+  skill: SkillConfig | null;
 
   constructor(config: EquipConfig) {
     if (!config.name) throw new Error("Equip: name is required");
@@ -54,6 +57,7 @@ class Equip {
     this.stdio = config.stdio || null;
     this.hookDefs = config.hooks || null;
     this.hookDir = config.hookDir || path.join(os.homedir(), `.${config.name}`, "hooks");
+    this.skill = config.skill || null;
   }
 
   detect(): DetectedPlatform[] {
@@ -126,6 +130,21 @@ class Equip {
     return !!this.hookDefs && this.hookDefs.length > 0 && !!getHookCapabilities(platform.platform);
   }
 
+  installSkill(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): { action: string } {
+    if (!this.skill) return { action: "skipped" };
+    return installSkill(platform, this.name, this.skill, options);
+  }
+
+  uninstallSkill(platform: DetectedPlatform, dryRun: boolean = false): boolean {
+    if (!this.skill) return false;
+    return uninstallSkill(platform, this.name, this.skill.name, dryRun);
+  }
+
+  hasSkill(platform: DetectedPlatform): boolean {
+    if (!this.skill) return false;
+    return hasSkill(platform, this.name, this.skill.name);
+  }
+
   /**
    * Verify that a tool is correctly installed on a platform.
    * Returns a structured result with per-check status.
@@ -170,6 +189,16 @@ class Equip {
       });
     }
 
+    // Check skills (if configured and platform supports them)
+    if (this.skill && platform.skillsPath) {
+      const skillInstalled = this.hasSkill(platform);
+      checks.push({
+        name: "skills",
+        ok: skillInstalled,
+        detail: skillInstalled ? `Skill "${this.skill.name}" installed` : `Skill "${this.skill.name}" not found`,
+      });
+    }
+
     return {
       platform: platform.platform,
       ok: checks.every(c => c.ok),
@@ -211,4 +240,4 @@ export {
 };
 
 // Types
-export type { DetectedPlatform, PlatformDefinition, PlatformHttpShape, PlatformHookCapabilities, HookDefinition };
+export type { DetectedPlatform, PlatformDefinition, PlatformHttpShape, PlatformHookCapabilities, HookDefinition, SkillConfig, SkillFile };

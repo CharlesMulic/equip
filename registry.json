@@ -6,6 +6,7 @@
     "command": "setup",
     "description": "Prior — agent-centric shared knowledge base",
     "marker": "prior",
-    "hookDir": "~/.prior/hooks"
+    "hookDir": "~/.prior/hooks",
+    "skillName": "search"
   }
 }

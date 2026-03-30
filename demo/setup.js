@@ -14,9 +14,10 @@
 //   1. Platform detection (which AI tools are installed?)
 //   2. MCP server configuration (HTTP or stdio transport)
 //   3. Behavioral rules installation (versioned, marker-based)
-//   4. Lifecycle hooks (optional, platform-dependent)
-//   5. Uninstallation (clean removal of everything it installed)
-//   6. CLI output helpers (colors, prompts, clipboard)
+//   4. Skills installation (SKILL.md files for agent discovery)
+//   5. Lifecycle hooks (optional, platform-dependent)
+//   6. Uninstallation (clean removal of everything it installed)
+//   7. CLI output helpers (colors, prompts, clipboard)
 //
 // Everything is inline-documented. Copy this file as a starting
 // point for your own tool's setup script.
@@ -120,6 +121,40 @@ const equip = new Equip({
   //     `,
   //   },
   // ],
+
+  // Skills are optional. A skill is a SKILL.md file (Agent Skills
+  // spec) that agents auto-discover. Unlike MCP config and rules,
+  // the skill format is universal — same file works on all platforms.
+  skill: {
+    name: "lookup",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: lookup
+description: Look up Acme API docs for the current project's dependency version.
+metadata:
+  author: acme-docs-demo
+  version: "${RULES_VERSION}"
+---
+
+# Acme Docs Lookup
+
+Use this skill when working with Acme APIs or libraries.
+
+## When to Use
+- Before writing code that calls an Acme API
+- When you see a deprecation warning from Acme
+- When the user asks about Acme API signatures
+
+## How to Use
+1. Call the acme-docs MCP tool with the function name
+2. The tool returns versioned docs matching the project's dependency
+3. Use the returned signatures, not training data
+`,
+      },
+    ],
+  },
 });
 
 // ─── 5. Detect platforms (shared by install and uninstall) ───
@@ -155,7 +190,7 @@ function detectTargetPlatforms() {
 async function runUninstall() {
   cli.log(`\n${cli.BOLD}@cg3/equip demo — uninstall${cli.RESET}\n`);
 
-  cli.step(1, 3, "Detecting platforms");
+  cli.step(1, 4, "Detecting platforms");
   const platforms = detectTargetPlatforms();
 
   for (const p of platforms) {
@@ -163,7 +198,7 @@ async function runUninstall() {
   }
 
   // ── Remove MCP config ────────────────────────────────────
-  cli.step(2, 3, "Removing MCP config");
+  cli.step(2, 4, "Removing MCP config");
 
   for (const p of platforms) {
     const removed = equip.uninstallMcp(p);
@@ -175,7 +210,7 @@ async function runUninstall() {
   }
 
   // ── Remove behavioral rules ──────────────────────────────
-  cli.step(3, 3, "Removing behavioral rules");
+  cli.step(3, 4, "Removing behavioral rules");
 
   for (const p of platforms) {
     const removed = equip.uninstallRules(p);
@@ -183,6 +218,18 @@ async function runUninstall() {
       cli.ok(`${platformName(p.platform)} → rules removed`);
     } else {
       cli.info(`${platformName(p.platform)} → no rules found`);
+    }
+  }
+
+  // ── Remove skills ──────────────────────────────────────
+  cli.step(4, 4, "Removing skills");
+
+  for (const p of platforms) {
+    const removed = equip.uninstallSkill(p);
+    if (removed) {
+      cli.ok(`${platformName(p.platform)} → skill removed`);
+    } else {
+      cli.info(`${platformName(p.platform)} → no skill found`);
     }
   }
 
@@ -215,7 +262,7 @@ async function runInstall() {
   //
   // You can also force a specific platform with createManualPlatform().
 
-  cli.step(1, 4, "Detecting platforms");
+  cli.step(1, 5, "Detecting platforms");
 
   const platforms = detectTargetPlatforms();
 
@@ -229,7 +276,7 @@ async function runInstall() {
   // In a real setup script, you'd prompt for or generate an
   // API key here. For the demo, we use a placeholder.
 
-  cli.step(2, 4, "API key");
+  cli.step(2, 5, "API key");
 
   // Real example:
   // const apiKey = await cli.prompt("  Enter your API key: ");
@@ -243,11 +290,11 @@ async function runInstall() {
   // installMcp() handles all platform differences:
   //   - JSON vs TOML config formats
   //   - Different root keys (mcpServers vs servers vs mcp_servers)
-  //   - CLI-first installation (claude mcp add, cursor --add-mcp)
-  //   - Fallback to direct file write with backup
+  //   - Different URL fields (url vs serverUrl vs httpUrl)
+  //   - Atomic file writes with crash safety
   //   - Windows path handling (cmd /c wrapper for stdio)
 
-  cli.step(3, 4, "Installing MCP config");
+  cli.step(3, 5, "Installing MCP config");
 
   for (const p of platforms) {
     const result = equip.installMcp(p, apiKey, { dryRun });
@@ -272,7 +319,7 @@ async function runInstall() {
   // Platforms without a rules file (Cursor, VS Code) get the
   // content copied to clipboard instead.
 
-  cli.step(4, 4, "Installing behavioral rules");
+  cli.step(4, 5, "Installing behavioral rules");
 
   for (const p of platforms) {
     const result = equip.installRules(p, { dryRun });
@@ -296,6 +343,32 @@ async function runInstall() {
         break;
       case "clipboard":
         cli.info(`${platformName(p.platform)} → copied to clipboard (paste into settings)`);
+        break;
+    }
+  }
+
+  // ── Step 5: Install skills ──────────────────────────────
+  //
+  // Skills are SKILL.md files (Agent Skills spec) that agents
+  // auto-discover from standard directories. Unlike MCP config,
+  // the skill format is universal — same file works on all
+  // platforms. Equip installs to each platform's native skill
+  // directory, or ~/.agents/skills/ for platforms without one.
+
+  cli.step(5, 5, "Installing skills");
+
+  for (const p of platforms) {
+    const result = equip.installSkill(p, { dryRun });
+    switch (result.action) {
+      case "created":
+        cli.ok(`${platformName(p.platform)} → skill installed`);
+        break;
+      case "skipped":
+        if (p.skillsPath) {
+          cli.info(`${platformName(p.platform)} → skill already current`);
+        } else {
+          cli.info(`${platformName(p.platform)} → no skills support`);
+        }
         break;
     }
   }
