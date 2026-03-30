@@ -6,19 +6,22 @@ We'll start with the simplest thing (a behavioral rule), add a skill, then add M
 
 ## Prerequisites
 
-Install equip as a dependency in your project (or globally if you're just experimenting):
+Install equip globally and as a local dependency:
 
 ```bash
-npm install @cg3/equip
+npm install -g @cg3/equip        # CLI: equip, unequip
+npm install @cg3/equip           # Library: require("@cg3/equip")
 ```
 
-All examples below are plain Node.js scripts. You run them directly:
+All examples below are plain Node.js scripts. Run them through equip for the full experience (state tracking, reconciliation):
 
 ```bash
-node piratehat.js
+equip ./piratehat.js
 ```
 
-Later, when you're ready to distribute, you'll publish to npm and register a shorthand so users can run `equip <yourname>` instead. But start local — no npm publish needed to try things out.
+Equip detects that `./piratehat.js` is a local path and runs it directly — no npm publish needed. You get the same state reconciliation and tracking as a published tool, which makes development and testing seamless.
+
+When you're ready to distribute, you'll publish to npm and register a shorthand so users can run `equip piratehat` instead.
 
 ## The Pirate Hat Example
 
@@ -59,10 +62,10 @@ for (const p of platforms) {
 Run it:
 
 ```bash
-node piratehat.js
+equip ./piratehat.js
 ```
 
-That's it. Every agent on every detected platform starts talking like a pirate. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
+That's it. Every agent on every detected platform starts talking like a pirate. Equip runs your script, then reconciles state — `equip status` and `equip doctor` will show the installed rules. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
 
 **How rules work across platforms:**
 - Claude Code: appended to `~/.claude/CLAUDE.md`
@@ -273,7 +276,7 @@ for (const p of platforms) {
 
 ## From Local Script to `equip <name>`
 
-So far everything has been a local script you run with `node`. Here's how to go from that to `equip piratehat`:
+So far everything has been a local script you run with `equip ./piratehat.js`. Here's how to go from that to `equip piratehat`:
 
 ### Step 1: Make it an npm package
 
@@ -285,10 +288,14 @@ piratehat/
   package.json
 ```
 
-### Step 2: Publish to npm
+You can test the package structure locally before publishing:
 
-```json
-// package.json
+```bash
+cd piratehat
+equip .              # Reads package.json, finds bin entry, runs it
+```
+
+### Step 2: Publish to npm
 
 ```json
 {

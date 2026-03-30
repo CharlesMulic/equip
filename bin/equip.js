@@ -60,6 +60,8 @@ function cmdHelp() {
   console.log("");
   console.log("Commands:");
   console.log("  <tool>           Install an MCP tool (e.g. equip prior)");
+  console.log("  ./script.js      Run a local setup script (for development)");
+  console.log("  .                Run current directory's package bin entry");
   console.log("  uninstall <tool> Remove an installed tool (alias: unequip)");
   console.log("  status           Show all MCP servers across all platforms");
   console.log("  doctor           Validate config integrity and detect drift");
@@ -137,7 +139,20 @@ function cmdUpdate() {
 
 // ─── Tool Dispatch ──────────────────────────────────────────
 
+function isLocalPath(arg) {
+  return arg.startsWith("./") || arg.startsWith("../") || arg.startsWith("/")
+    || arg.startsWith(".\\") || arg.startsWith("..\\")
+    || arg === "."
+    || arg.endsWith(".js");
+}
+
 function dispatchTool(alias, extraArgs) {
+  // Local path: run directly with node
+  if (isLocalPath(alias)) {
+    runLocal(alias, extraArgs);
+    return;
+  }
+
   const entry = TOOLS[alias];
 
   if (!entry) {
@@ -155,6 +170,75 @@ function dispatchTool(alias, extraArgs) {
 
   // For registered tools, the alias IS the tool name (e.g. "prior")
   spawnTool(entry.package, entry.command, extraArgs, alias);
+}
+
+/**
+ * Run a local script or package directory.
+ * - equip ./piratehat.js       → node ./piratehat.js
+ * - equip .                    → reads package.json bin, runs it
+ * - equip ../my-tool/setup.js  → node ../my-tool/setup.js
+ */
+function runLocal(localPath, extraArgs) {
+  const _path = require("path");
+  const _fs = require("fs");
+  let scriptPath;
+  let toolName = null;
+
+  if (localPath === "." || (_fs.existsSync(localPath) && _fs.statSync(localPath).isDirectory())) {
+    // Directory — look for package.json with bin field
+    const pkgPath = _path.join(localPath, "package.json");
+    if (!_fs.existsSync(pkgPath)) {
+      console.error(`No package.json found in ${localPath}`);
+      process.exit(1);
+    }
+    const pkg = JSON.parse(_fs.readFileSync(pkgPath, "utf-8"));
+    toolName = pkg.name?.replace(/^@[^/]+\//, "") || null;
+    const binEntries = pkg.bin;
+    if (!binEntries || typeof binEntries !== "object") {
+      console.error(`No bin field in ${pkgPath}`);
+      process.exit(1);
+    }
+    // Use the first bin entry
+    const binScript = Object.values(binEntries)[0];
+    scriptPath = _path.resolve(localPath, binScript);
+  } else {
+    // Direct script path
+    scriptPath = _path.resolve(localPath);
+    // Infer tool name from filename (piratehat.js → piratehat)
+    toolName = _path.basename(scriptPath, ".js");
+  }
+
+  if (!_fs.existsSync(scriptPath)) {
+    console.error(`Script not found: ${scriptPath}`);
+    process.exit(1);
+  }
+
+  const child = spawn(process.execPath, [scriptPath, ...extraArgs], {
+    stdio: "inherit",
+    env: { ...process.env, EQUIP_VERSION },
+  });
+  child.on("close", (code) => {
+    if (toolName) {
+      try {
+        const { reconcileState } = require("../dist/lib/reconcile");
+        const changed = reconcileState({
+          toolName,
+          package: toolName,
+          marker: toolName,
+        });
+        if (changed > 0) {
+          process.stderr.write(`\n  equip: tracked ${toolName} on ${changed} platform${changed === 1 ? "" : "s"}\n`);
+        }
+      } catch (e) {
+        process.stderr.write(`\n[equip] state reconciliation failed: ${e.message}\n`);
+      }
+    }
+    process.exit(code || 0);
+  });
+  child.on("error", (err) => {
+    console.error(`Failed to run ${scriptPath}: ${err.message}`);
+    process.exit(1);
+  });
 }
 
 function spawnTool(pkg, command, extraArgs, toolName) {
