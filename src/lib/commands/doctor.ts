@@ -73,17 +73,24 @@ export function runDoctor(): void {
       }
 
       // Check auth headers
+      let authOk = true;
+      let authLabel = "";
       if (record.transport === "http") {
         checks++;
         const authResult = checkAuth(entry as Record<string, unknown>);
         if (authResult.status === "missing") {
           cli.warn(`  ${def.name}: no auth header found in config`);
           issues++;
+          authOk = false;
         } else if (authResult.status === "expired") {
           cli.fail(`  ${def.name}: auth token expired (${authResult.detail})`);
           issues++;
+          authOk = false;
+        } else if (authResult.status === "ok") {
+          authLabel = "auth (JWT valid)";
+        } else {
+          authLabel = "auth";
         }
-        // "ok" and "present" are fine — no warning needed
       }
 
       // Check rules if tracked
@@ -143,10 +150,11 @@ export function runDoctor(): void {
 
       // Summary line for this platform
       const parts: string[] = ["config"];
+      if (authLabel && authOk) parts.push(authLabel);
       if (record.rulesVersion && rulesOk) parts.push(`rules v${record.rulesVersion}`);
       if (record.hookScripts && record.hookScripts.length > 0 && hooksOk) parts.push(`${record.hookScripts.length} hook${record.hookScripts.length === 1 ? "" : "s"}`);
       if (record.skillName && skillsOk) parts.push(`skill "${record.skillName}"`);
-      if (rulesOk && hooksOk && skillsOk) {
+      if (rulesOk && hooksOk && skillsOk && authOk) {
         cli.ok(`  ${def.name}: ${parts.join(" + ")}`);
       }
     }
