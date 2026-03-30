@@ -46,15 +46,18 @@ export function reconcileState(options: ReconcileOptions): number {
     const configPath = def.configPath();
     if (!dirFound && !fileFound && !fileExists(configPath)) continue;
 
-    // Check if tool has an MCP entry on this platform
-    const entry = readMcpEntry(configPath, def.rootKey, toolName, def.configFormat);
-    if (!entry) continue;
+    // Build state record from what's on disk.
+    // Check ALL artifact types — a tool may have only rules, only skills,
+    // only MCP config, or any combination. Track the platform if ANY artifact exists.
+    const record: Partial<ToolPlatformRecord> = { configPath };
+    let hasAnyArtifact = false;
 
-    // Build state record from what's on disk
-    const record: Partial<ToolPlatformRecord> = {
-      configPath,
-      transport: (entry as Record<string, unknown>).command ? "stdio" : "http",
-    };
+    // Check MCP config
+    const entry = readMcpEntry(configPath, def.rootKey, toolName, def.configFormat);
+    if (entry) {
+      record.transport = (entry as Record<string, unknown>).command ? "stdio" : "http";
+      hasAnyArtifact = true;
+    }
 
     // Check for rules (only on platforms that have a writable rules path)
     if (def.rulesPath) {
@@ -65,6 +68,7 @@ export function reconcileState(options: ReconcileOptions): number {
         if (versionMatch) {
           record.rulesPath = rulesPath;
           record.rulesVersion = versionMatch[1];
+          hasAnyArtifact = true;
         }
       } catch { /* rules file may not exist */ }
     }
@@ -76,6 +80,7 @@ export function reconcileState(options: ReconcileOptions): number {
         if (hookFiles.length > 0) {
           record.hookDir = hookDir;
           record.hookScripts = hookFiles;
+          hasAnyArtifact = true;
         }
       } catch { /* hook dir may not exist */ }
     }
@@ -93,9 +98,12 @@ export function reconcileState(options: ReconcileOptions): number {
         if (skillWithMd) {
           record.skillsPath = toolSkillDir;
           record.skillName = skillWithMd;
+          hasAnyArtifact = true;
         }
       } catch { /* skill dir may not exist */ }
     }
+
+    if (!hasAnyArtifact) continue;
 
     trackInstall(toolName, pkg, id, record);
     count++;
