@@ -10,11 +10,7 @@ npm install -g @cg3/equip
 
 Requires Node.js 18 or later.
 
-You can also use equip without installing globally:
-
-```bash
-npx @cg3/equip <command>
-```
+You can also run without installing globally via `npx @cg3/equip <command>`.
 
 ## Commands
 
