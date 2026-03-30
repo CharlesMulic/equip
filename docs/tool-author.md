@@ -73,7 +73,13 @@ equip ./piratehat.js
 
 That's it. Every agent on every detected platform starts talking like a pirate. Equip runs your script, then reconciles state — `equip status` and `equip doctor` will show the installed rules.
 
-Fair warning: you'll want to run `unequip piratehat` before your next code review. Trust us on this one. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
+Fair warning — you'll want to undo this before your next code review:
+
+```bash
+unequip piratehat
+```
+
+This works because `equip ./piratehat.js` inferred the tool name "piratehat" from the filename and tracked it in state. `unequip` reads that state to know what to remove — it doesn't need the original script file. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
 
 **How rules work across platforms:**
 - Claude Code: appended to `~/.claude/CLAUDE.md`
