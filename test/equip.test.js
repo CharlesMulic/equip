@@ -29,6 +29,7 @@ const { reconcileState } = require("../dist/lib/reconcile");
 const { getHookCapabilities, buildHooksConfig, installHooks, uninstallHooks, hasHooks } = require("../dist/lib/hooks");
 const { installSkill, uninstallSkill, hasSkill } = require("../dist/lib/skills");
 const { buildStdioConfig } = require("../dist/lib/mcp");
+const { migrateConfigs } = require("../dist/lib/migrate");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -1708,5 +1709,207 @@ describe("Tabnine (headersWrapper)", () => {
     const codex = buildHttpConfigWithAuth("https://x.com/mcp", "key", "codex");
     assert.ok(codex.http_headers, "codex should have top-level http_headers");
     assert.equal(codex.requestInit, undefined, "codex should not have requestInit");
+  });
+});
+
+// ─── Config Migration ───────────────────────────────────────
+// Tests simulate real migration scenarios: configs written by older equip
+// versions with different platform definitions, then migrated by current version.
+
+describe("config migration", () => {
+  const { readState, writeState, trackInstall, trackUninstall } = require("../dist/lib/state");
+
+  // Helper: write a config file and track it in state, then run migration
+  function setupAndMigrate(platformId, toolName, configContent) {
+    const configPath = tmpPath("migrate") + ".json";
+    fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+    trackInstall(toolName, "@test/pkg", platformId, { configPath, transport: "http" });
+    const results = migrateConfigs();
+    const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    trackUninstall(toolName);
+    cleanup(configPath);
+    return { results, content };
+  }
+
+  it("adds missing type field (Roo Code scenario)", () => {
+    // Simulate: old equip wrote Roo Code config without type field
+    // Current equip requires type: "streamable-http" for Roo Code
+    const { results, content } = setupAndMigrate("roo-code", "test-migrate", {
+      mcpServers: {
+        "test-migrate": {
+          url: "https://api.example.com/mcp",
+          headers: { Authorization: "Bearer ask_old" }
+        }
+      }
+    });
+
+    const migration = results.find(r => r.toolName === "test-migrate" && r.platform === "roo-code");
+    assert.equal(migration.action, "migrated", "should have migrated");
+    assert.ok(migration.detail.includes("type field"), "should mention type field");
+
+    // Verify the config was rewritten correctly
+    const entry = content.mcpServers["test-migrate"];
+    assert.equal(entry.type, "streamable-http", "should have added type field");
+    assert.equal(entry.url, "https://api.example.com/mcp", "should preserve URL");
+    assert.equal(entry.headers.Authorization, "Bearer ask_old", "should preserve auth");
+  });
+
+  it("removes stale type field (Cursor scenario)", () => {
+    // Simulate: old equip wrote Cursor config with type: "streamable-http"
+    // Current equip has no type field for Cursor
+    const { results, content } = setupAndMigrate("cursor", "test-migrate", {
+      mcpServers: {
+        "test-migrate": {
+          url: "https://api.example.com/mcp",
+          type: "streamable-http",
+          headers: { Authorization: "Bearer ask_old" }
+        }
+      }
+    });
+
+    const migration = results.find(r => r.toolName === "test-migrate" && r.platform === "cursor");
+    assert.equal(migration.action, "migrated");
+    assert.ok(migration.detail.includes("type field should not be present"));
+
+    const entry = content.mcpServers["test-migrate"];
+    assert.equal(entry.type, undefined, "type field should be removed");
+    assert.equal(entry.url, "https://api.example.com/mcp", "should preserve URL");
+    assert.equal(entry.headers.Authorization, "Bearer ask_old", "should preserve auth");
+  });
+
+  it("adds type field when wrong value (hypothetical)", () => {
+    // Simulate: config has type: "http" but platform now requires "streamable-http"
+    const { results, content } = setupAndMigrate("roo-code", "test-migrate", {
+      mcpServers: {
+        "test-migrate": {
+          url: "https://api.example.com/mcp",
+          type: "http",
+          headers: { Authorization: "Bearer ask_old" }
+        }
+      }
+    });
+
+    const migration = results.find(r => r.platform === "roo-code");
+    assert.equal(migration.action, "migrated");
+
+    const entry = content.mcpServers["test-migrate"];
+    assert.equal(entry.type, "streamable-http", "type should be corrected");
+  });
+
+  it("skips config that already matches current definitions", () => {
+    // Config already has the correct shape — no migration needed
+    const { results } = setupAndMigrate("claude-code", "test-migrate", {
+      mcpServers: {
+        "test-migrate": {
+          url: "https://api.example.com/mcp",
+          type: "http",
+          headers: { Authorization: "Bearer ask_current" }
+        }
+      }
+    });
+
+    const migration = results.find(r => r.platform === "claude-code");
+    assert.equal(migration.action, "skipped");
+    assert.ok(migration.detail.includes("current"));
+  });
+
+  it("skips platforms with no MCP entry", () => {
+    // Tool is tracked on platform but has no MCP config (rules-only install)
+    const configPath = tmpPath("migrate-empty") + ".json";
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+    trackInstall("test-migrate", "@test/pkg", "claude-code", { configPath, transport: "http" });
+    const results = migrateConfigs();
+    trackUninstall("test-migrate");
+    cleanup(configPath);
+
+    const migration = results.find(r => r.toolName === "test-migrate" && r.platform === "claude-code");
+    assert.ok(migration, "should have result for test-migrate on claude-code");
+    assert.equal(migration.action, "skipped");
+    assert.ok(migration.detail.includes("no MCP entry"));
+  });
+
+  it("preserves other servers during migration", () => {
+    // Config has multiple servers — migration should only touch the target tool
+    const configPath = tmpPath("migrate-multi") + ".json";
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        "other-tool": { url: "https://other.com/mcp", type: "http", headers: { "X-Key": "keep" } },
+        "test-migrate": { url: "https://api.example.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer old" } }
+      }
+    }));
+    trackInstall("test-migrate", "@test/pkg", "cursor", { configPath, transport: "http" });
+    migrateConfigs();
+
+    const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    // Other tool should be completely untouched
+    assert.equal(content.mcpServers["other-tool"].type, "http", "other tool should not be modified");
+    assert.equal(content.mcpServers["other-tool"].headers["X-Key"], "keep");
+    // Migrated tool should have type removed (Cursor)
+    assert.equal(content.mcpServers["test-migrate"].type, undefined, "cursor should lose type");
+    assert.equal(content.mcpServers["test-migrate"].url, "https://api.example.com/mcp");
+
+    trackUninstall("test-migrate");
+    cleanup(configPath);
+  });
+
+  it("preserves extra fields like alwaysAllow and disabled", () => {
+    const { content } = setupAndMigrate("roo-code", "test-migrate", {
+      mcpServers: {
+        "test-migrate": {
+          url: "https://api.example.com/mcp",
+          headers: { Authorization: "Bearer ask_old" },
+          alwaysAllow: ["tool1", "tool2"],
+          disabled: false,
+          timeout: 30000
+        }
+      }
+    });
+
+    const entry = content.mcpServers["test-migrate"];
+    assert.equal(entry.type, "streamable-http", "should add type");
+    assert.deepEqual(entry.alwaysAllow, ["tool1", "tool2"], "should preserve alwaysAllow");
+    assert.equal(entry.disabled, false, "should preserve disabled");
+    assert.equal(entry.timeout, 30000, "should preserve timeout");
+  });
+
+  it("handles Copilot CLI type addition", () => {
+    // Copilot CLI now requires type: "http"
+    const { results, content } = setupAndMigrate("copilot-cli", "test-migrate", {
+      mcpServers: {
+        "test-migrate": {
+          url: "https://api.example.com/mcp",
+          headers: { Authorization: "Bearer ask_old" }
+        }
+      }
+    });
+
+    const migration = results.find(r => r.toolName === "test-migrate" && r.platform === "copilot-cli");
+    assert.equal(migration.action, "migrated");
+    assert.equal(content.mcpServers["test-migrate"].type, "http");
+  });
+
+  it("handles migration of multiple tools at once", () => {
+    const configPath = tmpPath("migrate-batch") + ".json";
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        "tool-a": { url: "https://a.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer a" } },
+        "tool-b": { url: "https://b.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer b" } }
+      }
+    }));
+
+    // Track both on Cursor (which should NOT have type field)
+    trackInstall("tool-a", "@test/a", "cursor", { configPath, transport: "http" });
+    trackInstall("tool-b", "@test/b", "cursor", { configPath, transport: "http" });
+
+    const results = migrateConfigs();
+    const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+    assert.equal(results.filter(r => r.action === "migrated").length, 2, "both should be migrated");
+    assert.equal(content.mcpServers["tool-a"].type, undefined, "tool-a type removed");
+    assert.equal(content.mcpServers["tool-b"].type, undefined, "tool-b type removed");
+
+    trackUninstall("tool-a");
+    trackUninstall("tool-b");
+    cleanup(configPath);
   });
 });

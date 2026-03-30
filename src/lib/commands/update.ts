@@ -3,6 +3,7 @@
 import { execSync } from "child_process";
 import { readState, markUpdated } from "../state";
 import { resolvePackageVersion } from "../fs";
+import { migrateConfigs } from "../migrate";
 import * as cli from "../cli";
 
 export function runUpdate(): void {
@@ -27,21 +28,35 @@ export function runUpdate(): void {
       cli.ok(`Already at latest (v${oldVersion})`);
     }
   } catch (err: unknown) {
-    // npm update might fail if installed via npx or locally
     cli.warn(`npm update failed — you may need to run: npm install -g @cg3/equip`);
     cli.log(`  ${cli.DIM}${(err as Error).message?.split("\n")[0] || "unknown error"}${cli.RESET}`);
   }
 
-  // Step 2: Check for config migrations
-  cli.log(`\n${cli.BOLD}[2/2] Checking configs${cli.RESET}`);
+  // Step 2: Migrate configs
+  cli.log(`\n${cli.BOLD}[2/2] Migrating configs${cli.RESET}`);
   const state = readState();
   const toolCount = Object.keys(state.tools).length;
 
   if (toolCount === 0) {
     cli.ok("No tracked tools — nothing to migrate");
   } else {
-    cli.ok(`${toolCount} tracked tool${toolCount === 1 ? "" : "s"} — configs verified`);
-    // Future: compare old platform defs vs new, migrate if paths changed
+    const results = migrateConfigs();
+    const migrated = results.filter(r => r.action === "migrated");
+    const errors = results.filter(r => r.action === "error");
+
+    if (migrated.length > 0) {
+      for (const r of migrated) {
+        cli.ok(`${r.platform}/${r.toolName}: migrated (${r.detail})`);
+      }
+    }
+    if (errors.length > 0) {
+      for (const r of errors) {
+        cli.fail(`${r.platform}/${r.toolName}: ${r.detail}`);
+      }
+    }
+    if (migrated.length === 0 && errors.length === 0) {
+      cli.ok(`${toolCount} tool${toolCount === 1 ? "" : "s"} — all configs current`);
+    }
   }
 
   // Mark updated
