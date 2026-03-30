@@ -1065,12 +1065,7 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
 
   it("installs hook scripts and registers in settings", () => {
     const hookDir = tmpPath("hooks-install");
-    const settingsDir = tmpPath("settings");
-    const settingsPath = path.join(settingsDir, "settings.json");
-    fs.mkdirSync(settingsDir, { recursive: true });
-    fs.writeFileSync(settingsPath, "{}");
 
-    // Mock platform with claude-code hooks pointing to our temp settings
     const p = mockPlatform({ platform: "claude-code" });
 
     const result = installHooks(p, hookDefs, { hookDir });
@@ -1084,9 +1079,11 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
     assert.ok(fs.existsSync(scriptPath));
     assert.ok(fs.readFileSync(scriptPath, "utf-8").includes("hook ran"));
 
-    // Cleanup
+    // IMPORTANT: uninstall hooks from real settings.json to avoid polluting
+    // the user's Claude Code config. installHooks writes to the real
+    // ~/.claude/settings.json because the platform registry returns it.
+    uninstallHooks(p, hookDefs, { hookDir });
     fs.rmSync(hookDir, { recursive: true, force: true });
-    fs.rmSync(settingsDir, { recursive: true, force: true });
   });
 
   it("returns null for platforms without hook support", () => {
