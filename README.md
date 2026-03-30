@@ -2,7 +2,9 @@
 
 Cross-platform installer for MCP tools, behavioral rules, agent skills, and lifecycle hooks.
 
-[![npm](https://img.shields.io/npm/v/@cg3/equip)](https://www.npmjs.com/package/@cg3/equip) | [Discord](https://discord.gg/bBcRHT4J) | [Tool Author Guide](./docs/tool-author.md)
+[![npm](https://img.shields.io/npm/v/@cg3/equip)](https://www.npmjs.com/package/@cg3/equip)
+
+[Discord](https://discord.gg/bBcRHT4J) | [Tool Author Guide](./docs/tool-author.md)
 
 ## What It Does
 
