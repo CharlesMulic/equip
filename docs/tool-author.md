@@ -4,6 +4,22 @@ This guide walks through making your tool equippable — distributable across AI
 
 We'll start with the simplest thing (a behavioral rule), add a skill, then add MCP server config. Each layer works independently. Use what you need.
 
+## Prerequisites
+
+Install equip as a dependency in your project (or globally if you're just experimenting):
+
+```bash
+npm install @cg3/equip
+```
+
+All examples below are plain Node.js scripts. You run them directly:
+
+```bash
+node piratehat.js
+```
+
+Later, when you're ready to distribute, you'll publish to npm and register a shorthand so users can run `equip <yourname>` instead. But start local — no npm publish needed to try things out.
+
 ## The Pirate Hat Example
 
 Let's make agents talk like pirates. No MCP server needed — just rules and a skill that work across all platforms.
@@ -12,8 +28,9 @@ Let's make agents talk like pirates. No MCP server needed — just rules and a s
 
 The simplest equippable tool is a behavioral rule — a text block injected into each platform's rules file.
 
+Save this as `piratehat.js`:
+
 ```js
-// setup.js
 const { Equip, platformName, cli } = require("@cg3/equip");
 
 const equip = new Equip({
@@ -39,7 +56,13 @@ for (const p of platforms) {
 }
 ```
 
-That's it. Run it and every agent on every detected platform starts talking like a pirate. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
+Run it:
+
+```bash
+node piratehat.js
+```
+
+That's it. Every agent on every detected platform starts talking like a pirate. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
 
 **How rules work across platforms:**
 - Claude Code: appended to `~/.claude/CLAUDE.md`
@@ -248,38 +271,60 @@ for (const p of platforms) {
 
 ---
 
-## Registering Your Tool
+## From Local Script to `equip <name>`
 
-Once your setup script works, register a shorthand so users can run `equip <name>` instead of the full package name.
+So far everything has been a local script you run with `node`. Here's how to go from that to `equip piratehat`:
 
-**1. Publish your package to npm** with the setup script in `bin/`:
+### Step 1: Make it an npm package
+
+Move your script to `bin/setup.js` and add a package.json:
+
+```
+piratehat/
+  bin/setup.js       # Your setup script (the code from above)
+  package.json
+```
+
+### Step 2: Publish to npm
+
+```json
+// package.json
 
 ```json
 {
-  "name": "@myorg/my-tool",
-  "bin": { "my-tool": "./bin/setup.js" },
+  "name": "piratehat",
+  "version": "1.0.0",
+  "bin": { "piratehat": "./bin/setup.js" },
   "dependencies": { "@cg3/equip": "^0.9.0" }
 }
 ```
 
-**2. Open a PR** to [registry.json](https://github.com/CharlesMulic/equip/blob/main/registry.json):
+```bash
+npm publish
+```
+
+At this point, users can install your tool with `npx piratehat` — they don't even need equip installed. But if they DO have equip, you can register a shorthand.
+
+### Step 3: Register in equip
+
+Open a PR to [registry.json](https://github.com/CharlesMulic/equip/blob/main/registry.json):
 
 ```json
 {
-  "my-tool": {
-    "package": "@myorg/my-tool",
+  "piratehat": {
+    "package": "piratehat",
     "command": "setup",
-    "description": "What my tool does",
-    "marker": "my-tool",
-    "skillName": "my-skill"
+    "description": "Make your AI agents talk like pirates",
+    "marker": "piratehat",
+    "skillName": "pirate-speak"
   }
 }
 ```
 
-**3. Users install with:**
+Now users can install with:
 
 ```bash
-equip my-tool
+equip piratehat
 ```
 
 ---
