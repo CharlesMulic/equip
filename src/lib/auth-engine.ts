@@ -20,6 +20,7 @@ export interface AuthConfig {
   keyPrefix?: string;
   keyPrompt?: string;
   keyHelpUrl?: string;
+  validationUrl?: string;
   oauth?: {
     authorizeUrl: string;
     tokenUrl: string;
@@ -116,6 +117,51 @@ export function listStoredCredentials(): string[] {
       .map(f => f.replace(/\.json$/, ""));
   } catch {
     return [];
+  }
+}
+
+// ─── Credential Validation ──────────────────────────────────
+
+/**
+ * Validate a credential against a tool's validation URL.
+ * Returns true if the URL returns 2xx with the credential as Bearer token.
+ * Returns false on 401/403. Returns null if no validationUrl or network error.
+ */
+export async function validateCredential(
+  credential: string,
+  auth: AuthConfig,
+  logger: EquipLogger = NOOP_LOGGER,
+): Promise<{ valid: boolean | null; detail?: string }> {
+  if (!auth.validationUrl) {
+    return { valid: null, detail: "No validation URL configured" };
+  }
+
+  try {
+    logger.debug("Validating credential", { url: auth.validationUrl });
+    const res = await fetch(auth.validationUrl, {
+      headers: {
+        Authorization: `Bearer ${credential}`,
+        "User-Agent": "equip",
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.ok) {
+      logger.info("Credential validated");
+      return { valid: true };
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      logger.warn("Credential validation failed", { status: res.status });
+      return { valid: false, detail: `Validation returned ${res.status}` };
+    }
+
+    // Other status codes — don't treat as auth failure
+    logger.debug("Validation returned unexpected status", { status: res.status });
+    return { valid: null, detail: `Validation returned ${res.status}` };
+  } catch (e: unknown) {
+    logger.debug("Validation request failed", { error: (e as Error).message });
+    return { valid: null, detail: `Network error: ${(e as Error).message}` };
   }
 }
 

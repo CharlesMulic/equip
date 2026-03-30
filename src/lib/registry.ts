@@ -54,6 +54,7 @@ export interface ToolDefinition {
     content: string;
     version: string;
     marker: string;
+    fileName?: string;
   };
   hooks?: HookDefinition[];
   hookDir?: string;
@@ -64,6 +65,11 @@ export interface ToolDefinition {
 
   // Auth configuration — declares what auth flow the tool needs
   auth?: AuthConfig;
+
+  // Post-install behavior
+  postInstallUrl?: string;
+  dashboardUrl?: string;
+  platformHints?: Record<string, string>;
 }
 
 // ─── Local Registry Entry ──────────────────────────────────
@@ -217,6 +223,7 @@ export function toolDefToEquipConfig(def: ToolDefinition, options?: { logger?: E
       version: def.rules.version,
       marker: def.rules.marker,
     };
+    if (def.rules.fileName) config.rules.fileName = def.rules.fileName;
   }
 
   if (def.stdioCommand) {

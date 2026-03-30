@@ -69,6 +69,25 @@ describe("toolDefToEquipConfig", () => {
     assert.equal(config.rules.marker, "test");
   });
 
+  it("converts tool with rules.fileName", () => {
+    const def = {
+      name: "test",
+      displayName: "Test",
+      description: "",
+      installMode: "direct",
+      serverUrl: "https://example.com/mcp",
+      rules: {
+        content: "<!-- test:v1.0.0 -->\nRules\n<!-- /test -->",
+        version: "1.0.0",
+        marker: "test",
+        fileName: "test.md",
+      },
+    };
+    const config = toolDefToEquipConfig(def);
+    assert.ok(config.rules);
+    assert.equal(config.rules.fileName, "test.md");
+  });
+
   it("converts tool with skills (takes first from array)", () => {
     const def = {
       name: "test",
@@ -252,5 +271,47 @@ describe("direct-mode CLI", () => {
     assert.ok(out.includes("MCP Server"), "Should install MCP");
     assert.ok(out.includes("Behavioral Rules"), "Should install rules");
     assert.ok(out.includes("Done."), "Should complete");
+  });
+
+  it("--platform flag filters platforms", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js demo-fetch --platform claude-code --dry-run 2>&1", {
+      encoding: "utf-8",
+      cwd: path.join(__dirname, ".."),
+      timeout: 15000,
+      shell: true,
+    });
+    assert.ok(out.includes("Claude Code"), "Should include Claude Code");
+    assert.ok(!out.includes("Cursor"), "Should NOT include Cursor");
+    assert.ok(out.includes("1 platform configured"), "Should show 1 platform");
+  });
+
+  it("equip update <tool> re-fetches and re-installs", () => {
+    const { execSync } = require("child_process");
+    const out = execSync("node bin/equip.js update demo-fetch --dry-run 2>&1", {
+      encoding: "utf-8",
+      cwd: path.join(__dirname, ".."),
+      timeout: 15000,
+      shell: true,
+    });
+    assert.ok(out.includes("equip update"), "Should show update header");
+    assert.ok(out.includes("Demo Fetch"), "Should fetch tool definition");
+    assert.ok(out.includes("Done."), "Should complete");
+  });
+
+  it("prior definition includes new data fields", async () => {
+    const def = await fetchToolDef("prior");
+    assert.ok(def);
+    // Auth validation URL
+    assert.ok(def.auth.validationUrl, "Should have validationUrl");
+    assert.ok(def.auth.validationUrl.includes("/v1/agents/me"));
+    // Post-install behavior
+    assert.ok(def.postInstallUrl, "Should have postInstallUrl");
+    assert.ok(def.dashboardUrl, "Should have dashboardUrl");
+    assert.ok(def.platformHints, "Should have platformHints");
+    assert.ok(def.platformHints.cursor, "Should have Cursor hint");
+    // Rules fileName
+    assert.ok(def.rules.fileName, "Should have rules fileName");
+    assert.equal(def.rules.fileName, "prior.md");
   });
 });

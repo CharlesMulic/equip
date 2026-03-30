@@ -25,13 +25,14 @@ for (const [key, value] of Object.entries(REGISTRY)) {
 // ─── Arg Parsing ───────────────────────────────────────────
 
 function parseArgs(argv) {
-  const args = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false };
+  const args = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
     else if (a === "--dry-run") { args.dryRun = true; }
     else if (a === "--non-interactive") { args.nonInteractive = true; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
+    else if (a === "--platform" && i + 1 < argv.length) { args.platform = argv[++i]; }
     else { args._.push(a); }
   }
   return args;
@@ -90,6 +91,7 @@ function cmdHelp() {
   console.log("Options:");
   console.log("  --verbose        Show detailed logging");
   console.log("  --api-key <key>  Provide API key (skip prompt)");
+  console.log("  --platform <p>   Target specific platform(s), comma-separated");
   console.log("  --dry-run        Preview without writing");
   console.log("  --help, -h       Show this help");
   console.log("  --version, -v    Show version");
@@ -145,7 +147,50 @@ function cmdUninstall(args) {
   require("./unequip.js");
 }
 
-function cmdUpdate() {
+async function cmdUpdate(parsedArgs) {
+  const toolName = parsedArgs._[0];
+
+  // If a tool name is given, update that tool via direct-mode
+  if (toolName) {
+    const { fetchToolDef, validateCredential, readStoredCredential, cli } = require("../dist/index");
+    const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
+    const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
+
+    log(`\n${BOLD}equip update${RESET} ${toolName}\n`);
+
+    // Clear cache to get fresh definition
+    try { fs.unlinkSync(path.join(os.homedir(), ".equip", "cache", `${toolName}.json`)); } catch {}
+
+    const toolDef = await fetchToolDef(toolName, { logger });
+    if (!toolDef) {
+      fail(`Tool "${toolName}" not found in registry`);
+      process.exit(1);
+    }
+
+    if (toolDef.installMode !== "direct") {
+      // Package-mode: fall through to the legacy equip update
+      log(`  ${DIM}${toolName} is package-mode — use: npx @cg3/${toolName} setup --update${RESET}\n`);
+      return;
+    }
+
+    // Validate stored credential if we have one
+    const authConfig = toolDef.auth || { type: "none" };
+    const cred = readStoredCredential(toolName);
+    if (cred?.credential && authConfig.validationUrl) {
+      const v = await validateCredential(cred.credential, authConfig, logger);
+      if (v.valid === false) {
+        warn("Stored credential is invalid — re-authenticating...");
+      } else if (v.valid === true) {
+        ok("Credential valid");
+      }
+    }
+
+    // Re-run directInstall (idempotent — rules skip if current, MCP overwrites)
+    await directInstall(toolDef, parsedArgs);
+    return;
+  }
+
+  // No tool name: legacy equip self-update
   const { runUpdate } = require("../dist/lib/commands/update");
   runUpdate();
 }
@@ -327,9 +372,9 @@ function createConsoleLogger() {
 // ─── Direct-Mode Install ───────────────────────────────────
 
 async function directInstall(toolDef, parsedArgs) {
-  const { Equip, toolDefToEquipConfig, platformName, InstallReportBuilder, resolveAuth, cli } = require("../dist/index");
+  const { Equip, toolDefToEquipConfig, platformName, resolvePlatformId, InstallReportBuilder, resolveAuth, validateCredential, cli } = require("../dist/index");
   const { reconcileState } = require("../dist/lib/reconcile");
-  const { log, ok, fail, warn, step, DIM, RESET, BOLD, GREEN } = cli;
+  const { log, ok, fail, warn, step, prompt, DIM, RESET, BOLD, GREEN } = cli;
 
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
   const dryRun = parsedArgs.dryRun;
@@ -357,13 +402,39 @@ async function directInstall(toolDef, parsedArgs) {
     }
 
     apiKey = authResult.credential;
-    ok(`Authenticated ${DIM}(${authResult.method})${RESET}`);
+
+    // Validate credential against tool's validation URL
+    if (authConfig.validationUrl && !dryRun) {
+      const validation = await validateCredential(apiKey, authConfig, logger);
+      if (validation.valid === false) {
+        fail(`Credential invalid: ${validation.detail}`);
+        log(`  ${DIM}Try: equip reauth ${toolDef.name}${RESET}`);
+        process.exit(1);
+      }
+      if (validation.valid === true) {
+        ok(`Authenticated ${DIM}(${authResult.method}, validated)${RESET}`);
+      } else {
+        ok(`Authenticated ${DIM}(${authResult.method})${RESET}`);
+      }
+    } else {
+      ok(`Authenticated ${DIM}(${authResult.method})${RESET}`);
+    }
   }
 
   // ── Platform Detection ──
   const config = toolDefToEquipConfig(toolDef, { logger });
   const equip = new Equip(config);
-  const platforms = equip.detect();
+  let platforms = equip.detect();
+
+  // Filter by --platform if specified
+  if (parsedArgs.platform) {
+    const requested = parsedArgs.platform.split(",").map(s => resolvePlatformId(s.trim()));
+    platforms = platforms.filter(p => requested.includes(p.platform));
+    if (platforms.length === 0) {
+      fail(`None of the specified platforms detected: ${parsedArgs.platform}`);
+      process.exit(1);
+    }
+  }
 
   if (platforms.length === 0) {
     fail("No supported AI coding tools detected.");
@@ -376,11 +447,11 @@ async function directInstall(toolDef, parsedArgs) {
 
   // ── Install Loop ──
   const report = new InstallReportBuilder();
-  const steps = ["MCP Server"];
-  if (config.rules) steps.push("Behavioral Rules");
-  if (config.skill) steps.push("Skills");
-  steps.push("Verification");
-  const totalSteps = steps.length;
+  const stepList = ["MCP Server"];
+  if (config.rules) stepList.push("Behavioral Rules");
+  if (config.skill) stepList.push("Skills");
+  stepList.push("Verification");
+  const totalSteps = stepList.length;
   let stepNum = 0;
 
   // MCP Server
@@ -398,7 +469,7 @@ async function directInstall(toolDef, parsedArgs) {
     }
   }
 
-  // Rules (only platforms with writable rules paths — no clipboard in direct-mode)
+  // Rules (only platforms with writable rules paths)
   if (config.rules) {
     step(++stepNum, totalSteps, "Behavioral Rules");
     for (const p of platforms) {
@@ -462,7 +533,7 @@ async function directInstall(toolDef, parsedArgs) {
     }
   }
 
-  // ── Telemetry (fire and forget) ──
+  // ── Telemetry — equip-backend (anonymous, fire and forget) ──
   if (!dryRun) {
     try {
       const payload = {
@@ -483,6 +554,32 @@ async function directInstall(toolDef, parsedArgs) {
     } catch { /* fire and forget */ }
   }
 
+  // ── Telemetry — tool's own webhook (if configured) ──
+  if (!dryRun && toolDef.postInstallUrl && apiKey) {
+    try {
+      fetch(toolDef.postInstallUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "User-Agent": `equip/${EQUIP_VERSION}`,
+        },
+        body: JSON.stringify({
+          equipVersion: EQUIP_VERSION,
+          os: process.platform,
+          arch: process.arch,
+          nodeVersion: process.version,
+          platforms: platforms.map(p => ({
+            platform: p.platform,
+            version: p.version,
+            success: true,
+          })),
+        }),
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
+    } catch { /* fire and forget */ }
+  }
+
   // ── Summary ──
   log("");
   const succeeded = platforms.length;
@@ -490,6 +587,22 @@ async function directInstall(toolDef, parsedArgs) {
   if (report.warningCount > 0) {
     log(`  ${DIM}${report.warningCount} warning${report.warningCount === 1 ? "" : "s"}${RESET}`);
   }
+
+  // Platform hints
+  if (toolDef.platformHints) {
+    for (const p of platforms) {
+      const hint = toolDef.platformHints[p.platform];
+      if (hint) {
+        log(`\n  ${DIM}${platformName(p.platform)}: ${hint}${RESET}`);
+      }
+    }
+  }
+
+  // Dashboard link
+  if (toolDef.dashboardUrl) {
+    log(`\n  Dashboard   ${toolDef.dashboardUrl}`);
+  }
+
   log("");
 }
 
@@ -682,7 +795,7 @@ async function main() {
   switch (cmd) {
     case "status":    cmdStatus(); break;
     case "doctor":    cmdDoctor(); break;
-    case "update":    cmdUpdate(); break;
+    case "update":    await cmdUpdate(parsedArgs); break;
     case "list":      cmdList(); break;
     case "demo":      cmdDemo(parsedArgs._); break;
     case "uninstall": cmdUninstall(parsedArgs._); break;
