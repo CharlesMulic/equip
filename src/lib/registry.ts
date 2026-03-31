@@ -22,6 +22,25 @@ const FETCH_TIMEOUT_MS = 3000;
 const EQUIP_DIR = path.join(os.homedir(), ".equip");
 const CACHE_DIR = path.join(EQUIP_DIR, "cache");
 
+// ─── Post-Install Actions ──────────────────────────────────
+
+export interface PostInstallAction {
+  /** Action type. Currently only "open_with_code" is supported. */
+  type: "open_with_code";
+  /** When to execute: "always", "interactive" (default), or "non_interactive" */
+  condition?: "always" | "interactive" | "non_interactive";
+  /** URL to call (POST) to get a value */
+  url: string;
+  /** Send Authorization: Bearer <credential> with the request */
+  auth?: boolean;
+  /** Dot-notation path to extract from JSON response (e.g., "data.code") */
+  codePath: string;
+  /** Query parameter name to append to targetUrl (e.g., "cli_code") */
+  codeParam: string;
+  /** URL to open in browser with the extracted code appended */
+  targetUrl: string;
+}
+
 // ─── ToolDefinition ────────────────────────────────────────
 // Matches the shape returned by GET /tools/:name from equip-backend.
 
@@ -66,10 +85,10 @@ export interface ToolDefinition {
   // Auth configuration — declares what auth flow the tool needs
   auth?: AuthConfig;
 
-  // Post-install behavior
-  postInstallUrl?: string;
-  dashboardUrl?: string;
-  dashboardCodeUrl?: string;
+  // Post-install actions — ordered pipeline of typed actions
+  postInstall?: PostInstallAction[];
+
+  // Per-platform messages shown after install
   platformHints?: Record<string, string>;
 }
 

@@ -554,32 +554,6 @@ async function directInstall(toolDef, parsedArgs) {
     } catch { /* fire and forget */ }
   }
 
-  // ── Telemetry — tool's own webhook (if configured) ──
-  if (!dryRun && toolDef.postInstallUrl && apiKey) {
-    try {
-      fetch(toolDef.postInstallUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-          "User-Agent": `equip/${EQUIP_VERSION}`,
-        },
-        body: JSON.stringify({
-          equipVersion: EQUIP_VERSION,
-          os: process.platform,
-          arch: process.arch,
-          nodeVersion: process.version,
-          platforms: platforms.map(p => ({
-            platform: p.platform,
-            version: p.version,
-            success: true,
-          })),
-        }),
-        signal: AbortSignal.timeout(3000),
-      }).catch(() => {});
-    } catch { /* fire and forget */ }
-  }
-
   // ── Summary ──
   log("");
   const succeeded = platforms.length;
@@ -598,48 +572,69 @@ async function directInstall(toolDef, parsedArgs) {
     }
   }
 
-  // Dashboard prompt (Esc to skip, Enter to open)
-  if (toolDef.dashboardUrl && !dryRun && !parsedArgs.nonInteractive) {
-    log("");
-    const open = await cli.promptEnterOrEsc(`  Press ${BOLD}Enter${RESET} to open your dashboard, or ${BOLD}Esc${RESET} to exit: `);
-    if (open) {
-      let dashUrl = toolDef.dashboardUrl;
+  // ── Post-Install Actions ──
+  if (!dryRun && toolDef.postInstall && toolDef.postInstall.length > 0) {
+    const isInteractive = !parsedArgs.nonInteractive;
+    for (const action of toolDef.postInstall) {
+      const cond = action.condition || "interactive";
+      if (cond === "interactive" && !isInteractive) continue;
+      if (cond === "non_interactive" && isInteractive) continue;
 
-      // Get one-time login code if the augment supports it
-      if (toolDef.dashboardCodeUrl && apiKey) {
-        try {
-          const codeRes = await fetch(toolDef.dashboardCodeUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: "{}",
-            signal: AbortSignal.timeout(3000),
-          });
-          const codeData = await codeRes.json();
-          if (codeData.ok && codeData.data?.code) {
-            dashUrl = `${toolDef.dashboardUrl}?cli_code=${encodeURIComponent(codeData.data.code)}`;
-          }
-        } catch { /* fall through to plain URL */ }
-      }
-
-      const cp = require("child_process");
-      try {
-        if (process.platform === "win32") {
-          cp.execSync(`start "" "${dashUrl}"`, { shell: "cmd.exe", stdio: "ignore" });
-        } else if (process.platform === "darwin") {
-          cp.spawn("open", [dashUrl], { detached: true, stdio: "ignore" }).unref();
-        } else {
-          cp.spawn("xdg-open", [dashUrl], { detached: true, stdio: "ignore" }).unref();
-        }
-      } catch {}
+      await executePostInstallAction(action, { apiKey, cli, BOLD, RESET, DIM, logger });
     }
-  } else if (toolDef.dashboardUrl) {
-    log(`\n  Dashboard   ${toolDef.dashboardUrl}`);
   }
 
   log("");
+}
+
+// ─── Post-Install Action Executor ───────────────────────────
+
+async function executePostInstallAction(action, ctx) {
+  const { apiKey, cli, BOLD, RESET, DIM, logger } = ctx;
+
+  if (action.type === "open_with_code") {
+    cli.log("");
+    const open = await cli.promptEnterOrEsc(`  Press ${BOLD}Enter${RESET} to open your dashboard, or ${BOLD}Esc${RESET} to exit: `);
+    if (!open) return;
+
+    let targetUrl = action.targetUrl;
+
+    // Fetch one-time code
+    if (action.url && action.codePath) {
+      try {
+        const headers = { "Content-Type": "application/json" };
+        if (action.auth && apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+        const res = await fetch(action.url, {
+          method: "POST",
+          headers,
+          body: "{}",
+          signal: AbortSignal.timeout(5000),
+        });
+        const data = await res.json();
+
+        // Navigate codePath (e.g., "data.code")
+        const code = action.codePath.split(".").reduce((obj, key) => obj?.[key], data);
+        if (code) {
+          const separator = targetUrl.includes("?") ? "&" : "?";
+          targetUrl = `${targetUrl}${separator}${action.codeParam}=${encodeURIComponent(code)}`;
+        }
+      } catch (e) {
+        if (logger) logger.debug("Post-install code fetch failed, opening plain URL", { error: e.message });
+      }
+    }
+
+    const cp = require("child_process");
+    try {
+      if (process.platform === "win32") {
+        cp.execSync(`start "" "${targetUrl}"`, { shell: "cmd.exe", stdio: "ignore" });
+      } else if (process.platform === "darwin") {
+        cp.spawn("open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
+      } else {
+        cp.spawn("xdg-open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
+      }
+    } catch {}
+  }
 }
 
 // ─── Package-Mode Dispatch (existing) ──────────────────────
