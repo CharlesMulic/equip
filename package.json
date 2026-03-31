@@ -1,6 +1,6 @@
 {
   "name": "@cg3/equip",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Augment your AI agents — MCP servers, behavioral rules, and skills across every platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

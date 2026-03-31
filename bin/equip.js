@@ -598,8 +598,23 @@ async function directInstall(toolDef, parsedArgs) {
     }
   }
 
-  // Dashboard link
-  if (toolDef.dashboardUrl) {
+  // Dashboard prompt (Esc to skip, Enter to open)
+  if (toolDef.dashboardUrl && !dryRun && !parsedArgs.nonInteractive) {
+    log("");
+    const open = await cli.promptEnterOrEsc(`  Press ${BOLD}Enter${RESET} to open your dashboard, or ${BOLD}Esc${RESET} to exit: `);
+    if (open) {
+      const cp = require("child_process");
+      try {
+        if (process.platform === "win32") {
+          cp.execSync(`start "" "${toolDef.dashboardUrl}"`, { shell: "cmd.exe", stdio: "ignore" });
+        } else if (process.platform === "darwin") {
+          cp.spawn("open", [toolDef.dashboardUrl], { detached: true, stdio: "ignore" }).unref();
+        } else {
+          cp.spawn("xdg-open", [toolDef.dashboardUrl], { detached: true, stdio: "ignore" }).unref();
+        }
+      } catch {}
+    }
+  } else if (toolDef.dashboardUrl) {
     log(`\n  Dashboard   ${toolDef.dashboardUrl}`);
   }
 
