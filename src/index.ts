@@ -19,7 +19,7 @@ import { resolveAuth, validateCredential, readStoredCredential, writeStoredCrede
 
 // ─── Equip Class ────────────────────────────────────────────
 
-export interface EquipConfig {
+export interface AugmentConfig {
   name: string;
   serverUrl?: string;
   rules?: {
@@ -41,21 +41,20 @@ export interface EquipConfig {
 }
 
 /**
- * Equip — install augments (MCP servers, behavioral rules, skills) on AI agents.
- * The Equip class configures a single augment for installation across platforms.
+ * Augment — defines and installs an augment (MCP server, behavioral rules, skills) across AI platforms.
  */
-class Equip {
+class Augment {
   name: string;
   serverUrl?: string;
-  rules: EquipConfig["rules"] | null;
-  stdio: EquipConfig["stdio"] | null;
+  rules: AugmentConfig["rules"] | null;
+  stdio: AugmentConfig["stdio"] | null;
   hookDefs: HookDefinition[] | null;
   hookDir: string;
   skill: SkillConfig | null;
   logger: EquipLogger;
 
-  constructor(config: EquipConfig) {
-    if (!config.name) throw new Error("Equip: name is required");
+  constructor(config: AugmentConfig) {
+    if (!config.name) throw new Error("Augment: name is required");
 
     this.name = config.name;
     this.serverUrl = config.serverUrl;
@@ -235,7 +234,13 @@ export interface VerifyResult {
 
 // ─── Public API ─────────────────────────────────────────────
 
+/** @deprecated Use Augment instead */
+const Equip = Augment;
+/** @deprecated Use AugmentConfig instead */
+export type EquipConfig = AugmentConfig;
+
 export {
+  Augment,
   Equip,
   // Platform utilities
   createManualPlatform,

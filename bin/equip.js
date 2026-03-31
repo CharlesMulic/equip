@@ -202,7 +202,7 @@ async function cmdReauth(args) {
     process.exit(1);
   }
 
-  const { fetchToolDef, resolveAuth, deleteStoredCredential, Equip, toolDefToEquipConfig, platformName, cli } = require("../dist/index");
+  const { fetchToolDef, resolveAuth, deleteStoredCredential, Augment, toolDefToEquipConfig, platformName, cli } = require("../dist/index");
   const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
   const logger = args.verbose ? createConsoleLogger() : undefined;
 
@@ -242,7 +242,7 @@ async function cmdReauth(args) {
   // Update all platform configs with the new credential
   if (toolDef.installMode === "direct" && toolDef.serverUrl) {
     const config = toolDefToEquipConfig(toolDef, { logger });
-    const equip = new Equip(config);
+    const equip = new Augment(config);
     const platforms = equip.detect();
     const transport = toolDef.transport || "http";
 
@@ -372,7 +372,7 @@ function createConsoleLogger() {
 // ─── Direct-Mode Install ───────────────────────────────────
 
 async function directInstall(toolDef, parsedArgs) {
-  const { Equip, toolDefToEquipConfig, platformName, resolvePlatformId, InstallReportBuilder, resolveAuth, validateCredential, cli } = require("../dist/index");
+  const { Augment, toolDefToEquipConfig, platformName, resolvePlatformId, InstallReportBuilder, resolveAuth, validateCredential, cli } = require("../dist/index");
   const { reconcileState } = require("../dist/lib/reconcile");
   const { log, ok, fail, warn, step, prompt, DIM, RESET, BOLD, GREEN } = cli;
 
@@ -423,7 +423,7 @@ async function directInstall(toolDef, parsedArgs) {
 
   // ── Platform Detection ──
   const config = toolDefToEquipConfig(toolDef, { logger });
-  const equip = new Equip(config);
+  const equip = new Augment(config);
   let platforms = equip.detect();
 
   // Filter by --platform if specified

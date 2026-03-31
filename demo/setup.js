@@ -27,12 +27,12 @@
 
 // ─── 1. Import equip ────────────────────────────────────────
 //
-// The Equip class is the high-level API. It wraps detection,
+// The Augment class is the high-level API. It wraps detection,
 // config building, installation, and uninstallation into a
 // single object. You can also import individual primitives
 // (detectPlatforms, installMcp, etc.) for lower-level control.
 
-const { Equip, createManualPlatform, platformName, cli } = require("@cg3/equip");
+const { Augment, createManualPlatform, platformName, cli } = require("@cg3/equip");
 
 // ─── 2. Parse CLI flags ─────────────────────────────────────
 //
@@ -76,12 +76,12 @@ When working with Acme APIs or libraries:
 The tool returns versioned docs matching your project's dependency version.
 <!-- /${TOOL_NAME} -->`;
 
-// ─── 4. Create the Equip instance ───────────────────────────
+// ─── 4. Create the Augment instance ─────────────────────────
 //
 // The constructor validates config and stores it. No side
 // effects — detection and installation happen in separate calls.
 
-const equip = new Equip({
+const equip = new Augment({
   name: TOOL_NAME,
   serverUrl: SERVER_URL,
 

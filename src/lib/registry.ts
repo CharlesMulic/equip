@@ -5,7 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import type { EquipConfig } from "../index";
+import type { AugmentConfig } from "../index";
 import type { HookDefinition } from "./hooks";
 import type { SkillConfig, SkillFile } from "./skills";
 import type { EquipLogger } from "./types";
@@ -207,8 +207,8 @@ function localEntryToToolDef(name: string, entry: LocalRegistryEntry): ToolDefin
  * Convert a ToolDefinition (from API/cache) to an EquipConfig (for the Equip class).
  * Only meaningful for direct-mode tools. Package-mode tools are dispatched via npx.
  */
-export function toolDefToEquipConfig(def: ToolDefinition, options?: { logger?: EquipLogger }): EquipConfig {
-  const config: EquipConfig = {
+export function toolDefToEquipConfig(def: ToolDefinition, options?: { logger?: EquipLogger }): AugmentConfig {
+  const config: AugmentConfig = {
     name: def.name,
     logger: options?.logger,
   };
