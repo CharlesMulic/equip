@@ -53,9 +53,9 @@ describe("docs/tool-author.md — Pirate Hat Layer 1", () => {
 
   // Write the exact script from the docs
   fs.writeFileSync(scriptPath, `
-const { Equip, platformName, cli } = require("@cg3/equip");
+const { Augment, platformName, cli } = require("@cg3/equip");
 
-const equip = new Equip({
+const equip = new Augment({
   name: "piratehat",
   rules: {
     content: \`<!-- piratehat:v1.0.0 -->
@@ -102,9 +102,9 @@ for (const p of platforms) {
   // FROM: docs/tool-author.md → "Fair warning — you'll want to undo this"
   // unequip piratehat won't work for rules-only tools since reconcileState
   // tracks by MCP entry presence. For a clean test, uninstall directly.
-  it("rules can be removed via the Equip class", () => {
-    const { Equip } = require("..");
-    const equip = new Equip({
+  it("rules can be removed via the Augment class", () => {
+    const { Augment } = require("..");
+    const equip = new Augment({
       name: "piratehat",
       serverUrl: "https://example.com/unused",
       rules: {
@@ -141,9 +141,9 @@ describe("docs/tool-author.md — Pirate Hat Layer 2 (Rules + Skills)", () => {
 
   // Write the combined rules + skills script from the docs
   fs.writeFileSync(scriptPath, `
-const { Equip, platformName, cli } = require("@cg3/equip");
+const { Augment, platformName, cli } = require("@cg3/equip");
 
-const equip = new Equip({
+const equip = new Augment({
   name: "piratehat",
   rules: {
     content: \`<!-- piratehat:v1.0.0 -->
@@ -198,8 +198,8 @@ for (const p of platforms) {
   });
 
   it("verify confirms installation", () => {
-    const { Equip, createManualPlatform } = require("..");
-    const equip = new Equip({
+    const { Augment, createManualPlatform } = require("..");
+    const equip = new Augment({
       name: "piratehat",
       serverUrl: "https://example.com/unused",
       rules: { content: "<!-- piratehat:v1.0.0 -->\n## Pirate Mode\n<!-- /piratehat -->", version: "1.0.0", marker: "piratehat" },
@@ -224,8 +224,8 @@ for (const p of platforms) {
   });
 
   it("cleanup removes rules and skills", () => {
-    const { Equip } = require("..");
-    const equip = new Equip({
+    const { Augment } = require("..");
+    const equip = new Augment({
       name: "piratehat",
       serverUrl: "https://example.com/unused",
       rules: { content: "x", version: "1.0.0", marker: "piratehat" },
@@ -265,8 +265,8 @@ describe("docs/tool-author.md — equip . (local package)", () => {
 
   fs.mkdirSync(path.join(workDir, "bin"), { recursive: true });
   fs.writeFileSync(path.join(workDir, "bin", "setup.js"), `
-const { Equip, cli } = require("@cg3/equip");
-const equip = new Equip({
+const { Augment, cli } = require("@cg3/equip");
+const equip = new Augment({
   name: "test-local-pkg",
   rules: {
     content: "<!-- test-local-pkg:v1.0.0 -->\\nTest rule\\n<!-- /test-local-pkg -->",
@@ -294,8 +294,8 @@ console.log("Local package setup complete");
 
   // Cleanup
   it("cleanup removes the rules", () => {
-    const { Equip } = require("..");
-    const equip = new Equip({
+    const { Augment } = require("..");
+    const equip = new Augment({
       name: "test-local-pkg",
       serverUrl: "https://example.com/unused",
       rules: { content: "x", version: "1.0.0", marker: "test-local-pkg" },

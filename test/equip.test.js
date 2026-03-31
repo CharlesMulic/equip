@@ -11,7 +11,7 @@ const fs = require("fs");
 
 // Public API
 const {
-  Equip,
+  Augment,
   createManualPlatform,
   platformName,
   KNOWN_PLATFORMS,
@@ -62,60 +62,60 @@ const RULES_CONTENT = `<!-- test:v1.0.0 -->
 Always do the thing.
 <!-- /test -->`;
 
-// ─── Equip Class ─────────────────────────────────────────────
+// ─── Augment Class ─────────────────────────────────────────────
 
-describe("Equip class", () => {
+describe("Augment class", () => {
   it("requires name", () => {
-    assert.throws(() => new Equip({}), /name is required/);
+    assert.throws(() => new Augment({}), /name is required/);
   });
 
   it("works without serverUrl (rules/skills only)", () => {
-    const e = new Equip({ name: "test" });
+    const e = new Augment({ name: "test" });
     assert.equal(e.name, "test");
     assert.equal(e.serverUrl, undefined);
   });
 
   it("throws on installMcp without serverUrl", () => {
-    const e = new Equip({ name: "test" });
+    const e = new Augment({ name: "test" });
     const p = mockPlatform();
     assert.throws(() => e.installMcp(p, "key"), /serverUrl is required/);
   });
 
   it("creates instance with serverUrl", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     assert.equal(e.name, "test");
     assert.equal(e.serverUrl, "https://example.com/mcp");
   });
 
   it("detect returns platforms array", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const platforms = e.detect();
     assert.ok(Array.isArray(platforms));
   });
 
   it("buildConfig returns HTTP config", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const config = e.buildConfig("claude-code", "key123");
     assert.equal(config.url, "https://example.com/mcp");
     assert.equal(config.headers.Authorization, "Bearer key123");
   });
 
   it("buildConfig returns VS Code config with type", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const config = e.buildConfig("vscode", "key123");
     assert.equal(config.type, "http");
     assert.equal(config.url, "https://example.com/mcp");
   });
 
   it("buildConfig returns Windsurf config with serverUrl", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const config = e.buildConfig("windsurf", "key123");
     assert.equal(config.serverUrl, "https://example.com/mcp");
     assert.ok(!config.url);
   });
 
   it("buildConfig returns stdio config", () => {
-    const e = new Equip({
+    const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
       stdio: { command: "npx", args: ["-y", "test-mcp"], envKey: "TEST_KEY" },
@@ -125,7 +125,7 @@ describe("Equip class", () => {
   });
 
   it("installMcp and uninstallMcp roundtrip", () => {
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform();
     cleanup(p.configPath);
     e.installMcp(p, "key123");
@@ -139,7 +139,7 @@ describe("Equip class", () => {
   });
 
   it("installRules and uninstallRules roundtrip", () => {
-    const e = new Equip({
+    const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
       rules: { content: RULES_CONTENT, version: "1.0.0", marker: "test" },
@@ -158,14 +158,14 @@ describe("Equip class", () => {
   });
 
   it("installRules skips without rules config", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform();
     const r = e.installRules(p);
     assert.equal(r.action, "skipped");
   });
 
   it("buildConfig uses http_headers for codex", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const config = e.buildConfig("codex", "key123");
     assert.equal(config.url, "https://example.com/mcp");
     assert.equal(config.http_headers.Authorization, "Bearer key123");
@@ -173,14 +173,14 @@ describe("Equip class", () => {
   });
 
   it("buildConfig uses httpUrl for gemini-cli", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const config = e.buildConfig("gemini-cli", "key123");
     assert.equal(config.httpUrl, "https://example.com/mcp");
     assert.equal(config.headers.Authorization, "Bearer key123");
   });
 
   it("buildConfig uses url and headers for junie", () => {
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const config = e.buildConfig("junie", "key123");
     assert.equal(config.url, "https://example.com/mcp");
     assert.equal(config.headers.Authorization, "Bearer key123");
@@ -188,7 +188,7 @@ describe("Equip class", () => {
 
   it("installMcp and readMcp roundtrip with TOML (Codex)", () => {
     const configPath = tmpPath("codex-equip") + ".toml";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
     cleanup(configPath);
     e.installMcp(p, "key123");
@@ -203,7 +203,7 @@ describe("Equip class", () => {
 
   it("installMcp and readMcp roundtrip (Gemini CLI)", () => {
     const configPath = tmpPath("gemini-equip") + ".json";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "gemini-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
     cleanup(configPath);
     e.installMcp(p, "key123");
@@ -217,7 +217,7 @@ describe("Equip class", () => {
 
   it("installMcp and readMcp roundtrip (Junie)", () => {
     const configPath = tmpPath("junie-equip") + ".json";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "junie", configPath, rootKey: "mcpServers", configFormat: "json" });
     cleanup(configPath);
     e.installMcp(p, "key123");
@@ -233,7 +233,7 @@ describe("Equip class", () => {
     const dir = tmpPath("copilot-jb-equip");
     fs.mkdirSync(dir, { recursive: true });
     const configPath = path.join(dir, "mcp.json");
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "copilot-jetbrains", configPath, rootKey: "mcpServers", configFormat: "json" });
     e.installMcp(p, "key123");
     const entry = e.readMcp(p);
@@ -248,7 +248,7 @@ describe("Equip class", () => {
     const dir = tmpPath("copilot-cli-equip");
     fs.mkdirSync(dir, { recursive: true });
     const configPath = path.join(dir, "mcp-config.json");
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "copilot-cli", configPath, rootKey: "mcpServers", configFormat: "json" });
     e.installMcp(p, "key123");
     const entry = e.readMcp(p);
@@ -692,7 +692,7 @@ describe("equip CLI", () => {
 describe("state module", () => {
   const { readState, writeState, trackInstall, trackUninstall, getStatePath } = require("../dist/lib/state");
 
-  // Clean up any state pollution from Equip class tests (they use name: "test", "myserver")
+  // Clean up any state pollution from Augment class tests (they use name: "test", "myserver")
   function cleanupTestState() {
     const state = readState();
     let changed = false;
@@ -916,9 +916,9 @@ describe("resolvePackageVersion", () => {
 
 // ─── Verify Method ──────────────────────────────────────────
 
-describe("Equip.verify()", () => {
+describe("Augment.verify()", () => {
   it("returns ok when MCP is installed", () => {
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform();
     cleanup(p.configPath);
     e.installMcp(p, "key123");
@@ -929,7 +929,7 @@ describe("Equip.verify()", () => {
   });
 
   it("returns not ok when MCP is missing", () => {
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform();
     cleanup(p.configPath);
     // Don't install — verify should fail
@@ -939,7 +939,7 @@ describe("Equip.verify()", () => {
   });
 
   it("checks rules when configured", () => {
-    const e = new Equip({
+    const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
       rules: { content: "<!-- test:v1.0.0 -->\nTest\n<!-- /test -->", version: "1.0.0", marker: "test" },
@@ -958,7 +958,7 @@ describe("Equip.verify()", () => {
   });
 
   it("detects rules version mismatch", () => {
-    const e = new Equip({
+    const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
       rules: { content: "<!-- test:v2.0.0 -->\nTest\n<!-- /test -->", version: "2.0.0", marker: "test" },
@@ -977,7 +977,7 @@ describe("Equip.verify()", () => {
   });
 
   it("returns structured result with platform id", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "cursor" });
     const result = e.verify(p);
     assert.equal(result.platform, "cursor");
@@ -1181,9 +1181,9 @@ describe("buildStdioConfig", () => {
 
 // ─── updateMcpKey ───────────────────────────────────────────
 
-describe("Equip.updateMcpKey()", () => {
+describe("Augment.updateMcpKey()", () => {
   it("updates API key in existing JSON config", () => {
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform();
     cleanup(p.configPath);
     e.installMcp(p, "old-key");
@@ -1198,7 +1198,7 @@ describe("Equip.updateMcpKey()", () => {
 
   it("updates API key in TOML config", () => {
     const configPath = tmpPath("toml-rekey") + ".toml";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
     cleanup(configPath);
     e.installMcp(p, "old-key");
@@ -1467,9 +1467,9 @@ describe("skills.ts", () => {
   });
 });
 
-// ─── Equip Class Skills Integration ─────────────────────────
+// ─── Augment Class Skills Integration ─────────────────────────
 
-describe("Equip class (skills)", () => {
+describe("Augment class (skills)", () => {
   const SKILL_CONFIG = {
     name: "lookup",
     files: [{ path: "SKILL.md", content: "---\nname: lookup\ndescription: Look up docs\n---\n\n# Lookup\n" }],
@@ -1477,7 +1477,7 @@ describe("Equip class (skills)", () => {
 
   it("installSkill and uninstallSkill roundtrip", () => {
     const skillsDir = tmpPath("equip-skill");
-    const e = new Equip({
+    const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
       skill: SKILL_CONFIG,
@@ -1494,14 +1494,14 @@ describe("Equip class (skills)", () => {
   });
 
   it("installSkill skips without skill config", () => {
-    const e = new Equip({ name: "test", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ skillsPath: tmpPath("no-skill") });
     assert.equal(e.installSkill(p).action, "skipped");
   });
 
   it("verify includes skills check", () => {
     const skillsDir = tmpPath("equip-verify-skill");
-    const e = new Equip({
+    const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
       skill: SKILL_CONFIG,
@@ -1525,7 +1525,7 @@ describe("Equip class (skills)", () => {
   });
 
   it("verify detects missing skill", () => {
-    const e = new Equip({
+    const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
       skill: SKILL_CONFIG,
@@ -1576,9 +1576,9 @@ describe("Amazon Q", () => {
     cleanup(p.configPath);
   });
 
-  it("Equip class roundtrip", () => {
+  it("Augment class roundtrip", () => {
     const configPath = tmpPath("amazonq-equip") + ".json";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "amazon-q", configPath, rootKey: "mcpServers" });
     cleanup(configPath);
     e.installMcp(p, "ask_roundtrip");
@@ -1674,9 +1674,9 @@ describe("Tabnine (headersWrapper)", () => {
     cleanup(p.configPath);
   });
 
-  it("Equip class full roundtrip for tabnine", () => {
+  it("Augment class full roundtrip for tabnine", () => {
     const configPath = tmpPath("tabnine-equip") + ".json";
-    const e = new Equip({ name: "myserver", serverUrl: "https://example.com/mcp" });
+    const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "tabnine", configPath, rootKey: "mcpServers" });
     cleanup(configPath);
     e.installMcp(p, "ask_roundtrip");

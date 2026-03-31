@@ -513,10 +513,10 @@ describe("settings.json non-destructive behavior", () => {
   });
 });
 
-// ─── Equip Class Integration Tests ───────────────────────────
+// ─── Augment Class Integration Tests ───────────────────────────
 
-describe("Equip class hooks integration", () => {
-  const { Equip } = require("../index");
+describe("Augment class hooks integration", () => {
+  const { Augment } = require("../index");
   let tmpDir, hookDir;
 
   beforeEach(() => {
@@ -533,12 +533,12 @@ describe("Equip class hooks integration", () => {
   });
 
   it("supportsHooks returns false without hook config", () => {
-    const equip = new Equip({ name: "test", serverUrl: "http://test" });
+    const equip = new Augment({ name: "test", serverUrl: "http://test" });
     assert.equal(equip.supportsHooks({ platform: "claude-code" }), false);
   });
 
   it("supportsHooks returns true with hook config on supported platform", () => {
-    const equip = new Equip({
+    const equip = new Augment({
       name: "test", serverUrl: "http://test",
       hooks: SAMPLE_HOOKS,
     });
@@ -546,7 +546,7 @@ describe("Equip class hooks integration", () => {
   });
 
   it("supportsHooks returns false with hook config on unsupported platform", () => {
-    const equip = new Equip({
+    const equip = new Augment({
       name: "test", serverUrl: "http://test",
       hooks: SAMPLE_HOOKS,
     });
@@ -554,12 +554,12 @@ describe("Equip class hooks integration", () => {
   });
 
   it("installHooks returns null without hook config", () => {
-    const equip = new Equip({ name: "test", serverUrl: "http://test" });
+    const equip = new Augment({ name: "test", serverUrl: "http://test" });
     assert.equal(equip.installHooks({ platform: "claude-code" }, { hookDir }), null);
   });
 
   it("uses hookDir from constructor config", () => {
-    const equip = new Equip({
+    const equip = new Augment({
       name: "test", serverUrl: "http://test",
       hooks: SAMPLE_HOOKS,
       hookDir: hookDir,

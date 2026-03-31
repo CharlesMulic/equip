@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const { Equip, makeResult, NOOP_LOGGER, InstallReportBuilder } = require("../dist/index");
+const { Augment, makeResult, NOOP_LOGGER, InstallReportBuilder } = require("../dist/index");
 const { installMcpJson, installMcpToml, readMcpEntryDetailed } = require("../dist/lib/mcp");
 const { installRules } = require("../dist/lib/rules");
 const { installHooks } = require("../dist/lib/hooks");
@@ -117,17 +117,17 @@ describe("ArtifactResult shape", () => {
     assert.equal(result.action, "skipped");
   });
 
-  it("Equip class installMcp returns ArtifactResult", () => {
+  it("Augment class installMcp returns ArtifactResult", () => {
     const p = mockPlatform();
-    const equip = new Equip({ name: "test", serverUrl: "https://example.com" });
+    const equip = new Augment({ name: "test", serverUrl: "https://example.com" });
     const result = equip.installMcp(p, "key123");
     assert.equal(result.artifact, "mcp");
     assert.equal(result.success, true);
     cleanup(p.configPath);
   });
 
-  it("Equip class installRules returns skipped when no rules configured", () => {
-    const equip = new Equip({ name: "test" });
+  it("Augment class installRules returns skipped when no rules configured", () => {
+    const equip = new Augment({ name: "test" });
     const p = mockPlatform();
     const result = equip.installRules(p);
     assert.equal(result.attempted, false);
@@ -371,9 +371,9 @@ describe("EquipLogger", () => {
     assert.equal(logger.calls[1].level, "warn");
   });
 
-  it("Equip class passes logger to installMcp", () => {
+  it("Augment class passes logger to installMcp", () => {
     const logger = recordingLogger();
-    const equip = new Equip({ name: "test", serverUrl: "https://example.com", logger });
+    const equip = new Augment({ name: "test", serverUrl: "https://example.com", logger });
     const p = mockPlatform();
     equip.installMcp(p, "key123");
 
@@ -383,9 +383,9 @@ describe("EquipLogger", () => {
     cleanup(p.configPath);
   });
 
-  it("Equip class passes logger to installRules", () => {
+  it("Augment class passes logger to installRules", () => {
     const logger = recordingLogger();
-    const equip = new Equip({
+    const equip = new Augment({
       name: "test",
       rules: { content: "<!-- test:v1.0.0 -->\nTest\n<!-- /test -->", version: "1.0.0", marker: "test" },
       logger,

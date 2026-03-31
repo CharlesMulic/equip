@@ -234,14 +234,8 @@ export interface VerifyResult {
 
 // ─── Public API ─────────────────────────────────────────────
 
-/** @deprecated Use Augment instead */
-const Equip = Augment;
-/** @deprecated Use AugmentConfig instead */
-export type EquipConfig = AugmentConfig;
-
 export {
   Augment,
-  Equip,
   // Platform utilities
   createManualPlatform,
   platformName,
