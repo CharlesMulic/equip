@@ -1,7 +1,7 @@
 {
   "name": "@cg3/equip",
   "version": "0.14.0",
-  "description": "Universal MCP + behavioral rules installer for AI coding agents",
+  "description": "Augment your AI agents — MCP servers, behavioral rules, and skills across every platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

@@ -646,7 +646,7 @@ describe("equip CLI", () => {
   it("help shows all dispatch paths", () => {
     const { execSync } = require("child_process");
     const out = execSync("node bin/equip.js --help", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
-    assert.ok(out.includes("<tool>"), "should show tool install path");
+    assert.ok(out.includes("<augment>"), "should show augment install path");
     assert.ok(out.includes("./script.js"), "should show local script path");
     assert.ok(out.includes("uninstall"), "should show uninstall command");
     assert.ok(out.includes("--api-key"), "should show api-key option");
@@ -683,7 +683,7 @@ describe("equip CLI", () => {
     const { execSync } = require("child_process");
     const out = execSync("node bin/equip.js list", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
     assert.ok(out.includes("prior"));
-    assert.ok(out.includes("Registered tools"));
+    assert.ok(out.includes("Registered augments"));
   });
 });
 

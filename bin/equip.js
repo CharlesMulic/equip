@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @cg3/equip CLI — universal MCP tool installer and configuration manager.
+// @cg3/equip CLI — augment your AI agents.
 // Usage: equip <command> [args...]
 
 "use strict";
@@ -71,17 +71,17 @@ function cmdVersion() {
 // ─── Command: --help ────────────────────────────────────────
 
 function cmdHelp() {
-  console.log(`equip v${EQUIP_VERSION} — universal MCP tool installer`);
+  console.log(`equip v${EQUIP_VERSION} — augment your AI agents`);
   console.log("");
   console.log("Usage: equip <command> [options]");
   console.log("");
   console.log("Commands:");
-  console.log("  <tool>           Install a tool from the registry");
+  console.log("  <augment>        Install an augment from the registry");
   console.log("  ./script.js      Run a local setup script (for development)");
   console.log("  .                Run current directory's package bin entry");
-  console.log("  uninstall <tool> Remove an installed tool (alias: unequip)");
-  console.log("  reauth <tool>    Re-authenticate and update credentials");
-  console.log("  refresh [tool]   Refresh expired OAuth tokens");
+  console.log("  uninstall <name> Remove an augment (alias: unequip)");
+  console.log("  reauth <name>    Re-authenticate and update credentials");
+  console.log("  refresh [name]   Refresh expired OAuth tokens");
   console.log("  status           Show all MCP servers across all platforms");
   console.log("  doctor           Validate config integrity and detect drift");
   console.log("  update           Update equip and migrate configs");
@@ -102,12 +102,12 @@ function cmdHelp() {
 
 function cmdList() {
   const { GREEN, DIM, RESET, BOLD } = require("../dist/lib/cli");
-  console.log(`\n${BOLD}Registered tools${RESET}\n`);
+  console.log(`\n${BOLD}Registered augments${RESET}\n`);
   for (const [name, info] of Object.entries(TOOLS)) {
     const desc = info.description ? `  ${DIM}${info.description}${RESET}` : "";
     console.log(`  ${GREEN}${name}${RESET}  →  ${info.package} ${info.command}${desc}`);
   }
-  console.log(`\n  ${DIM}Install: equip <tool>${RESET}`);
+  console.log(`\n  ${DIM}Install: equip <augment>${RESET}`);
   console.log(`  ${DIM}Browse:  https://cg3.io/equip${RESET}\n`);
 }
 

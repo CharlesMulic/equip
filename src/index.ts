@@ -1,5 +1,5 @@
-// @cg3/equip — Universal MCP + behavioral rules installer for AI coding agents.
-// Zero dependencies. Works with Claude Code, Cursor, Windsurf, VS Code, Cline, Roo Code, Codex, Gemini CLI.
+// @cg3/equip — Augment your AI agents with MCP servers, behavioral rules, and skills.
+// Zero dependencies. Works across Claude Code, Cursor, Windsurf, VS Code, Cline, Roo Code, Codex, Gemini CLI, and more.
 
 import * as path from "path";
 import * as os from "os";
@@ -41,7 +41,8 @@ export interface EquipConfig {
 }
 
 /**
- * Equip — configure AI coding tools with your MCP server and behavioral rules.
+ * Equip — install augments (MCP servers, behavioral rules, skills) on AI agents.
+ * The Equip class configures a single augment for installation across platforms.
  */
 class Equip {
   name: string;

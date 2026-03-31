@@ -1,16 +1,20 @@
 # Equip
 
-Cross-platform installer for MCP tools, behavioral rules, agent skills, and lifecycle hooks.
+Equip your AI agents with augments — packages of MCP servers, behavioral rules, and agent skills that work across every platform.
 
 [![npm](https://img.shields.io/npm/v/@cg3/equip)](https://www.npmjs.com/package/@cg3/equip)
 
-[Discord](https://discord.gg/bBcRHT4J) | [Tool Author Guide](./docs/tool-author.md)
+[Discord](https://discord.gg/bBcRHT4J) · [Augment Author Guide](./docs/augment-author.md) · [Browse Augments](https://cg3.io/equip)
 
 ## What It Does
 
-You build an MCP tool. You want it to work on Claude Code, Cursor, VS Code, Windsurf, Cline, Roo Code, Codex, Gemini CLI, and more. Each platform has its own config format, file paths, root keys, URL fields, and quirks.
+You want to add a capability to your AI coding agent — a knowledge base, a documentation fetcher, a code formatter. It should work on Claude Code, Cursor, VS Code, Windsurf, and every other platform. Each platform has its own config format, file paths, and quirks.
 
-Equip handles all of that. One setup script, every platform.
+Equip handles all of that. One command, every platform.
+
+```bash
+equip prior           # Installs MCP server + rules + skills on all detected platforms
+```
 
 ## Install
 
@@ -18,131 +22,118 @@ Equip handles all of that. One setup script, every platform.
 npm install -g @cg3/equip
 ```
 
+Or use without installing:
+
+```bash
+npx @cg3/equip prior
+```
+
 ## Quick Start
 
 ```bash
-equip prior                    # Install a tool
+equip prior                    # Install an augment
 equip status                   # See what's installed across all platforms
-equip doctor                   # Validate config integrity
-equip update                   # Update equip + migrate configs
-unequip prior                  # Remove a tool
+equip doctor                   # Validate config integrity + credential health
+equip update prior             # Re-fetch and re-install latest version
+equip refresh                  # Refresh expired OAuth tokens
+equip reauth prior             # Re-authenticate and rotate credentials
+unequip prior                  # Remove an augment
 ```
 
-## For Tool Authors
+## How Augments Work
 
-```js
-const { Equip } = require("@cg3/equip");
+An augment is a bundle of up to four layers that enhance your agent:
 
-const equip = new Equip({
-  name: "my-tool",
-  serverUrl: "https://mcp.example.com",
-  rules: {
-    content: `<!-- my-tool:v1.0.0 -->\n## My Tool\nAlways check My Tool first.\n<!-- /my-tool -->`,
-    version: "1.0.0",
-    marker: "my-tool",
-  },
-  skill: {
-    name: "lookup",
-    files: [{ path: "SKILL.md", content: "---\nname: lookup\ndescription: Look up docs\n---\n\n# Lookup\n" }],
-  },
-});
+| Layer | What It Does | Coverage |
+|---|---|---|
+| [MCP Server](./docs/mcp-servers.md) | Makes capabilities *available* — agent can call them | All platforms |
+| [Behavioral Rules](./docs/rules.md) | Teaches the agent *when and how* to use them | Most platforms |
+| [Agent Skills](./docs/skills.md) | Gives *detailed knowledge* loaded on demand | Most platforms |
+| [Lifecycle Hooks](./docs/hooks.md) | *Structurally enforces* behavior at key moments | Claude Code |
 
-const platforms = equip.detect();
-for (const p of platforms) {
-  equip.installMcp(p, "api_key_here");
-  equip.installRules(p);
-  equip.installSkill(p);
-}
-```
-
-See the [Tool Author Guide](./docs/tool-author.md) for the complete walkthrough, or run `equip demo` for an interactive example.
-
-## The Four Layers
-
-Equip distributes your tool through four complementary layers:
-
-| Layer | What It Does | Reliability | Coverage |
-|---|---|---|---|
-| [MCP Config](./docs/mcp-servers.md) | Makes the tool *available* — agent can call it | Baseline | All platforms |
-| [Behavioral Rules](./docs/rules.md) | Teaches the agent *when* to call it | Strong | Most platforms + clipboard |
-| [Agent Skills](./docs/skills.md) | Gives the agent *detailed knowledge* of how to use it | Strong (varies) | Most platforms |
-| [Lifecycle Hooks](./docs/hooks.md) | *Structurally enforces* behavior at key moments | Strongest | 1 platform (Claude Code) |
-
-Each layer compensates for the limitations of the one before it. Tool descriptions alone don't reliably trigger behavior. Rules are stronger but can be compacted. Skills add depth but may not auto-invoke on all platforms. Hooks fire automatically, independent of the agent's memory.
-
-No layer is a silver bullet. Together, they give you the best coverage available.
+Each layer compensates for the limitations of the one before it. Together, they give your agent the best coverage available.
 
 ## Supported Platforms
 
 | Platform | MCP | Rules | Skills | Hooks |
 |---|---|---|---|---|
 | Claude Code | Yes | Yes | Yes | Yes |
-| Cursor | Yes | clipboard | Yes | -- |
-| VS Code / Copilot | Yes | clipboard | Yes | -- |
-| Windsurf | Yes | Yes | Yes | -- |
-| Cline | Yes | Yes | Yes | -- |
-| Roo Code | Yes | Yes | Yes | -- |
-| Codex | Yes | Yes | Yes | -- |
-| Gemini CLI | Yes | Yes | Yes | -- |
-| Junie | Yes | -- | -- | -- |
-| Copilot (JetBrains) | Yes | -- | -- | -- |
-| Copilot CLI | Yes | -- | -- | -- |
-| Amazon Q | Yes | -- | -- | -- |
-| Tabnine | Yes | Yes | -- | -- |
+| Cursor | Yes | — | Yes | — |
+| VS Code / Copilot | Yes | — | Yes | — |
+| Windsurf | Yes | Yes | Yes | — |
+| Cline | Yes | Yes | Yes | — |
+| Roo Code | Yes | Yes | Yes | — |
+| Codex | Yes | Yes | Yes | — |
+| Gemini CLI | Yes | Yes | Yes | — |
+| Junie | Yes | — | — | — |
+| Copilot (JetBrains) | Yes | — | — | — |
+| Copilot CLI | Yes | — | — | — |
+| Amazon Q | Yes | — | — | — |
+| Tabnine | Yes | Yes | — | — |
 
-See [Platforms](./docs/platforms.md) for full details — config paths, detection, and per-platform quirks.
+See [Platforms](./docs/platforms.md) for config paths, detection, and per-platform details.
 
 ## CLI Commands
 
 | Command | Description |
 |---|---|
-| `equip <tool>` | Install an MCP tool |
-| `equip status` | Cross-platform MCP server inventory |
-| `equip doctor` | Validate config integrity, detect drift |
-| `equip update` | Update equip and migrate configs |
-| `equip list` | Show registered tools |
-| `equip uninstall <tool>` | Remove a tool (alias: `unequip`) |
-| `equip demo` | Run the interactive demo |
+| `equip <augment>` | Install an augment from the registry |
+| `equip status` | Cross-platform inventory of installed augments |
+| `equip doctor` | Validate config integrity and credential health |
+| `equip update <augment>` | Re-fetch definition and re-install |
+| `equip refresh [augment]` | Refresh expired OAuth tokens |
+| `equip reauth <augment>` | Re-authenticate and update credentials |
+| `equip uninstall <augment>` | Remove an augment (alias: `unequip`) |
+| `equip ./script.js` | Run a local setup script (for development) |
+
+Options: `--verbose`, `--dry-run`, `--api-key <key>`, `--platform <name>`, `--non-interactive`
 
 See [CLI Reference](./docs/cli.md) for details.
 
+## For Augment Authors
+
+Equip distributes your augment through the [registry service](https://cg3.io/equip). Define your MCP server URL, auth requirements, rules, and skills — equip handles platform detection, config translation, credential management, and installation across all platforms.
+
+For local development:
+
+```bash
+equip ./my-augment.js          # Test locally on all detected platforms
+equip .                        # Run current directory's package
+```
+
+See the [Augment Author Guide](./docs/augment-author.md) for the full walkthrough.
+
+## Auth
+
+Equip handles authentication for augments that require it:
+
+- **API key** — prompt or `--api-key` flag
+- **OAuth** — browser PKCE flow with automatic token refresh
+- **OAuth + key exchange** — browser flow → API key (for tools like Prior)
+
+Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-refreshed on every equip command.
+
 ## Documentation
 
-| Guide | Audience |
+| Guide | Description |
 |---|---|
-| [Tool Author Guide](./docs/tool-author.md) | Building a setup script with equip |
-| [Platforms](./docs/platforms.md) | Supported platforms, capabilities, paths |
+| [Augment Author Guide](./docs/augment-author.md) | Build and publish augments |
+| [Platforms](./docs/platforms.md) | Supported platforms, capabilities, config paths |
 | [MCP Servers](./docs/mcp-servers.md) | Config format translation, API reference |
 | [Behavioral Rules](./docs/rules.md) | Marker-based versioned instructions |
 | [Agent Skills](./docs/skills.md) | SKILL.md format, cross-platform distribution |
 | [Lifecycle Hooks](./docs/hooks.md) | Event-driven enforcement scripts |
-| [CLI Reference](./docs/cli.md) | Commands, state tracking, tool registry |
+| [CLI Reference](./docs/cli.md) | Commands, state tracking, options |
 
-## Key Design Decisions
+## Design Principles
 
-- **Zero runtime dependencies** — installs fast, no supply chain risk
-- **Platform registry as single source of truth** — one place for all platform knowledge
+- **Zero runtime dependencies** — fast installs, no supply chain risk
+- **Registry service as source of truth** — augment definitions served from `api.cg3.io/equip`
+- **Single-process installs** — no secondary npm/npx for direct-mode augments
 - **Atomic file writes** — crash-safe config modifications
-- **State reconciliation from disk** — CLI scans what's actually installed, no stale cache
-- **Corrupt config detection** — throws instead of silently overwriting
-
-## Tool Registry
-
-Register a shorthand for your tool so users can run `equip <name>`. Open a PR to [`registry.json`](./registry.json):
-
-```json
-{
-  "my-tool": {
-    "package": "@myorg/my-tool",
-    "command": "setup",
-    "description": "What my tool does",
-    "marker": "my-tool",
-    "hookDir": "~/.my-tool/hooks",
-    "skillName": "my-skill"
-  }
-}
-```
+- **Structured observability** — every install returns typed results with error codes and warnings
+- **Credential lifecycle** — store, validate, refresh, and rotate automatically
 
 ## License
 
-MIT — Charles Mulic
+MIT — Charles Mulic / [CG3 LLC](https://cg3.io)
