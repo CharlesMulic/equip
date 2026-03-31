@@ -603,14 +603,35 @@ async function directInstall(toolDef, parsedArgs) {
     log("");
     const open = await cli.promptEnterOrEsc(`  Press ${BOLD}Enter${RESET} to open your dashboard, or ${BOLD}Esc${RESET} to exit: `);
     if (open) {
+      let dashUrl = toolDef.dashboardUrl;
+
+      // Get one-time login code if the augment supports it
+      if (toolDef.dashboardCodeUrl && apiKey) {
+        try {
+          const codeRes = await fetch(toolDef.dashboardCodeUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: "{}",
+            signal: AbortSignal.timeout(3000),
+          });
+          const codeData = await codeRes.json();
+          if (codeData.ok && codeData.data?.code) {
+            dashUrl = `${toolDef.dashboardUrl}?cli_code=${encodeURIComponent(codeData.data.code)}`;
+          }
+        } catch { /* fall through to plain URL */ }
+      }
+
       const cp = require("child_process");
       try {
         if (process.platform === "win32") {
-          cp.execSync(`start "" "${toolDef.dashboardUrl}"`, { shell: "cmd.exe", stdio: "ignore" });
+          cp.execSync(`start "" "${dashUrl}"`, { shell: "cmd.exe", stdio: "ignore" });
         } else if (process.platform === "darwin") {
-          cp.spawn("open", [toolDef.dashboardUrl], { detached: true, stdio: "ignore" }).unref();
+          cp.spawn("open", [dashUrl], { detached: true, stdio: "ignore" }).unref();
         } else {
-          cp.spawn("xdg-open", [toolDef.dashboardUrl], { detached: true, stdio: "ignore" }).unref();
+          cp.spawn("xdg-open", [dashUrl], { detached: true, stdio: "ignore" }).unref();
         }
       } catch {}
     }

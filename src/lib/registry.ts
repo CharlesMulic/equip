@@ -69,6 +69,7 @@ export interface ToolDefinition {
   // Post-install behavior
   postInstallUrl?: string;
   dashboardUrl?: string;
+  dashboardCodeUrl?: string;
   platformHints?: Record<string, string>;
 }
 
