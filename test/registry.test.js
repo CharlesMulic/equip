@@ -305,9 +305,12 @@ describe("direct-mode CLI", () => {
     // Auth validation URL
     assert.ok(def.auth.validationUrl, "Should have validationUrl");
     assert.ok(def.auth.validationUrl.includes("/v1/agents/me"));
-    // Post-install behavior
-    assert.ok(def.postInstallUrl, "Should have postInstallUrl");
-    assert.ok(def.dashboardUrl, "Should have dashboardUrl");
+    // Post-install actions
+    assert.ok(def.postInstall, "Should have postInstall actions");
+    assert.ok(Array.isArray(def.postInstall));
+    assert.equal(def.postInstall[0].type, "open_with_code");
+    assert.equal(def.postInstall[0].codePath, "data.code");
+    // Platform hints
     assert.ok(def.platformHints, "Should have platformHints");
     assert.ok(def.platformHints.cursor, "Should have Cursor hint");
     // Rules fileName

@@ -35,6 +35,7 @@ export interface AuthConfig {
     keyPath: string;
     conflictCode?: string;
     conflictResolution?: "regenerate" | "prompt";
+    conflictHelpUrl?: string;
     regenerateBody?: Record<string, unknown>;
   };
 }
@@ -742,8 +743,8 @@ async function exchangeTokenForKey(
         cli.log("\n  An API key already exists for this account.");
         cli.log("    [1] Generate a fresh key (old key will stop working)");
         cli.log("    [2] Enter your existing key manually");
-        if (config.body && typeof config.body === "object") {
-          cli.log("        → Check your account dashboard for the existing key");
+        if (config.conflictHelpUrl) {
+          cli.log(`        → Find your key at: ${config.conflictHelpUrl}`);
         }
         const choice = await cli.prompt("  Choice [1]: ");
 
