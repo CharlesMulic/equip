@@ -24,15 +24,11 @@ equip prior --dry-run
 equip prior --platform codex
 ```
 
-Equip looks up the tool in `registry.json`, then runs its setup script via `npx`:
+Equip fetches the augment definition from the registry API (`api.cg3.io/equip`) and installs MCP config, rules, and skills across all detected platforms in a single process.
 
-```bash
-npx -y @cg3/prior-node@latest setup
-```
+Flags: `--verbose`, `--dry-run`, `--api-key <key>`, `--platform <name>`, `--non-interactive`.
 
-Extra arguments are forwarded to the tool's setup script. Common flags like `--dry-run` and `--platform` are conventions that tools typically support.
-
-After the setup script completes, equip reconciles state: it scans all platform configs to determine what was installed and records it in `~/.equip/state.json`.
+After installation, equip reconciles state: it scans all platform configs to determine what was installed and records it in `~/.equip/state.json`.
 
 ### `equip` (no arguments)
 
