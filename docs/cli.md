@@ -1,257 +1,175 @@
 # CLI Reference
 
-Equip provides two CLI commands: `equip` (install and manage) and `unequip` (remove).
+Equip provides two CLI commands: `equip` and `unequip`.
 
-## Installation
+## Install
 
 ```bash
 npm install -g @cg3/equip
 ```
 
-Requires Node.js 18 or later.
+Or use without installing:
 
-You can also run without installing globally via `npx @cg3/equip <command>`.
+```bash
+npx @cg3/equip <augment>
+```
 
 ## Commands
 
-### `equip <tool>`
+### `equip <augment>`
 
-Install an MCP tool by its registered name.
+Install an augment from the registry.
 
 ```bash
-equip prior
-equip prior --dry-run
-equip prior --platform codex
+equip prior                        # Install Prior augment
+equip demo-fetch                   # Install demo-fetch augment
+equip prior --platform claude      # Install on Claude Code only
+equip prior --api-key ask_xxx      # Provide API key (skip prompt)
+equip prior --dry-run              # Preview without writing
+equip prior --verbose              # Show detailed logging
+equip prior --non-interactive      # No prompts (fail if info missing)
 ```
 
 Equip fetches the augment definition from the registry API (`api.cg3.io/equip`) and installs MCP config, rules, and skills across all detected platforms in a single process.
 
-Flags: `--verbose`, `--dry-run`, `--api-key <key>`, `--platform <name>`, `--non-interactive`.
-
-After installation, equip reconciles state: it scans all platform configs to determine what was installed and records it in `~/.equip/state.json`.
+If the API is unreachable, equip falls back to a locally cached definition (`~/.equip/cache/`).
 
 ### `equip` (no arguments)
 
-Shows the status dashboard (same as `equip status`), plus a hint to run `equip --help`.
+Shows the status dashboard (same as `equip status`).
 
 ### `equip status`
 
-Display all MCP servers across all detected platforms. Reads config files directly -- no state file required.
+Show all MCP servers installed across all platforms. Servers installed via equip are tagged `[equip]`; manually configured servers show as `[manual]`.
 
+```bash
+equip status
 ```
-Detected platforms
-  Claude Code            3 MCP servers
-  Cursor                 2 MCP servers
-  Gemini CLI             1 MCP server
-
-MCP servers
-  prior                Claude Code, Cursor, Gemini CLI    [equip]
-  filesystem           Claude Code                        [manual]
-  github               Claude Code, Cursor                [manual]
-
-  3 servers total (1 via equip, 2 manual)
-```
-
-Servers installed via equip are tagged `[equip]`. Others are tagged `[manual]`.
 
 ### `equip doctor`
 
-Validate config integrity and detect drift. For each tracked tool, doctor checks:
+Validate config integrity, detect drift, and check credential health.
 
-- Config file exists and is parseable
-- MCP server entry is present (detects manual removal)
-- Server URL uses HTTPS
-- Rules marker block is present with the expected version
-- Hook scripts exist on disk
-- Skill files exist in the expected location
-- All platform config files are valid JSON/TOML
-
-```
+```bash
 equip doctor
-
-  State file present
-
-Checking tracked tools
-
-  prior (@ cg3/prior-node)
-    Claude Code: config + rules v0.6.0 + 2 hooks + skill "search"
-    Cursor: config
-    Gemini CLI: config + rules v0.6.0
-
-Config file health
-    Claude Code: valid JSON
-    Cursor: valid JSON
-    Gemini CLI: valid JSON
-
-  All 8 checks passed
 ```
 
-### `equip update`
+Checks for each tracked augment:
+- Config file exists and is parseable
+- MCP entry present in config
+- Auth headers present (JWT expiry checked)
+- Rules version matches expected
+- Skills installed
+- Stored credentials valid (OAuth expiry, token health)
 
-Self-update equip via `npm update -g @cg3/equip` and check for config migrations.
+### `equip update [augment]`
 
 ```bash
-equip update
+equip update prior                 # Re-fetch definition, re-install augment
+equip update                       # Self-update equip + migrate configs
 ```
 
-This also updates the `lastUpdated` timestamp in state, which resets the stale version nudge.
+With an augment name: clears the cache, re-fetches the definition from the API, validates stored credentials, and re-installs. Rules update if the registry has a newer version.
 
-### `equip list`
+Without an augment name: updates equip itself and runs config migrations.
 
-Show all tools registered in `registry.json`.
+### `equip refresh [augment]`
 
-```
-Registered tools
-
-  prior  ->  @cg3/prior-node setup    Prior -- agent-centric shared knowledge base
-
-  Install: equip <tool>
-  Add yours: PR to registry.json at github.com/CharlesMulic/equip
-```
-
-### `equip demo`
-
-Run the built-in demo setup script. Demonstrates platform detection, MCP config, rules, and skills installation using a fictional tool.
+Refresh expired OAuth tokens.
 
 ```bash
-equip demo                    # Dry run (safe, no files modified)
-equip demo --live             # Actually write files
-equip demo --uninstall        # Remove demo config
-equip demo --platform codex   # Target a specific platform
+equip refresh                      # Check and refresh all expired tokens
+equip refresh prior                # Refresh a specific augment's token
 ```
 
-### `equip uninstall <tool>` / `unequip <tool>`
+Uses stored refresh tokens to obtain new access tokens. For `oauth` type augments, also updates platform MCP configs with the new token.
 
-Remove a tool from all platforms where it was installed. Uses state tracking to know what to clean up.
+Auto-refresh runs automatically on every equip command — this command is for explicit/manual refresh.
+
+### `equip reauth <augment>`
+
+Re-authenticate from scratch. Deletes stored credentials and re-runs the full auth flow.
+
+```bash
+equip reauth prior                 # Re-run OAuth + key exchange
+equip reauth prior --api-key xxx   # Replace with a specific key
+```
+
+Use when credentials are revoked, you want to switch accounts, or `equip doctor` reports invalid credentials.
+
+### `equip uninstall <augment>`
+
+Remove an augment from all platforms.
 
 ```bash
 equip uninstall prior
-equip uninstall prior --dry-run
-# or equivalently:
-unequip prior
-unequip prior --dry-run
+unequip prior                      # Alias — same behavior
 ```
 
-Removes:
-- MCP config entries from all platform config files
-- Behavioral rules marker blocks from rules files
-- Hook scripts and settings registrations
-- Skills directories
+Removes MCP config entries, rules marker blocks, and skill files from all detected platforms. Does not remove stored credentials (use `equip reauth` to clear those).
 
-After removal, the tool is removed from `~/.equip/state.json`.
+### `equip ./script.js`
 
-```
-unequip prior
-
-  Claude Code: removed config + rules + hooks
-  Cursor: removed config
-  Gemini CLI: removed config + rules
-
-  prior removed from 3 platforms
-```
-
-### `equip --version` / `equip -v`
-
-Print the installed equip version.
-
-### `equip --help` / `equip -h`
-
-Print usage information and list registered tools.
-
-## Tool Registry
-
-The tool registry (`registry.json` in the equip package) maps short names to npm packages and setup commands:
-
-```json
-{
-  "prior": {
-    "package": "@cg3/prior-node",
-    "command": "setup",
-    "description": "Prior -- agent-centric shared knowledge base",
-    "marker": "prior",
-    "hookDir": "~/.prior/hooks",
-    "skillName": "search"
-  }
-}
-```
-
-### Registry Fields
-
-| Field | Required | Description |
-|---|---|---|
-| `package` | Yes | npm package name (run via `npx -y {package}@latest {command}`) |
-| `command` | Yes | Command exported by the package's `bin` field |
-| `description` | No | Short description shown in `equip list` and `equip --help` |
-| `marker` | No | Rules marker name (defaults to tool name). Used by state reconciliation. |
-| `hookDir` | No | Hook script directory (e.g., `~/.prior/hooks`). `~` is expanded at runtime. |
-| `skillName` | No | Skill directory name. Used by state reconciliation. |
-
-### Adding Your Tool
-
-To register your tool, submit a PR adding an entry to `registry.json` at [github.com/CharlesMulic/equip](https://github.com/CharlesMulic/equip). Your npm package must export a CLI command that runs your setup script.
-
-Unregistered tools can still be installed by passing the package name and command directly:
+Run a local setup script for development.
 
 ```bash
-equip @example/my-tool setup
+equip ./my-augment.js              # Run a local script
+equip .                            # Run current directory's package bin entry
 ```
+
+After the script exits, equip reconciles state — scanning all platform configs to track what was installed. This integrates local augments with `equip status`, `equip doctor`, and `equip uninstall`.
+
+### `equip list`
+
+Show augments registered in the local registry.
+
+### `equip demo`
+
+Run the built-in interactive demo that walks through building an augment.
+
+## Options
+
+| Flag | Description |
+|------|-------------|
+| `--verbose` | Show detailed debug logging (API fetches, config reads/writes) |
+| `--dry-run` | Preview what would happen without writing any files |
+| `--api-key <key>` | Provide API key directly (skip auth prompt/OAuth) |
+| `--platform <name>` | Target specific platform(s), comma-separated (e.g., `claude,cursor`) |
+| `--non-interactive` | No prompts — fail if information is missing |
+| `--help`, `-h` | Show help |
+| `--version`, `-v` | Show version |
+
+## Auth
+
+Equip handles authentication for augments that require it. The auth type is declared in the augment's registry definition.
+
+**Resolution order:**
+1. `--api-key` flag (explicit)
+2. Stored credential (`~/.equip/credentials/<augment>.json`)
+3. Environment variable (if `keyEnvVar` is configured)
+4. Interactive flow (prompt for key, or OAuth browser flow)
+
+**Credential storage:**
+
+Credentials are stored at `~/.equip/credentials/` with restrictive file permissions (0600 on Unix). Each augment has its own credential file containing the API key or OAuth tokens.
+
+**Token lifecycle:**
+- `equip refresh` — refresh expired OAuth tokens using stored refresh tokens
+- `equip reauth` — re-run the full auth flow from scratch
+- `equip doctor` — reports credential health and expiry
+- Auto-refresh runs on every equip command
 
 ## State Tracking
 
-Equip tracks installed tools in `~/.equip/state.json`. The state file is written exclusively by the CLI (not by the Equip library class) via reconciliation after each tool dispatch.
+Equip tracks installed augments in `~/.equip/state.json`. State is reconciled from disk — equip scans what's actually installed in platform configs rather than relying on a cache.
 
-### State Structure
+State is used by:
+- `equip status` — shows what's installed and where
+- `equip doctor` — validates tracked augments
+- `equip uninstall` — knows what to remove
 
-```json
-{
-  "equipVersion": "0.9.0",
-  "lastUpdated": "2026-03-29T10:00:00.000Z",
-  "tools": {
-    "prior": {
-      "package": "@cg3/prior-node",
-      "installedAt": "2026-03-28T15:00:00.000Z",
-      "updatedAt": "2026-03-29T10:00:00.000Z",
-      "platforms": {
-        "claude-code": {
-          "configPath": "/home/user/.claude.json",
-          "transport": "http",
-          "rulesPath": "/home/user/.claude/CLAUDE.md",
-          "rulesVersion": "0.6.0",
-          "hookDir": "/home/user/.prior/hooks",
-          "hookScripts": ["check-search.js", "remind-search.js"],
-          "skillsPath": "/home/user/.claude/skills/prior",
-          "skillName": "search",
-          "equipVersion": "0.9.0"
-        },
-        "cursor": {
-          "configPath": "/home/user/.cursor/mcp.json",
-          "transport": "http",
-          "equipVersion": "0.9.0"
-        }
-      }
-    }
-  }
-}
-```
+## Cache
 
-State is used by `equip doctor` (to know what to verify), `equip uninstall` (to know what to remove), and `equip status` (to tag servers as `[equip]` vs `[manual]`).
+Tool definitions fetched from the API are cached at `~/.equip/cache/<augment>.json`. The cache is used as a fallback when the API is unreachable.
 
-### Reconciliation
-
-State is not written during tool setup. Instead, after a tool's setup script finishes, equip's CLI runs `reconcileState()` which scans all platform configs to determine what's actually on disk. This approach avoids version skew between the CLI's equip version and a tool's bundled equip version.
-
-Reconciliation checks:
-- MCP config entries across all platforms
-- Rules marker blocks in rules files
-- Hook scripts in the hook directory
-- Skill files in skill directories
-
-## Stale Version Nudge
-
-If the `lastUpdated` timestamp in state is more than 14 days old, equip prints a reminder:
-
-```
-equip v0.9.0 is 21 days old -- run "equip update" for platform fixes
-```
-
-This nudge appears for all commands except `update`, `--version`, and `--help`. Running `equip update` resets the timer.
+`equip update <augment>` clears the cache before re-fetching to ensure the latest definition.

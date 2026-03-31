@@ -1,8 +1,8 @@
 # MCP Server Configuration
 
-Equip translates a single MCP server definition into the correct format for each platform. You provide the server URL and API key once; equip handles the per-platform differences in field names, root keys, config formats, and file locations.
+Augment translates a single MCP server definition into the correct format for each platform. You provide the server URL and API key once; equip handles the per-platform differences in field names, root keys, config formats, and file locations.
 
-## What Equip Does
+## What Augment Does
 
 Given an MCP server URL and an API key, equip:
 
@@ -11,7 +11,7 @@ Given an MCP server URL and an API key, equip:
 3. Reads the existing config file (preserving other entries)
 4. Merges the new entry and writes the file atomically
 
-This means you never need to know that Windsurf uses `serverUrl` while Gemini CLI uses `httpUrl`, or that Codex uses TOML while everyone else uses JSON. Equip handles all of it.
+This means you never need to know that Windsurf uses `serverUrl` while Gemini CLI uses `httpUrl`, or that Codex uses TOML while everyone else uses JSON. Augment handles all of it.
 
 ## Format Differences
 
@@ -61,11 +61,11 @@ See [platforms.md](./platforms.md) for the complete matrix.
 
 ## HTTP vs Stdio Transport
 
-Equip supports both HTTP and stdio transports.
+Augment supports both HTTP and stdio transports.
 
 ### HTTP Transport (default)
 
-The server runs remotely. Equip writes the platform-specific URL and auth headers:
+The server runs remotely. Augment writes the platform-specific URL and auth headers:
 
 ```json
 {
@@ -83,7 +83,7 @@ The server runs remotely. Equip writes the platform-specific URL and auth header
 
 ### Stdio Transport
 
-The server runs as a local subprocess. Equip writes the command, args, and environment variables:
+The server runs as a local subprocess. Augment writes the command, args, and environment variables:
 
 ```json
 {
@@ -133,7 +133,7 @@ If something goes wrong, the `.bak` file remains as a recovery point.
 
 ### Config Merging
 
-Equip never overwrites the entire config file. It:
+Augment never overwrites the entire config file. It:
 
 1. Reads the existing file (or starts with `{}` if the file doesn't exist)
 2. Ensures the root key exists (e.g., `mcpServers`)
@@ -152,7 +152,7 @@ For TOML files (Codex), if the server entry already exists, it is removed first,
 
 ### Corrupt Config Handling
 
-Equip distinguishes between missing and corrupt config files:
+Augment distinguishes between missing and corrupt config files:
 
 - **Missing file** -- creates a new file with just the server entry
 - **Corrupt file** (exists but cannot be parsed as JSON) -- throws an error with guidance:
@@ -162,7 +162,7 @@ Cannot install to ~/.cursor/mcp.json: Invalid JSON: Unexpected token ...
 Fix the file manually or restore from ~/.cursor/mcp.json.bak if available.
 ```
 
-Equip will never silently overwrite a corrupt file. This protects against data loss if a config file was hand-edited with a syntax error.
+Augment will never silently overwrite a corrupt file. This protects against data loss if a config file was hand-edited with a syntax error.
 
 ## API Reference
 
@@ -171,7 +171,7 @@ Equip will never silently overwrite a corrupt file. This protects against data l
 Build a config entry without writing it. Useful for previewing what equip would write.
 
 ```typescript
-const equip = new Equip({ name: "my-tool", serverUrl: "https://api.example.com/mcp" });
+const equip = new Augment({ name: "my-tool", serverUrl: "https://api.example.com/mcp" });
 
 // HTTP config for Claude Code
 equip.buildConfig("claude-code", "sk-xxx");
@@ -181,7 +181,7 @@ equip.buildConfig("claude-code", "sk-xxx");
 equip.buildConfig("windsurf", "sk-xxx");
 // { serverUrl: "https://api.example.com/mcp", headers: { Authorization: "Bearer sk-xxx" } }
 
-// Stdio config (requires stdio in EquipConfig)
+// Stdio config (requires stdio in AugmentConfig)
 equip.buildConfig("claude-code", "sk-xxx", "stdio");
 // { command: "npx", args: ["-y", "@example/my-mcp@latest"], env: { MY_API_KEY: "sk-xxx" } }
 ```
@@ -248,7 +248,7 @@ import { buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, up
 
 ## TOML Support
 
-Codex uses TOML config files. Equip includes a minimal zero-dependency TOML handler that supports the flat table structure used by MCP config:
+Codex uses TOML config files. Augment includes a minimal zero-dependency TOML handler that supports the flat table structure used by MCP config:
 
 ```toml
 [mcp_servers.my-tool]

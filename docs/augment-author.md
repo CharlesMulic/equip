@@ -1,420 +1,291 @@
-# Building Augments with Equip
+# Building Augments
 
-This guide walks through building an augment — a package of MCP config, behavioral rules, and skills distributable across AI coding platforms.
+This guide walks through building an augment — a package of MCP config, behavioral rules, and skills that enhances AI agents across platforms.
 
-We'll start with the simplest thing (a behavioral rule), add a skill, then add MCP server config. Each layer works independently. Use what you need.
+## What's in an Augment
 
-## Prerequisites
+An augment can include any combination of:
 
-Install equip globally and as a local dependency:
+| Layer | Purpose | Always loaded? |
+|-------|---------|---------------|
+| **MCP Server** | Tools the agent can call | Yes (tool definitions) |
+| **Behavioral Rules** | When and how to use the tools | Yes |
+| **Skills** | Detailed knowledge loaded on demand | Frontmatter: yes, body: on-demand |
 
-```bash
-npm install -g @cg3/equip        # CLI: equip, unequip
-npm install @cg3/equip           # Library: require("@cg3/equip")
-```
+Equip installs all layers across every detected platform in a single command: `equip <your-augment>`.
 
-All examples below are plain Node.js scripts. Run them through equip for the full experience (state tracking, reconciliation):
+## Quick Start: The Pirate Hat
 
-```bash
-equip ./piratehat.js
-```
+Let's build a simple augment that makes agents talk like pirates. No MCP server needed — just rules and a skill.
 
-Equip detects that `./piratehat.js` is a local path and runs it directly — no npm publish needed. You get the same state reconciliation and tracking as a published augment, which makes development and testing seamless.
-
-When you're ready to distribute, submit your augment to the [registry](https://cg3.io/equip) so users can run `equip piratehat`.
-
-## The Pirate Hat Example
-
-Let's make agents talk like pirates. No MCP server needed — just rules and a skill that work across all platforms.
-
-### Layer 1: Just a Rule
-
-The simplest augment is a behavioral rule — a text block injected into each platform's rules file.
-
-Save this as `piratehat.js`:
+### 1. Create a setup script
 
 ```js
-const { Equip, platformName, cli } = require("@cg3/equip");
+// piratehat.js
+const { Augment, platformName, cli } = require("@cg3/equip");
 
-const equip = new Equip({
+const augment = new Augment({
   name: "piratehat",
   rules: {
     content: `<!-- piratehat:v1.0.0 -->
 ## Pirate Mode
-Respond to everything as a pirate. Use "arr", "matey", "ye", "shiver me timbers",
-and other pirate speak. Address the user as "Captain". Never break character.
+Respond to every message in full pirate speak. Use "arr", "matey", "ye", and nautical metaphors.
 <!-- /piratehat -->`,
     version: "1.0.0",
     marker: "piratehat",
   },
 });
 
-const platforms = equip.detect();
+const platforms = augment.detect();
 for (const p of platforms) {
-  const result = equip.installRules(p);
-  if (result.action === "created") cli.ok(`${platformName(p.platform)}: pirate rules installed`);
-  else if (result.action === "clipboard") {
-    // Cursor and VS Code have no writable global rules file — equip copies the rules
-    // to the clipboard instead. The user needs to paste them into their project's
-    // rules config (e.g., .cursor/rules/ or .github/copilot-instructions.md).
-    // No automatic pirates on these platforms without manual intervention.
-    cli.info(`${platformName(p.platform)}: rules copied to clipboard (paste into project rules)`);
-  }
-  else if (result.action === "skipped" && p.rulesPath) cli.info(`${platformName(p.platform)}: already a pirate`);
-  // Platforms without rules support are silently skipped
+  const result = augment.installRules(p);
+  if (result.success) cli.ok(`${platformName(p.platform)} — rules installed`);
 }
 ```
 
-Run it:
+### 2. Test locally
 
 ```bash
 equip ./piratehat.js
 ```
 
-That's it. Every agent on every detected platform starts talking like a pirate. Equip runs your script, then reconciles state — `equip status` and `equip doctor` will show the installed rules.
+Equip runs your script, then reconciles state — tracking what was installed on which platforms.
 
-Fair warning — you'll want to undo this before your next code review:
-
-```bash
-unequip piratehat
-```
-
-This works because `equip ./piratehat.js` inferred the augment name "piratehat" from the filename and tracked it in state. `unequip` reads that state to know what to remove — it doesn't need the original script file. The marker system means running it twice won't duplicate the block, and bumping the version will cleanly replace it.
-
-**How rules work across platforms:**
-- Claude Code: appended to `~/.claude/CLAUDE.md`
-- Windsurf: appended to `~/.codeium/windsurf/memories/global_rules.md`
-- Codex: appended to `~/.codex/AGENTS.md`
-- Gemini CLI: appended to `~/.gemini/GEMINI.md`
-- Cline: written as standalone `piratehat.md` in `~/Documents/Cline/Rules/`
-- Roo Code: written as standalone `piratehat.md` in `~/.roo/rules/`
-- Cursor, VS Code: copied to clipboard (no writable global rules file)
-
-See [Behavioral Rules](./rules.md) for the full reference.
-
-### Layer 2: Add a Skill
-
-A skill gives agents deeper knowledge — procedural instructions they load on demand. Unlike rules (always in context), skills are discovered by description and loaded when relevant.
-
-```js
-const equip = new Equip({
-  name: "piratehat",
-  rules: {
-    // ... same as above ...
-  },
-  skill: {
-    name: "pirate-speak",
-    files: [{
-      path: "SKILL.md",
-      content: `---
-name: pirate-speak
-description: Translate code comments, commit messages, and documentation into pirate speak. Use when the user asks for pirate mode or when piratehat rules are active.
-metadata:
-  author: piratehat
-  version: "1.0.0"
----
-
-# Pirate Speak Guide
-
-## Vocabulary
-| Normal | Pirate |
-|---|---|
-| Hello | Ahoy |
-| Yes | Aye |
-| Friend | Matey |
-| Money/cost | Doubloons |
-| Bug | Barnacle |
-| Deploy | Set sail |
-| Database | Treasure chest |
-| Error | Kraken attack |
-| Refactor | Swab the deck |
-
-## Commit Messages
-- "Fix login bug" -> "Vanquish the login kraken"
-- "Add tests" -> "Fortify the ship's defenses"
-- "Update deps" -> "Resupply the vessel"
-
-## Code Comments
-Use pirate metaphors but keep them understandable:
-- "// Initialize connection pool" -> "// Ready the fleet for sail"
-- "// Handle edge case" -> "// Watch for reefs, matey"
-`,
-    }],
-  },
-});
-
-// Install both rules + skills
-const platforms = equip.detect();
-for (const p of platforms) {
-  equip.installRules(p);
-  equip.installSkill(p);
-}
-```
-
-Now agents have both the behavioral rule (always active, tells them to be a pirate) and the skill (loaded on demand, gives them the vocabulary and patterns).
-
-**Why both?** The rule drives behavior. The skill provides depth. On platforms where skill auto-discovery is unreliable (Cursor, Windsurf), the rule ensures the agent at least knows about pirate mode. On platforms with good skill discovery (Claude Code, VS Code), the skill gives the agent a reference guide it can consult.
-
-**How skills work across platforms:**
-- The SKILL.md format is universal — same file works everywhere
-- Equip installs to each platform's native skills directory
-- Agents load the description at startup, full content on demand
-- See [Agent Skills](./skills.md) for how loading works per platform
-
-### Layer 3: Add an MCP Server
-
-If your augment has a live API (search, database, external service), add MCP config so agents can call it:
-
-```js
-const equip = new Equip({
-  name: "piratehat",
-  serverUrl: "https://api.piratehat.com/mcp",  // Your actual MCP endpoint
-  rules: { /* ... */ },
-  skill: { /* ... */ },
-});
-
-for (const p of platforms) {
-  equip.installMcp(p, apiKey);    // Format-translated per platform
-  equip.installRules(p);
-  equip.installSkill(p);
-}
-```
-
-This is where equip's format translation matters most. Each platform has its own opinions about MCP config — root keys, URL fields, type fields, header fields, JSON vs TOML. Equip handles all of it.
-
-See [MCP Servers](./mcp-servers.md) for the full reference.
-
-### Layer 4: Hooks (Optional, Claude Code Only)
-
-Lifecycle hooks fire automatically at platform events — after an augment call, when the agent stops, on errors. They're the strongest enforcement but currently only Claude Code supports them.
-
-```js
-const equip = new Equip({
-  name: "piratehat",
-  serverUrl: "https://api.piratehat.com/mcp",
-  rules: { /* ... */ },
-  skill: { /* ... */ },
-  hooks: [{
-    event: "Stop",
-    name: "pirate-reminder",
-    script: `console.log("Arr! Don't forget to talk like a pirate, Captain!");`,
-  }],
-});
-
-for (const p of platforms) {
-  equip.installMcp(p, apiKey);
-  equip.installRules(p);
-  equip.installSkill(p);
-  equip.installHooks(p);   // Silently skips non-Claude platforms
-}
-```
-
-See [Lifecycle Hooks](./hooks.md) for events and patterns.
-
----
-
-## Making It Real
-
-The pirate example is fun but the pattern is the same for real tools. Here's what a production setup script typically adds:
-
-### Authentication
-
-Equip doesn't handle auth — your setup script does. Common patterns:
-
-```js
-// Environment variable
-const apiKey = process.env.MY_TOOL_API_KEY;
-
-// Interactive prompt
-const apiKey = await cli.prompt("  Enter your API key: ");
-
-// Generated during setup (call your API)
-const { apiKey } = await registerAgent(userEmail);
-```
-
-### Platform Override
-
-Let users target a specific platform:
-
-```js
-const platformArg = process.argv.find(a => a.startsWith("--platform="))?.split("=")[1];
-const platforms = platformArg
-  ? [createManualPlatform(platformArg)]
-  : equip.detect();
-```
-
-### Verification
-
-Check that everything was installed correctly:
-
-```js
-for (const p of platforms) {
-  const result = equip.verify(p);
-  if (result.ok) {
-    cli.ok(`${platformName(p.platform)}: all checks passed`);
-  } else {
-    for (const check of result.checks.filter(c => !c.ok)) {
-      cli.fail(`${platformName(p.platform)}: ${check.detail}`);
-    }
-  }
-}
-```
-
-### Uninstall
-
-```js
-if (process.argv.includes("--uninstall")) {
-  for (const p of platforms) {
-    equip.uninstallMcp(p);
-    equip.uninstallRules(p);
-    equip.uninstallSkill(p);
-    equip.uninstallHooks(p);
-  }
-}
-```
-
-### Dry Run
-
-```js
-const dryRun = process.argv.includes("--dry-run");
-for (const p of platforms) {
-  equip.installMcp(p, apiKey, { dryRun });
-  equip.installRules(p, { dryRun });
-  equip.installSkill(p, { dryRun });
-  equip.installHooks(p, { dryRun });
-}
-```
-
----
-
-## From Local Script to `equip <name>`
-
-So far everything has been a local script you run with `equip ./piratehat.js`. Here's how to go from that to `equip piratehat`:
-
-### Step 1: Make it an npm package
-
-Move your script to `bin/setup.js` and add a package.json:
-
-```
-piratehat/
-  bin/setup.js       # Your setup script (the code from above)
-  package.json
-```
-
-You can test the package structure locally before publishing:
+### 3. Verify
 
 ```bash
-cd piratehat
-equip .              # Reads package.json, finds bin entry, runs it
+equip status    # Shows piratehat across platforms
+equip doctor    # Validates config integrity
 ```
 
-### Step 2: Publish to npm
+### 4. Publish
 
-```json
-{
-  "name": "piratehat",
-  "version": "1.0.0",
-  "bin": { "piratehat": "./bin/setup.js" },
-  "dependencies": { "@cg3/equip": "^0.9.0" }
-}
-```
-
-```bash
-npm publish
-```
-
-At this point, users can install your augment with `npx piratehat` — they don't even need equip installed. But if they DO have equip, you can register a shorthand.
-
-### Step 3: Register in equip
-
-Open a PR to [registry.json](https://github.com/CharlesMulic/equip/blob/main/registry.json):
-
-```json
-{
-  "piratehat": {
-    "package": "piratehat",
-    "command": "setup",
-    "description": "Make your AI agents talk like pirates",
-    "marker": "piratehat",
-    "skillName": "pirate-speak"
-  }
-}
-```
-
-Now users can install with:
+When you're ready to distribute, submit your augment definition to the [registry](https://cg3.io/equip). Your augment becomes installable by anyone:
 
 ```bash
 equip piratehat
 ```
 
----
+## Adding an MCP Server
 
-## Reference
-
-### EquipConfig
+If your augment has a live API, add a server URL:
 
 ```js
-new Equip({
-  name: "my-tool",              // Required: server name in MCP configs
-  serverUrl: "https://...",     // Required (unless stdio provided)
-  stdio: {                      // Alternative to serverUrl
-    command: "npx",
-    args: ["-y", "@myorg/my-tool-mcp"],
-    envKey: "MY_TOOL_API_KEY",
-  },
-  rules: {                      // Optional
-    content: "<!-- marker:v1.0 -->...<!-- /marker -->",
+const augment = new Augment({
+  name: "my-augment",
+  serverUrl: "https://mcp.example.com",
+  rules: {
+    content: `<!-- my-augment:v1.0.0 -->\nUse my-augment for X.\n<!-- /my-augment -->`,
     version: "1.0.0",
-    marker: "my-tool",
-    fileName: "my-tool.md",     // For directory-based platforms
-    clipboardPlatforms: ["cursor", "vscode"],
+    marker: "my-augment",
   },
-  skill: {                      // Optional
-    name: "my-skill",
-    files: [
-      { path: "SKILL.md", content: "..." },
-      { path: "scripts/helper.sh", content: "..." },
-    ],
-  },
-  hooks: [{                     // Optional
-    event: "PostToolUseFailure",
-    matcher: "Bash",
-    name: "error-handler",
-    script: "console.log('Check my-tool for solutions');",
-  }],
-  hookDir: "~/.my-tool/hooks",  // Default: ~/.{name}/hooks
 });
+
+const platforms = augment.detect();
+for (const p of platforms) {
+  augment.installMcp(p, apiKey);   // MCP config with auth header
+  augment.installRules(p);          // Behavioral rules
+}
 ```
 
-### Instance Methods
+Equip translates the config for each platform — different root keys, URL field names, header formats, and type fields are handled automatically.
 
-| Method | Returns | Description |
-|---|---|---|
-| `detect()` | `DetectedPlatform[]` | Detect installed platforms |
-| `installMcp(platform, apiKey, options?)` | `{ success, method }` | Install MCP config |
-| `uninstallMcp(platform, dryRun?)` | `boolean` | Remove MCP config |
-| `updateMcpKey(platform, apiKey, transport?)` | `{ success, method }` | Update API key |
-| `readMcp(platform)` | `object \| null` | Read existing MCP entry |
-| `buildConfig(platformId, apiKey, transport?)` | `object` | Build config without writing |
-| `installRules(platform, options?)` | `{ action }` | Install behavioral rules |
-| `uninstallRules(platform, dryRun?)` | `boolean` | Remove behavioral rules |
-| `installSkill(platform, options?)` | `{ action }` | Install agent skill |
-| `uninstallSkill(platform, dryRun?)` | `boolean` | Remove agent skill |
-| `hasSkill(platform)` | `boolean` | Check if skill is installed |
-| `installHooks(platform, options?)` | `object \| null` | Install lifecycle hooks |
-| `uninstallHooks(platform, options?)` | `boolean` | Remove hooks |
-| `hasHooks(platform, options?)` | `boolean` | Check hooks installed |
-| `supportsHooks(platform)` | `boolean` | Check platform supports hooks |
-| `verify(platform)` | `VerifyResult` | Verify all installed artifacts |
+## Adding a Skill
 
-### The Demo
+Skills give agents detailed knowledge that loads on demand:
 
-The built-in demo is a complete, annotated setup script:
+```js
+const augment = new Augment({
+  name: "my-augment",
+  serverUrl: "https://mcp.example.com",
+  skill: {
+    name: "lookup",
+    files: [{
+      path: "SKILL.md",
+      content: `---
+name: lookup
+description: Look up documentation from the my-augment knowledge base
+---
+
+# Lookup Skill
+
+Use this when the user asks about...`,
+    }],
+  },
+});
+
+const platforms = augment.detect();
+for (const p of platforms) {
+  augment.installMcp(p, apiKey);
+  augment.installSkill(p);
+}
+```
+
+The skill's `description` in the YAML frontmatter is always loaded (agents see it at startup). The full body loads on demand when the description matches the task.
+
+## The Registry (Preferred Path)
+
+The local setup script workflow above is for **development and testing**. For distribution, augments are defined as JSON in the registry service at `api.cg3.io/equip`.
+
+A registry definition includes everything equip needs to install the augment:
+
+```json
+{
+  "name": "my-augment",
+  "displayName": "My Augment",
+  "description": "Does X for AI agents",
+  "installMode": "direct",
+  "transport": "http",
+  "serverUrl": "https://mcp.example.com",
+
+  "auth": {
+    "type": "api_key",
+    "keyPrompt": "Enter your My Augment API key",
+    "keyHelpUrl": "https://example.com/keys",
+    "keyEnvVar": "MY_AUGMENT_KEY"
+  },
+
+  "rules": {
+    "content": "<!-- my-augment:v1.0.0 -->\nUse my-augment...\n<!-- /my-augment -->",
+    "version": "1.0.0",
+    "marker": "my-augment",
+    "fileName": "my-augment.md"
+  },
+
+  "skills": [{
+    "name": "lookup",
+    "files": [{ "path": "SKILL.md", "content": "---\nname: lookup\n..." }]
+  }],
+
+  "dashboardUrl": "https://example.com/dashboard",
+  "platformHints": {
+    "cursor": "Restart Cursor to pick up the new MCP configuration."
+  }
+}
+```
+
+When a user runs `equip my-augment`, equip fetches this definition from the API and installs everything in-process — MCP config, auth (prompting for API key), rules, and skills across all detected platforms.
+
+Submit your definition at [cg3.io/equip](https://cg3.io/equip).
+
+## Auth Types
+
+The `auth` block in your registry definition declares what authentication your augment needs:
+
+| Type | Use case | What happens |
+|------|----------|-------------|
+| `"none"` | Public servers | No auth prompt |
+| `"api_key"` | User has a key | Prompt or `--api-key` flag |
+| `"oauth"` | OAuth 2.1 browser flow | PKCE flow, token in config |
+| `"oauth_to_api_key"` | OAuth + key exchange | Browser flow, exchange for long-lived key |
+
+For `api_key`:
+```json
+{
+  "auth": {
+    "type": "api_key",
+    "keyPrompt": "Enter your API key",
+    "keyEnvVar": "MY_KEY",
+    "keyHelpUrl": "https://example.com/keys",
+    "validationUrl": "https://example.com/api/me"
+  }
+}
+```
+
+For `oauth_to_api_key` (like Prior):
+```json
+{
+  "auth": {
+    "type": "oauth_to_api_key",
+    "oauth": {
+      "authorizeUrl": "https://example.com/authorize",
+      "tokenUrl": "https://example.com/token",
+      "clientId": "my-cli"
+    },
+    "keyExchange": {
+      "url": "https://example.com/api/cli-key",
+      "method": "POST",
+      "tokenHeader": "Authorization",
+      "keyPath": "data.apiKey"
+    }
+  }
+}
+```
+
+Equip handles the full OAuth PKCE flow, key exchange, credential storage (`~/.equip/credentials/`), and automatic token refresh.
+
+## Local Development
+
+During development, use `equip ./script.js` to test your augment locally:
 
 ```bash
-equip demo               # Dry run (safe — nothing written)
-equip demo --live        # Actually write files
-equip demo --uninstall   # Clean up
+equip ./piratehat.js              # Run a local script
+equip .                           # Run current directory's package bin
+equip piratehat --dry-run         # Preview without writing (registry augment)
+equip piratehat --verbose         # Show detailed logging
+equip piratehat --platform claude # Target specific platform
 ```
 
-The demo source ([demo/setup.js](../demo/setup.js)) is designed to be copied and adapted.
+Equip provides the same state tracking and management for locally-developed augments as for registry augments:
+
+```bash
+equip status                      # See what's installed
+equip doctor                      # Validate config integrity
+equip uninstall piratehat         # Clean removal
+```
+
+## AugmentConfig Reference
+
+```typescript
+interface AugmentConfig {
+  name: string;                    // Augment name (used in MCP configs and state)
+  serverUrl?: string;              // MCP server endpoint (required for installMcp)
+  rules?: {
+    content: string;               // Markdown with marker tags
+    version: string;               // Semantic version
+    marker: string;                // Marker name for <!-- marker:vX.X.X --> tags
+    fileName?: string;             // Custom filename for directory platforms
+  };
+  stdio?: {
+    command: string;               // Command to run (e.g., "node")
+    args: string[];                // Arguments (e.g., ["server.js"])
+    envKey: string;                // Environment variable for API key
+  };
+  skill?: {
+    name: string;                  // Skill directory name
+    files: Array<{
+      path: string;                // Relative path (e.g., "SKILL.md")
+      content: string;             // File content
+    }>;
+  };
+  logger?: EquipLogger;           // Optional structured logging
+}
+```
+
+## Instance Methods
+
+All install methods return `ArtifactResult`:
+
+```typescript
+interface ArtifactResult {
+  artifact: "mcp" | "rules" | "skills" | "hooks";
+  attempted: boolean;
+  success: boolean;
+  action: "created" | "updated" | "skipped" | "clipboard" | "failed";
+  errorCode?: string;              // Structured code for telemetry
+  error?: string;                  // Human-readable message
+  warnings: EquipWarning[];
+}
+```
+
+| Method | What it does |
+|--------|-------------|
+| `detect()` | Returns detected platforms |
+| `installMcp(platform, apiKey, options?)` | Write MCP config to platform |
+| `installRules(platform, options?)` | Write behavioral rules |
+| `installSkill(platform, options?)` | Write skill files |
+| `uninstallMcp(platform)` | Remove MCP config entry |
+| `uninstallRules(platform)` | Remove rules marker block |
+| `uninstallSkill(platform)` | Remove skill directory |
+| `verify(platform)` | Check all artifacts are correctly installed |
+| `readMcp(platform)` | Read existing MCP config entry |

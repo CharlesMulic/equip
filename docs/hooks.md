@@ -2,7 +2,7 @@
 
 Hooks are scripts that run at specific lifecycle events in an AI coding platform. They provide structural enforcement -- rather than relying on the agent to remember instructions, hooks inject reminders and checks at precisely the right moments.
 
-Currently, **Claude Code is the only platform that supports hooks**. Equip's hook system is designed to extend to other platforms as they add support.
+Currently, **Claude Code is the only platform that supports hooks**. The Augment class supports hooks via the library API, but **hooks are not installed by direct-mode** (`equip <augment>`). They are available for augments using the library directly (local setup scripts). This will be revisited as more platforms add hook support.
 
 ## What Hooks Are
 
@@ -36,7 +36,7 @@ Claude Code supports 12 lifecycle events:
 
 ## How Hooks Are Installed
 
-Equip installs hooks in two steps:
+Augment installs hooks in two steps:
 
 ### 1. Script Files
 
@@ -48,11 +48,11 @@ Hook scripts are written to a configurable directory (default: `~/.{toolName}/ho
   remind-search.js
 ```
 
-Each file is a self-contained Node.js script. Equip writes the `script` field from your `HookDefinition` to `{hookDir}/{name}.js`.
+Each file is a self-contained Node.js script. Augment writes the `script` field from your `HookDefinition` to `{hookDir}/{name}.js`.
 
 ### 2. Settings Registration
 
-Equip registers the hooks in Claude Code's `~/.claude/settings.json`:
+Augment registers the hooks in Claude Code's `~/.claude/settings.json`:
 
 ```json
 {
@@ -124,7 +124,7 @@ const hooks: HookDefinition[] = [
 Install hook scripts and register them in platform settings.
 
 ```typescript
-const equip = new Equip({
+const equip = new Augment({
   name: "my-tool",
   serverUrl: "https://...",
   hooks: hookDefs,

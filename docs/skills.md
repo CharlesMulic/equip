@@ -1,6 +1,6 @@
 # Agent Skills
 
-Skills are structured knowledge files that AI agents auto-discover and load on demand. They follow the [Agent Skills specification](https://agentskills.io/specification) and use the SKILL.md format. Equip installs skill files to each platform's native skills directory.
+Skills are structured knowledge files that AI agents auto-discover and load on demand. They follow the [Agent Skills specification](https://agentskills.io/specification) and use the SKILL.md format. Augment installs skill files to each platform's native skills directory.
 
 ## What Skills Are
 
@@ -34,9 +34,9 @@ Detailed instructions the agent follows when the skill is active.
 
 The `name` and `description` fields are required. Everything else is optional.
 
-## How Equip Installs Skills
+## How Augment Installs Skills
 
-Equip copies skill files to each platform's skills directory using a scoped layout:
+Augment copies skill files to each platform's skills directory using a scoped layout:
 
 ```
 {skillsPath}/{toolName}/{skillName}/SKILL.md
@@ -69,7 +69,7 @@ The `toolName` scope prevents naming collisions between different tools that mig
 
 Platforms without a confirmed skills path (Junie, Copilot JetBrains, Copilot CLI) have `skillsPath: null` and skill installation is silently skipped.
 
-The `~/.agents/skills/` path is a cross-platform convention -- all 8 skill-supporting platforms scan this directory. Equip uses each platform's native path when one exists, falling back to `~/.agents/skills/` for platforms like Windsurf, VS Code, and Codex that don't have a tool-specific global skills directory.
+The `~/.agents/skills/` path is a cross-platform convention -- all 8 skill-supporting platforms scan this directory. Augment uses each platform's native path when one exists, falling back to `~/.agents/skills/` for platforms like Windsurf, VS Code, and Codex that don't have a tool-specific global skills directory.
 
 ## How Skills Get Loaded by Agents
 
@@ -165,7 +165,7 @@ The markdown body contains the full instructions the agent follows when the skil
 Skills can include supporting files beyond SKILL.md:
 
 ```typescript
-const equip = new Equip({
+const equip = new Augment({
   name: "my-tool",
   serverUrl: "https://...",
   skill: {

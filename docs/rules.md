@@ -1,13 +1,15 @@
 # Behavioral Rules
 
-Behavioral rules are markdown instructions injected into platform-specific rules files. They tell AI agents when and how to use your MCP tool. Without rules, agents may have your tool available but never use it -- or use it incorrectly.
+Behavioral rules are markdown instructions injected into platform-specific rules files. They tell AI agents when and how to use your augment. Without rules, agents may have your augment available but never use it — or use it incorrectly.
+
+**Note:** In direct-mode (`equip <augment>`), rules are installed only on platforms with writable rules paths. Platforms like Cursor and VS Code that lack global rules files are skipped. The library API (`augment.installRules()`) still supports clipboard fallback for these platforms when called directly.
 
 ## Why Rules Matter
 
-An MCP server entry makes a tool _available_. Rules make the agent _use_ it. In practice:
+An MCP server entry makes an augment _available_. Rules make the agent _use_ it. In practice:
 
 - Agents don't reliably discover new tools on their own
-- Even when they discover a tool, they may not know the right context to use it
+- Even when they discover an augment, they may not know the right context to use it
 - Rules ensure consistent behavior across sessions and platforms
 - Rules are the single most effective way to improve tool adoption
 
@@ -22,7 +24,7 @@ When working with Acme APIs or libraries:
 
 ## The Marker System
 
-Equip uses HTML comment markers to manage versioned blocks within shared rules files. This allows multiple tools to coexist in the same file without interfering with each other.
+Augment uses HTML comment markers to manage versioned blocks within shared rules files. This allows multiple tools to coexist in the same file without interfering with each other.
 
 ### Format
 
@@ -35,7 +37,7 @@ Your rules content here.
 <!-- /my-tool -->
 ```
 
-The opening marker contains the tool name and version: `<!-- {marker}:v{version} -->`. The closing marker is `<!-- /{marker} -->`. Everything between them is your rules content.
+The opening marker contains the augment name and version: `<!-- {marker}:v{version} -->`. The closing marker is `<!-- /{marker} -->`. Everything between them is your rules content.
 
 ### How Markers Work
 
@@ -44,11 +46,11 @@ The opening marker contains the tool name and version: `<!-- {marker}:v{version}
 3. **Same version** -- equip skips the write (idempotent)
 4. **Uninstall** -- equip removes the block, preserving all other content
 
-The marker name is typically your tool name. It must be unique within the file.
+The marker name is typically your augment name. It must be unique within the file.
 
 ### Version Tracking
 
-Equip compares the version in the marker against your configured version:
+Augment compares the version in the marker against your configured version:
 
 ```typescript
 import { parseRulesVersion } from "@cg3/equip";
@@ -66,14 +68,14 @@ Platforms handle rules in two ways:
 
 ### Single-file platforms (append mode)
 
-Claude Code (`CLAUDE.md`), Windsurf (`global_rules.md`), Codex (`AGENTS.md`), and Gemini CLI (`GEMINI.md`) use a single rules file. Equip appends your marker block to the existing file content, preserving anything else in the file.
+Claude Code (`CLAUDE.md`), Windsurf (`global_rules.md`), Codex (`AGENTS.md`), and Gemini CLI (`GEMINI.md`) use a single rules file. Augment appends your marker block to the existing file content, preserving anything else in the file.
 
 ### Directory-based platforms (standalone file)
 
-Cline (`~/Documents/Cline/Rules/`) and Roo Code (`~/.roo/rules/`) use a rules directory where each file is loaded independently. Equip writes a standalone file using the `fileName` option:
+Cline (`~/Documents/Cline/Rules/`) and Roo Code (`~/.roo/rules/`) use a rules directory where each file is loaded independently. Augment writes a standalone file using the `fileName` option:
 
 ```typescript
-const equip = new Equip({
+const equip = new Augment({
   name: "my-tool",
   serverUrl: "https://...",
   rules: {
@@ -171,7 +173,7 @@ const { MARKER_RE, BLOCK_RE } = markerPatterns("my-tool");
 <!-- my-tool:v1.0.0 -->
 ## My Tool -- Agent Instructions
 
-[When to use the tool -- be specific about triggers]
+[When to use the augment -- be specific about triggers]
 [How to use it -- concrete steps]
 [What NOT to do -- common mistakes]
 
@@ -190,4 +192,4 @@ const { MARKER_RE, BLOCK_RE } = markerPatterns("my-tool");
 
 5. **Version your rules.** Bump the version whenever you change the content. This ensures all users get the update on their next run.
 
-6. **Combine with skills.** Rules tell the agent _when_ to use the tool. Skills tell it _how_. Together they cover the full loop. See [skills.md](./skills.md) for details.
+6. **Combine with skills.** Rules tell the agent _when_ to use the augment. Skills tell it _how_. Together they cover the full loop. See [skills.md](./skills.md) for details.
