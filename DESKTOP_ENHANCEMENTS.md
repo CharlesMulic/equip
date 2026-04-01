@@ -332,8 +332,24 @@ Based on what the UI needs and dependencies between gaps:
 
 *(Move items here as they're finished)*
 
-- Sidecar bridge created (`equip/sidecar/bridge.ts`) with `scan`, `status`, `ping` methods
+- Sidecar bridge created (`equip/sidecar/bridge.ts`) with `scan`, `read`, `running`, `setEnabled`, `augments`, `meta`, `ping` methods
 - Platform detection wired through sidecar to UI
 - Capability tags derived from PLATFORM_REGISTRY and displayed in UI
 - Augment count per platform from live config reads
 - Shortened config paths (`~/...` format) for display
+- Process detection with per-instance details (PID, start time, command line, executable path, parent PID)
+- Enable/disable platforms via sidecar
+
+## Future Enhancements
+
+### Platform-Specific Hooks for Deeper Integration
+
+Claude Code supports lifecycle hooks (SessionStart, SessionEnd, PreToolUse, PostToolUse, etc.) that Equip already installs for Prior. This opens the door to deeper integration between Equip and Claude Code specifically:
+
+- **Session tracking hooks**: An Equip hook on `SessionStart` could report to `~/.equip/sessions.json` when a session starts, including the working directory (`process.cwd()`), session ID, and active augments. This would let the Agents tab show "4 sessions: ~/project-a, ~/project-b, ..." — the working directory info that isn't available via process inspection.
+
+- **Augment usage tracking**: A `PostToolUse` hook could log which MCP tools were actually called during sessions. This feeds into weight optimization — "you have 12 augments equipped but only use 3 of them."
+
+- **Session-scoped augment loading** (future): If Equip manages sessions via `--mcp-config`, hooks could report which augments are active in each session vs the global config.
+
+This is Claude Code-specific and wouldn't work for Cursor, VS Code, etc. But Claude Code is the most capable platform and the one most likely to be used by power users who care about augment management. Worth investing in once the core Equip experience is solid.
