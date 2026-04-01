@@ -16,6 +16,7 @@ import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, typ
 import type { ReadMcpResult } from "./lib/mcp";
 import { fetchToolDef, toolDefToEquipConfig, type ToolDefinition, type LocalRegistryEntry, type PostInstallAction } from "./lib/registry";
 import { resolveAuth, validateCredential, readStoredCredential, writeStoredCredential, deleteStoredCredential, listStoredCredentials, isCredentialExpired, refreshCredential, refreshAllExpired, type AuthConfig, type StoredCredential, type AuthResult, type RefreshResult } from "./lib/auth-engine";
+import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, hasAugmentDef, syncFromRegistry, createLocalAugment, wrapUnmanaged, modAugmentRules, resetAugmentRules, getAugmentsDir, type AugmentDef, type AugmentSource, type AugmentRules, type LocalAugmentConfig, type WrapConfig } from "./lib/augment-defs";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -297,6 +298,18 @@ export {
   refreshCredential,
   refreshAllExpired,
   validateCredential,
+  // Augment Definitions
+  readAugmentDef,
+  writeAugmentDef,
+  listAugmentDefs,
+  deleteAugmentDef,
+  hasAugmentDef,
+  syncFromRegistry,
+  createLocalAugment,
+  wrapUnmanaged,
+  modAugmentRules,
+  resetAugmentRules,
+  getAugmentsDir,
 };
 
 // Types
@@ -323,4 +336,9 @@ export type {
   StoredCredential,
   AuthResult,
   RefreshResult,
+  AugmentDef,
+  AugmentSource,
+  AugmentRules,
+  LocalAugmentConfig,
+  WrapConfig,
 };
