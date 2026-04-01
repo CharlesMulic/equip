@@ -1540,9 +1540,182 @@ describe("Augment class (skills)", () => {
     const skillCheck = result.checks.find(c => c.name === "skills");
     assert.ok(skillCheck);
     assert.ok(!skillCheck.ok);
-    assert.ok(skillCheck.detail.includes("not found"));
+    assert.ok(skillCheck.detail.includes("Missing skills") || skillCheck.detail.includes("not found"));
 
     cleanup(p.configPath);
+  });
+});
+
+// ─── Multi-Skill Support ────────────────────────────────────
+
+describe("multi-skill support", () => {
+  const SKILL_A = {
+    name: "search",
+    files: [{ path: "SKILL.md", content: "---\nname: search\n---\n\n# Search\n" }],
+  };
+  const SKILL_B = {
+    name: "contribute",
+    files: [{ path: "SKILL.md", content: "---\nname: contribute\n---\n\n# Contribute\n" }],
+  };
+  const SKILL_C = {
+    name: "feedback",
+    files: [{ path: "SKILL.md", content: "---\nname: feedback\n---\n\n# Feedback\n" }],
+  };
+
+  it("installs multiple skills to correct directories", () => {
+    const skillsDir = tmpPath("multi-skill-install");
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skills: [SKILL_A, SKILL_B, SKILL_C],
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+
+    const result = e.installSkill(p);
+    assert.equal(result.action, "created");
+
+    // All three skill directories should exist
+    assert.ok(fs.existsSync(path.join(skillsDir, "test", "search", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "test", "contribute", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "test", "feedback", "SKILL.md")));
+
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("uninstalls all skills for a tool", () => {
+    const skillsDir = tmpPath("multi-skill-uninstall");
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skills: [SKILL_A, SKILL_B],
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+
+    e.installSkill(p);
+    assert.ok(e.hasSkill(p));
+
+    const removed = e.uninstallSkill(p);
+    assert.ok(removed);
+    assert.ok(!fs.existsSync(path.join(skillsDir, "test", "search")));
+    assert.ok(!fs.existsSync(path.join(skillsDir, "test", "contribute")));
+
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("hasSkill returns false if any skill is missing", () => {
+    const skillsDir = tmpPath("multi-skill-partial");
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skills: [SKILL_A, SKILL_B],
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+
+    // Install only the first skill manually
+    installSkill(p, "test", SKILL_A);
+    assert.ok(!e.hasSkill(p), "hasSkill should be false when not all skills are installed");
+
+    // Install the second too
+    installSkill(p, "test", SKILL_B);
+    assert.ok(e.hasSkill(p), "hasSkill should be true when all skills are installed");
+
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("installedSkills returns names of installed skills", () => {
+    const skillsDir = tmpPath("multi-skill-installed");
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skills: [SKILL_A, SKILL_B, SKILL_C],
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+
+    // Install only two of three
+    installSkill(p, "test", SKILL_A);
+    installSkill(p, "test", SKILL_C);
+
+    const installed = e.installedSkills(p);
+    assert.equal(installed.length, 2);
+    assert.ok(installed.includes("search"));
+    assert.ok(installed.includes("feedback"));
+    assert.ok(!installed.includes("contribute"));
+
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("verify reports per-skill status for multi-skill augment", () => {
+    const skillsDir = tmpPath("multi-skill-verify");
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skills: [SKILL_A, SKILL_B],
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+    cleanup(p.configPath);
+    e.installMcp(p, "key");
+    e.installSkill(p);
+
+    const result = e.verify(p);
+    assert.ok(result.ok);
+    const skillCheck = result.checks.find(c => c.name === "skills");
+    assert.ok(skillCheck.ok);
+    assert.ok(skillCheck.detail.includes("search"));
+    assert.ok(skillCheck.detail.includes("contribute"));
+
+    cleanup(p.configPath);
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("verify detects partially missing skills", () => {
+    const skillsDir = tmpPath("multi-skill-verify-missing");
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skills: [SKILL_A, SKILL_B],
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+    cleanup(p.configPath);
+    e.installMcp(p, "key");
+    // Only install first skill
+    installSkill(p, "test", SKILL_A);
+
+    const result = e.verify(p);
+    assert.ok(!result.ok);
+    const skillCheck = result.checks.find(c => c.name === "skills");
+    assert.ok(!skillCheck.ok);
+    assert.ok(skillCheck.detail.includes("contribute"), "should report missing skill name");
+
+    cleanup(p.configPath);
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("backward compat: singular skill config still works", () => {
+    const skillsDir = tmpPath("single-skill-compat");
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+      skill: SKILL_A,  // singular (deprecated)
+    });
+    const p = mockPlatform({ skillsPath: skillsDir });
+
+    assert.equal(e.skills.length, 1, "should convert singular to array");
+    assert.equal(e.skill.name, "search", "deprecated getter should still work");
+
+    const result = e.installSkill(p);
+    assert.equal(result.action, "created");
+    assert.ok(fs.existsSync(path.join(skillsDir, "test", "search", "SKILL.md")));
+
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("no skills config means empty array", () => {
+    const e = new Augment({
+      name: "test",
+      serverUrl: "https://example.com/mcp",
+    });
+    assert.equal(e.skills.length, 0);
+    assert.equal(e.skill, null, "deprecated getter returns null for empty");
   });
 });
 

@@ -449,7 +449,8 @@ async function directInstall(toolDef, parsedArgs) {
   const report = new InstallReportBuilder();
   const stepList = ["MCP Server"];
   if (config.rules) stepList.push("Behavioral Rules");
-  if (config.skill) stepList.push("Skills");
+  const hasSkills = (config.skills && config.skills.length > 0) || config.skill;
+  if (hasSkills) stepList.push("Skills");
   stepList.push("Verification");
   const totalSteps = stepList.length;
   let stepNum = 0;
@@ -488,15 +489,16 @@ async function directInstall(toolDef, parsedArgs) {
   }
 
   // Skills
-  if (config.skill) {
+  if (hasSkills) {
     step(++stepNum, totalSteps, "Skills");
+    const skillNames = (config.skills || (config.skill ? [config.skill] : [])).map(s => s.name);
     for (const p of platforms) {
       const result = equip.installSkill(p, { dryRun });
       report.addResult(p.platform, result);
       if (result.action === "created") {
-        ok(`${platformName(p.platform)}   Skill "${config.skill.name}" installed`);
+        ok(`${platformName(p.platform)}   ${skillNames.length} skill${skillNames.length === 1 ? "" : "s"} installed (${skillNames.join(", ")})`);
       } else if (result.action === "skipped" && result.attempted) {
-        ok(`${platformName(p.platform)}   Skill already current`);
+        ok(`${platformName(p.platform)}   Skills already current`);
       }
     }
   }

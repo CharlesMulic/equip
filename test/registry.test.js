@@ -9,6 +9,7 @@ const path = require("path");
 const os = require("os");
 
 const { toolDefToEquipConfig, fetchToolDef } = require("../dist/lib/registry");
+const { Augment } = require("../dist/index");
 
 // ─── Test Helpers ───────────────────────────────────────────
 
@@ -88,7 +89,7 @@ describe("toolDefToEquipConfig", () => {
     assert.equal(config.rules.fileName, "test.md");
   });
 
-  it("converts tool with skills (takes first from array)", () => {
+  it("converts tool with skills (preserves all skills from array)", () => {
     const def = {
       name: "test",
       displayName: "Test",
@@ -101,9 +102,14 @@ describe("toolDefToEquipConfig", () => {
       ],
     };
     const config = toolDefToEquipConfig(def);
-    assert.ok(config.skill);
-    assert.equal(config.skill.name, "search");
-    assert.equal(config.skill.files.length, 1);
+    assert.ok(config.skills);
+    assert.equal(config.skills.length, 2);
+    assert.equal(config.skills[0].name, "search");
+    assert.equal(config.skills[1].name, "other");
+    // Backward compat: singular skill getter still works
+    const augment = new Augment(config);
+    assert.ok(augment.skill);
+    assert.equal(augment.skill.name, "search");
   });
 
   it("converts tool with stdio config", () => {

@@ -262,10 +262,9 @@ export function toolDefToEquipConfig(def: ToolDefinition, options?: { logger?: E
     config.hookDir = def.hookDir.replace(/^~/, os.homedir());
   }
 
-  // Skills: API returns an array, EquipConfig expects a single skill.
-  // Use the first skill if present.
+  // Skills: pass all skills through
   if (def.skills && def.skills.length > 0) {
-    config.skill = def.skills[0];
+    config.skills = def.skills;
   }
 
   return config;

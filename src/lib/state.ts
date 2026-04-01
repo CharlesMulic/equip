@@ -32,8 +32,10 @@ export interface ToolPlatformRecord {
   hookScripts?: string[];
   /** Directory where skills were installed */
   skillsPath?: string;
-  /** Skill directory name (e.g., "search") */
+  /** @deprecated Use skillNames instead. First skill directory name. */
   skillName?: string;
+  /** All installed skill directory names (e.g., ["search", "contribute"]) */
+  skillNames?: string[];
   /** Equip version that wrote this record */
   equipVersion?: string;
 }

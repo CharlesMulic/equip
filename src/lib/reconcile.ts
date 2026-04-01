@@ -86,18 +86,20 @@ export function reconcileState(options: ReconcileOptions): number {
     }
 
     // Check for skills (only on platforms that support skills)
+    // Discover ALL skill directories, not just the first
     if (def.skillsPath) {
       const skillsBasePath = def.skillsPath();
       const toolSkillDir = path.join(skillsBasePath, toolName);
       try {
         const skillDirs = fs.readdirSync(toolSkillDir);
-        const skillWithMd = skillDirs.find(s => {
+        const skillsWithMd = skillDirs.filter(s => {
           try { return fs.statSync(path.join(toolSkillDir, s, "SKILL.md")).isFile(); }
           catch { return false; }
         });
-        if (skillWithMd) {
+        if (skillsWithMd.length > 0) {
           record.skillsPath = toolSkillDir;
-          record.skillName = skillWithMd;
+          record.skillName = skillsWithMd[0]; // backward compat: first skill
+          record.skillNames = skillsWithMd;    // new: all skills
           hasAnyArtifact = true;
         }
       } catch { /* skill dir may not exist */ }

@@ -36,6 +36,9 @@ export interface AugmentConfig {
   };
   hooks?: HookDefinition[];
   hookDir?: string;
+  /** Multiple skills — each gets its own directory under {skillsPath}/{toolName}/{skillName}/ */
+  skills?: SkillConfig[];
+  /** @deprecated Use `skills` instead. Single skill, kept for backward compatibility. */
   skill?: SkillConfig;
   logger?: EquipLogger;
 }
@@ -50,7 +53,7 @@ class Augment {
   stdio: AugmentConfig["stdio"] | null;
   hookDefs: HookDefinition[] | null;
   hookDir: string;
-  skill: SkillConfig | null;
+  skills: SkillConfig[];
   logger: EquipLogger;
 
   constructor(config: AugmentConfig) {
@@ -62,8 +65,14 @@ class Augment {
     this.stdio = config.stdio || null;
     this.hookDefs = config.hooks || null;
     this.hookDir = config.hookDir || path.join(os.homedir(), `.${config.name}`, "hooks");
-    this.skill = config.skill || null;
+    // Support both `skills` (array) and deprecated `skill` (singular)
+    this.skills = config.skills || (config.skill ? [config.skill] : []);
     this.logger = config.logger || NOOP_LOGGER;
+  }
+
+  /** @deprecated Use `skills` instead */
+  get skill(): SkillConfig | null {
+    return this.skills.length > 0 ? this.skills[0] : null;
   }
 
   detect(): DetectedPlatform[] {
@@ -142,18 +151,37 @@ class Augment {
   }
 
   installSkill(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): ArtifactResult {
-    if (!this.skill) return makeResult("skills", { attempted: false, success: true, action: "skipped" });
-    return installSkill(platform, this.name, this.skill, { ...options, logger: this.logger });
+    if (this.skills.length === 0) return makeResult("skills", { attempted: false, success: true, action: "skipped" });
+    let anyCreated = false;
+    let lastResult: ArtifactResult = makeResult("skills", { attempted: false, success: true, action: "skipped" });
+    for (const sk of this.skills) {
+      const result = installSkill(platform, this.name, sk, { ...options, logger: this.logger });
+      lastResult = result;
+      if (result.action === "created") anyCreated = true;
+      if (!result.success) return result; // fail fast on error
+    }
+    // If any skill was newly created, report "created"; otherwise report last result
+    if (anyCreated) return makeResult("skills", { attempted: true, success: true, action: "created" });
+    return lastResult;
   }
 
   uninstallSkill(platform: DetectedPlatform, dryRun: boolean = false): boolean {
-    if (!this.skill) return false;
-    return uninstallSkill(platform, this.name, this.skill.name, dryRun);
+    if (this.skills.length === 0) return false;
+    let anyRemoved = false;
+    for (const sk of this.skills) {
+      if (uninstallSkill(platform, this.name, sk.name, dryRun)) anyRemoved = true;
+    }
+    return anyRemoved;
   }
 
   hasSkill(platform: DetectedPlatform): boolean {
-    if (!this.skill) return false;
-    return hasSkill(platform, this.name, this.skill.name);
+    if (this.skills.length === 0) return false;
+    return this.skills.every(sk => hasSkill(platform, this.name, sk.name));
+  }
+
+  /** Check which skills are installed (returns names of installed skills) */
+  installedSkills(platform: DetectedPlatform): string[] {
+    return this.skills.filter(sk => hasSkill(platform, this.name, sk.name)).map(sk => sk.name);
   }
 
   /**
@@ -201,12 +229,16 @@ class Augment {
     }
 
     // Check skills (if configured and platform supports them)
-    if (this.skill && platform.skillsPath) {
-      const skillInstalled = this.hasSkill(platform);
+    if (this.skills.length > 0 && platform.skillsPath) {
+      const installed = this.installedSkills(platform);
+      const missing = this.skills.filter(sk => !installed.includes(sk.name)).map(sk => sk.name);
+      const allOk = missing.length === 0;
       checks.push({
         name: "skills",
-        ok: skillInstalled,
-        detail: skillInstalled ? `Skill "${this.skill.name}" installed` : `Skill "${this.skill.name}" not found`,
+        ok: allOk,
+        detail: allOk
+          ? `${installed.length} skill${installed.length === 1 ? "" : "s"} installed (${installed.join(", ")})`
+          : `Missing skills: ${missing.join(", ")}`,
       });
     }
 
