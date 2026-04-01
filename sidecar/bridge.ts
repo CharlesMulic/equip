@@ -124,9 +124,10 @@ function getMeta() {
 
 /**
  * Check for running platform processes.
+ * Returns per-instance details: PID, start time, command line args, parent process.
  */
 function checkRunning() {
-  const running: { platform: string; processName: string }[] = [];
+  const { execSync } = require("child_process");
 
   const processMap: Record<string, string[]> = {
     "claude-code": ["claude"],
@@ -137,10 +138,28 @@ function checkRunning() {
     "gemini-cli": ["gemini"],
   };
 
+  interface ProcessInstance {
+    pid: number;
+    startTime: string;
+    commandLine: string;
+    executablePath: string;
+    parentPid: number;
+    parentName: string;
+  }
+
+  interface PlatformProcessInfo {
+    platform: string;
+    processName: string;
+    instances: ProcessInstance[];
+  }
+
+  const running: PlatformProcessInfo[] = [];
+
   for (const [platform, names] of Object.entries(processMap)) {
     for (const name of names) {
-      if (isProcessRunning(name)) {
-        running.push({ platform, processName: name });
+      const instances = getProcessInstances(name, execSync);
+      if (instances.length > 0) {
+        running.push({ platform, processName: name, instances });
         break;
       }
     }
@@ -149,22 +168,74 @@ function checkRunning() {
   return { running };
 }
 
-function isProcessRunning(name: string): boolean {
+function getProcessInstances(name: string, execSync: any): any[] {
   try {
-    const { execSync } = require("child_process");
     if (process.platform === "win32") {
-      const output = execSync(`tasklist /FI "IMAGENAME eq ${name}.exe" /NH`, {
-        encoding: "utf-8",
-        timeout: 3000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      return output.toLowerCase().includes(name.toLowerCase());
+      // Use wmic LIST format — one field per line, reliable parsing
+      const output = execSync(
+        `wmic process where "name='${name}.exe'" get ProcessId,CommandLine,ExecutablePath,ParentProcessId,CreationDate /FORMAT:LIST`,
+        { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+      ).trim();
+
+      if (!output) return [];
+
+      // Split into per-process blocks (separated by double newlines)
+      const blocks = output.split(/\n\s*\n/).filter((b: string) => b.trim());
+      const instances: any[] = [];
+
+      for (const block of blocks) {
+        const fields: Record<string, string> = {};
+        for (const line of block.split("\n")) {
+          const eq = line.indexOf("=");
+          if (eq > 0) {
+            fields[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+          }
+        }
+
+        if (!fields.ProcessId) continue;
+
+        // Parse wmic date: "20260326203446.123456-300" → ISO-ish
+        let startTime = "";
+        if (fields.CreationDate) {
+          const d = fields.CreationDate;
+          startTime = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}T${d.slice(8,10)}:${d.slice(10,12)}:${d.slice(12,14)}`;
+        }
+
+        instances.push({
+          pid: parseInt(fields.ProcessId, 10) || 0,
+          startTime,
+          commandLine: fields.CommandLine || "",
+          executablePath: fields.ExecutablePath || "",
+          parentPid: parseInt(fields.ParentProcessId, 10) || 0,
+          parentName: "",  // skip parent lookup for now — too expensive
+        });
+      }
+
+      return instances;
     } else {
-      execSync(`pgrep -x "${name}"`, { timeout: 3000, stdio: ["pipe", "pipe", "pipe"] });
-      return true;
+      // Unix: use ps for details
+      const output = execSync(
+        `ps -eo pid,lstart,comm,args | grep -i "\\b${name}\\b" | grep -v grep`,
+        { encoding: "utf-8", timeout: 3000, stdio: ["pipe", "pipe", "pipe"] }
+      ).trim();
+
+      if (!output) return [];
+
+      return output.split("\n").map((line: string) => {
+        const parts = line.trim().split(/\s+/);
+        const pid = parseInt(parts[0], 10);
+        return {
+          pid,
+          startTime: "",
+          commandLine: parts.slice(5).join(" "),
+          executablePath: "",
+          parentPid: 0,
+          parentName: "",
+        };
+      });
     }
   } catch {
-    return false;
+    return [];
   }
 }
 
