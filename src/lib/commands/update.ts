@@ -1,9 +1,10 @@
 // equip update — self-update equip and migrate configs if needed.
 
 import { execSync } from "child_process";
-import { readState, markUpdated } from "../state";
 import { resolvePackageVersion } from "../fs";
 import { migrateConfigs } from "../migrate";
+import { readInstallations } from "../installations";
+import { markEquipUpdated } from "../equip-meta";
 import * as cli from "../cli";
 
 export function runUpdate(): void {
@@ -34,11 +35,11 @@ export function runUpdate(): void {
 
   // Step 2: Migrate configs
   cli.log(`\n${cli.BOLD}[2/2] Migrating configs${cli.RESET}`);
-  const state = readState();
-  const toolCount = Object.keys(state.tools).length;
+  const installations = readInstallations();
+  const augmentCount = Object.keys(installations.augments).length;
 
-  if (toolCount === 0) {
-    cli.ok("No tracked tools — nothing to migrate");
+  if (augmentCount === 0) {
+    cli.ok("No tracked augments — nothing to migrate");
   } else {
     const results = migrateConfigs();
     const migrated = results.filter(r => r.action === "migrated");
@@ -55,12 +56,12 @@ export function runUpdate(): void {
       }
     }
     if (migrated.length === 0 && errors.length === 0) {
-      cli.ok(`${toolCount} tool${toolCount === 1 ? "" : "s"} — all configs current`);
+      cli.ok(`${augmentCount} augment${augmentCount === 1 ? "" : "s"} — all configs current`);
     }
   }
 
   // Mark updated
-  markUpdated();
+  markEquipUpdated();
 
   cli.log(`\n${cli.GREEN}${cli.BOLD}Update complete${cli.RESET}\n`);
 }

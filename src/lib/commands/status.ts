@@ -1,11 +1,10 @@
 // equip status — show all MCP servers across all platforms.
-// Reads config files directly; no state required.
+// Reads config files directly and cross-references with installations.json.
 
 import * as fs from "fs";
 import { PLATFORM_REGISTRY } from "../platforms";
-import { readMcpEntry } from "../mcp";
-import { readState } from "../state";
 import { dirExists, fileExists } from "../detect";
+import { getManagedAugmentNames } from "../installations";
 import * as cli from "../cli";
 
 interface ServerInfo {
@@ -15,7 +14,7 @@ interface ServerInfo {
 }
 
 export function runStatus(): void {
-  const state = readState();
+  const managedNames = getManagedAugmentNames();
   const servers = new Map<string, ServerInfo>();
   const platformResults: { id: string; name: string; count: number }[] = [];
 
@@ -42,7 +41,7 @@ export function runStatus(): void {
 
     for (const name of entryNames) {
       if (!servers.has(name)) {
-        const tracked = !!state.tools[name];
+        const tracked = managedNames.has(name);
         servers.set(name, { name, platforms: [], tracked });
       }
       servers.get(name)!.platforms.push(def.name);
@@ -110,9 +109,9 @@ function readAllTomlEntries(content: string, rootKey: string): Record<string, un
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith(prefix) && !trimmed.includes(".", prefix.length)) {
-      const name = trimmed.slice(prefix.length, -1); // remove trailing ]
+      const name = trimmed.slice(prefix.length, -1);
       if (name && !name.includes(".")) {
-        result[name] = {}; // just mark presence
+        result[name] = {};
       }
     }
   }
