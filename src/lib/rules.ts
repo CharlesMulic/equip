@@ -72,17 +72,7 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
     return makeResult("rules", { attempted: false, success: true, action: "skipped" });
   }
 
-  let rulesPath: string;
-  if (fileName) {
-    try {
-      const stat = fs.statSync(platform.rulesPath);
-      rulesPath = stat.isDirectory() ? path.join(platform.rulesPath, fileName) : platform.rulesPath;
-    } catch {
-      rulesPath = path.extname(platform.rulesPath) ? platform.rulesPath : path.join(platform.rulesPath, fileName);
-    }
-  } else {
-    rulesPath = platform.rulesPath;
-  }
+  const rulesPath = resolveRulesPath(platform.rulesPath, marker, fileName);
 
   const { BLOCK_RE } = markerPatterns(marker);
 
@@ -121,17 +111,7 @@ export function uninstallRules(platform: DetectedPlatform, options: { marker: st
 
   if (!platform.rulesPath) return false;
 
-  let rulesPath: string;
-  if (fileName) {
-    try {
-      const stat = fs.statSync(platform.rulesPath);
-      rulesPath = stat.isDirectory() ? path.join(platform.rulesPath, fileName) : platform.rulesPath;
-    } catch {
-      rulesPath = path.extname(platform.rulesPath) ? platform.rulesPath : path.join(platform.rulesPath, fileName);
-    }
-  } else {
-    rulesPath = platform.rulesPath;
-  }
+  const rulesPath = resolveRulesPath(platform.rulesPath, marker, fileName);
 
   try {
     if (!fs.statSync(rulesPath).isFile()) return false;
@@ -151,4 +131,28 @@ export function uninstallRules(platform: DetectedPlatform, options: { marker: st
     }
     return true;
   } catch { return false; }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+/**
+ * Resolve the actual file path for rules, handling both file and directory rulesPath.
+ * Some platforms (e.g., Roo Code) use a directory of per-augment .md files rather
+ * than a single shared rules file. When rulesPath is a directory:
+ *   - If fileName is provided, use it
+ *   - Otherwise, default to <marker>.md
+ */
+function resolveRulesPath(basePath: string, marker: string, fileName?: string): string {
+  try {
+    if (fs.statSync(basePath).isDirectory()) {
+      return path.join(basePath, fileName || `${marker}.md`);
+    }
+  } catch {
+    // Path doesn't exist yet — if it has no extension and fileName is given,
+    // treat it as a directory path
+    if (fileName && !path.extname(basePath)) {
+      return path.join(basePath, fileName);
+    }
+  }
+  return basePath;
 }

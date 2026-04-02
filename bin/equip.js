@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // @cg3/equip CLI — augment your AI agents.
 // Usage: equip <command> [args...]
+//
+// This is a thin dispatcher. Command logic lives in src/lib/commands/ (TypeScript).
 
 "use strict";
 
@@ -11,16 +13,6 @@ const os = require("os");
 
 const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8"));
 const EQUIP_VERSION = PKG.version;
-
-// ─── Registry ───────────────────────────────────────────────
-
-const REGISTRY = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "..", "registry.json"), "utf-8")
-);
-const TOOLS = {};
-for (const [key, value] of Object.entries(REGISTRY)) {
-  if (!key.startsWith("$")) TOOLS[key] = value;
-}
 
 // ─── Arg Parsing ───────────────────────────────────────────
 
@@ -33,7 +25,6 @@ function parseArgs(argv) {
     else if (a === "--non-interactive") { args.nonInteractive = true; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
     else if (a === "--api-key-file" && i + 1 < argv.length) {
-      // Read API key from file — avoids exposing key in process list and shell history
       try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }
       catch (e) { process.stderr.write(`Error reading API key file: ${e.message}\n`); process.exit(1); }
     }
@@ -41,14 +32,6 @@ function parseArgs(argv) {
     else { args._.push(a); }
   }
   return args;
-}
-
-// ─── Built-in Commands ──────────────────────────────────────
-
-const BUILTIN_COMMANDS = new Set(["status", "doctor", "update", "reauth", "refresh", "list", "demo", "--help", "-h", "--version", "-v"]);
-
-function isBuiltin(cmd) {
-  return BUILTIN_COMMANDS.has(cmd);
 }
 
 // ─── Stale Version Nudge ────────────────────────────────────
@@ -68,13 +51,11 @@ function checkStaleVersion() {
   } catch {}
 }
 
-// ─── Command: --version ─────────────────────────────────────
+// ─── Simple Commands ────────────────────────────────────────
 
 function cmdVersion() {
   console.log(`equip v${EQUIP_VERSION}`);
 }
-
-// ─── Command: --help ────────────────────────────────────────
 
 function cmdHelp() {
   console.log(`equip v${EQUIP_VERSION} — augment your AI agents`);
@@ -91,7 +72,9 @@ function cmdHelp() {
   console.log("  status           Show all MCP servers across all platforms");
   console.log("  doctor           Validate config integrity and detect drift");
   console.log("  update           Update equip and migrate configs");
-  console.log("  list             Show registered tools");
+  console.log("  snapshot [plat]  Capture current platform config state");
+  console.log("  snapshots [plat] List available config snapshots");
+  console.log("  restore <plat>   Restore platform config from a snapshot");
   console.log("  demo             Run the built-in demo");
   console.log("");
   console.log("Options:");
@@ -103,21 +86,6 @@ function cmdHelp() {
   console.log("  --version, -v    Show version");
   console.log("");
 }
-
-// ─── Command: list ──────────────────────────────────────────
-
-function cmdList() {
-  const { GREEN, DIM, RESET, BOLD } = require("../dist/lib/cli");
-  console.log(`\n${BOLD}Registered augments${RESET}\n`);
-  for (const [name, info] of Object.entries(TOOLS)) {
-    const desc = info.description ? `  ${DIM}${info.description}${RESET}` : "";
-    console.log(`  ${GREEN}${name}${RESET}  →  ${info.package} ${info.command}${desc}`);
-  }
-  console.log(`\n  ${DIM}Install: equip <augment>${RESET}`);
-  console.log(`  ${DIM}Browse:  https://cg3.io/equip${RESET}\n`);
-}
-
-// ─── Command: demo ──────────────────────────────────────────
 
 function cmdDemo(extraArgs) {
   const demoPath = path.join(__dirname, "..", "demo", "setup.js");
@@ -132,21 +100,17 @@ function cmdDemo(extraArgs) {
   });
 }
 
-// ─── Command: status ────────────────────────────────────────
+// ─── Delegated Commands (logic in TypeScript modules) ───────
 
 function cmdStatus() {
   const { runStatus } = require("../dist/lib/commands/status");
   runStatus();
 }
 
-// ─── Command: doctor ────────────────────────────────────────
-
 function cmdDoctor() {
   const { runDoctor } = require("../dist/lib/commands/doctor");
   runDoctor();
 }
-
-// ─── Command: update ────────────────────────────────────────
 
 function cmdUninstall(args) {
   process.argv = [process.argv[0], process.argv[1], ...args];
@@ -156,9 +120,9 @@ function cmdUninstall(args) {
 async function cmdUpdate(parsedArgs) {
   const toolName = parsedArgs._[0];
 
-  // If a tool name is given, update that tool via direct-mode
   if (toolName) {
     const { fetchToolDef, validateCredential, readStoredCredential, cli } = require("../dist/index");
+    const { createConsoleLogger } = require("../dist/lib/cli");
     const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
     const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
 
@@ -169,17 +133,16 @@ async function cmdUpdate(parsedArgs) {
 
     const toolDef = await fetchToolDef(toolName, { logger });
     if (!toolDef) {
-      fail(`Tool "${toolName}" not found in registry`);
+      fail(`Augment "${toolName}" not found in registry`);
       process.exit(1);
     }
 
     if (toolDef.installMode !== "direct") {
-      // Package-mode: fall through to the legacy equip update
       log(`  ${DIM}${toolName} is package-mode — use: npx @cg3/${toolName} setup --update${RESET}\n`);
       return;
     }
 
-    // Validate stored credential if we have one
+    // Validate stored credential
     const authConfig = toolDef.auth || { type: "none" };
     const cred = readStoredCredential(toolName);
     if (cred?.credential && authConfig.validationUrl) {
@@ -191,472 +154,43 @@ async function cmdUpdate(parsedArgs) {
       }
     }
 
-    // Re-run directInstall (idempotent — rules skip if current, MCP overwrites)
-    await directInstall(toolDef, parsedArgs);
+    // Re-run install (idempotent)
+    const { runInstall } = require("../dist/lib/commands/install");
+    await runInstall(toolDef, parsedArgs, EQUIP_VERSION);
     return;
   }
 
-  // No tool name: legacy equip self-update
+  // No augment name: legacy equip self-update
   const { runUpdate } = require("../dist/lib/commands/update");
   runUpdate();
 }
 
-async function cmdReauth(args) {
-  const toolName = args._[0];
-  if (!toolName) {
-    console.error("Usage: equip reauth <tool>");
-    process.exit(1);
-  }
-
-  const { fetchToolDef, resolveAuth, deleteStoredCredential, Augment, toolDefToEquipConfig, platformName, cli } = require("../dist/index");
-  const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
-  const logger = args.verbose ? createConsoleLogger() : undefined;
-
-  log(`\n${BOLD}equip reauth${RESET} ${toolName}\n`);
-
-  const toolDef = await fetchToolDef(toolName, { logger });
-  if (!toolDef) {
-    fail(`Tool "${toolName}" not found in registry`);
-    process.exit(1);
-  }
-
-  const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "api_key" } : null);
-  if (!authConfig || authConfig.type === "none") {
-    fail(`${toolName} does not require authentication`);
-    process.exit(1);
-  }
-
-  // Delete stored credential to force fresh auth
-  deleteStoredCredential(toolName);
-  log("  Cleared stored credentials");
-
-  const authResult = await resolveAuth({
-    toolName,
-    auth: authConfig,
-    logger,
-    apiKey: args.apiKey,
-    nonInteractive: args.nonInteractive,
-  });
-
-  if (!authResult.credential) {
-    fail(authResult.error || "Re-authentication failed");
-    process.exit(1);
-  }
-
-  ok(`New credential obtained ${DIM}(${authResult.method})${RESET}`);
-
-  // Update all platform configs with the new credential
-  if (toolDef.installMode === "direct" && toolDef.serverUrl) {
-    const config = toolDefToEquipConfig(toolDef, { logger });
-    const equip = new Augment(config);
-    const platforms = equip.detect();
-    const transport = toolDef.transport || "http";
-
-    log("\n  Updating platform configs...");
-    for (const p of platforms) {
-      const entry = equip.readMcp(p);
-      if (entry) {
-        equip.updateMcpKey(p, authResult.credential, transport);
-        ok(`${platformName(p.platform)} updated`);
-      }
-    }
-  }
-
-  log(`\n${BOLD}Done.${RESET} Credentials rotated for ${toolName}.\n`);
+async function cmdReauth(parsedArgs) {
+  const { runReauth } = require("../dist/lib/commands/reauth");
+  await runReauth(parsedArgs);
 }
 
-async function cmdRefresh(args) {
-  const { refreshCredential, refreshAllExpired, readStoredCredential, isCredentialExpired, listStoredCredentials, cli } = require("../dist/index");
-  const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
-  const logger = args.verbose ? createConsoleLogger() : undefined;
-
-  const toolName = args._[0];
-
-  if (toolName) {
-    // Refresh a specific tool
-    log(`\n${BOLD}equip refresh${RESET} ${toolName}\n`);
-
-    const cred = readStoredCredential(toolName);
-    if (!cred) {
-      fail(`No stored credentials for ${toolName}`);
-      process.exit(1);
-    }
-
-    if (!cred.oauth || !cred.oauth.refreshToken) {
-      fail(`${toolName} has no OAuth refresh token — use 'equip reauth ${toolName}' instead`);
-      process.exit(1);
-    }
-
-    const expired = isCredentialExpired(cred);
-    if (!expired) {
-      ok(`${toolName}: OAuth token is still valid`);
-      if (cred.oauth.expiresAt) {
-        const remaining = new Date(cred.oauth.expiresAt).getTime() - Date.now();
-        const mins = Math.floor(remaining / 60000);
-        log(`  ${DIM}Expires in ${mins} minute${mins === 1 ? "" : "s"}${RESET}`);
-      }
-      return;
-    }
-
-    const result = await refreshCredential(toolName, { logger, updateConfigs: true });
-    if (result.success) {
-      ok(`${toolName}: token refreshed`);
-      if (result.configsUpdated && result.configsUpdated > 0) {
-        ok(`${result.configsUpdated} platform config${result.configsUpdated === 1 ? "" : "s"} updated`);
-      }
-    } else {
-      fail(`${toolName}: ${result.error}`);
-      log(`  ${DIM}Try: equip reauth ${toolName}${RESET}`);
-    }
-  } else {
-    // Refresh all expired credentials
-    log(`\n${BOLD}equip refresh${RESET}\n`);
-
-    const tools = listStoredCredentials();
-    if (tools.length === 0) {
-      log(`  ${DIM}No stored credentials found.${RESET}\n`);
-      return;
-    }
-
-    let anyExpired = false;
-    for (const name of tools) {
-      const cred = readStoredCredential(name);
-      if (!cred || !cred.oauth?.refreshToken) continue;
-      if (!isCredentialExpired(cred)) {
-        ok(`${name}: token valid`);
-        continue;
-      }
-
-      anyExpired = true;
-      const result = await refreshCredential(name, { logger, updateConfigs: true });
-      if (result.success) {
-        ok(`${name}: token refreshed${result.configsUpdated ? ` (${result.configsUpdated} config${result.configsUpdated === 1 ? "" : "s"} updated)` : ""}`);
-      } else {
-        fail(`${name}: ${result.error}`);
-        log(`  ${DIM}Try: equip reauth ${name}${RESET}`);
-      }
-    }
-
-    if (!anyExpired) {
-      log(`  ${DIM}All tokens are current.${RESET}`);
-    }
-  }
-  log("");
+async function cmdRefresh(parsedArgs) {
+  const { runRefresh } = require("../dist/lib/commands/refresh");
+  await runRefresh(parsedArgs);
 }
 
-// ─── Auto-Refresh ──────────────────────────────────────────
-
-async function autoRefreshExpired(verbose) {
-  try {
-    const { refreshAllExpired } = require("../dist/index");
-    const logger = verbose ? createConsoleLogger() : undefined;
-    const results = await refreshAllExpired({ logger });
-
-    if (results.size > 0 && !verbose) {
-      const { cli } = require("../dist/index");
-      for (const [name, result] of results) {
-        if (result.success) {
-          cli.ok(`Auto-refreshed token for ${name}`);
-        }
-      }
-    }
-  } catch { /* best effort — don't block the command */ }
+function cmdSnapshot(parsedArgs) {
+  const { runSnapshot } = require("../dist/lib/commands/snapshot");
+  runSnapshot(parsedArgs);
 }
 
-// ─── Logger ─────────────────────────────────────────────────
-
-function createConsoleLogger() {
-  const { DIM, RESET, YELLOW, RED } = require("../dist/lib/cli");
-  return {
-    debug(msg, ctx) { process.stderr.write(`  ${DIM}[debug] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
-    info(msg, ctx) { process.stderr.write(`  [info] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}\n`); },
-    warn(msg, ctx) { process.stderr.write(`  ${YELLOW}[warn] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
-    error(msg, ctx) { process.stderr.write(`  ${RED}[error] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
-  };
+function cmdSnapshots(parsedArgs) {
+  const { runSnapshots } = require("../dist/lib/commands/snapshot");
+  runSnapshots(parsedArgs);
 }
 
-// ─── Direct-Mode Install ───────────────────────────────────
-
-async function directInstall(toolDef, parsedArgs) {
-  const { Augment, toolDefToEquipConfig, platformName, resolvePlatformId, InstallReportBuilder, resolveAuth, validateCredential, cli } = require("../dist/index");
-  const { reconcileState } = require("../dist/lib/reconcile");
-  const { log, ok, fail, warn, step, prompt, DIM, RESET, BOLD, GREEN } = cli;
-
-  const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
-  const dryRun = parsedArgs.dryRun;
-
-  log(`\n${BOLD}equip${RESET} v${EQUIP_VERSION} — installing ${toolDef.displayName || toolDef.name}`);
-  if (dryRun) warn("DRY RUN — no changes will be made");
-
-  // ── Auth Resolution (via AuthEngine) ──
-  let apiKey = null;
-  const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "api_key" } : { type: "none" });
-
-  if (authConfig.type !== "none") {
-    const authResult = await resolveAuth({
-      toolName: toolDef.name,
-      auth: authConfig,
-      logger,
-      apiKey: parsedArgs.apiKey,
-      nonInteractive: parsedArgs.nonInteractive,
-      dryRun,
-    });
-
-    if (!authResult.credential) {
-      fail(authResult.error || `${toolDef.name} requires authentication`);
-      process.exit(1);
-    }
-
-    apiKey = authResult.credential;
-
-    // Validate credential against tool's validation URL
-    if (authConfig.validationUrl && !dryRun) {
-      const validation = await validateCredential(apiKey, authConfig, logger);
-      if (validation.valid === false) {
-        fail(`Credential invalid: ${validation.detail}`);
-        log(`  ${DIM}Try: equip reauth ${toolDef.name}${RESET}`);
-        process.exit(1);
-      }
-      if (validation.valid === true) {
-        ok(`Authenticated ${DIM}(${authResult.method}, validated)${RESET}`);
-      } else {
-        ok(`Authenticated ${DIM}(${authResult.method})${RESET}`);
-      }
-    } else {
-      ok(`Authenticated ${DIM}(${authResult.method})${RESET}`);
-    }
-  }
-
-  // ── Platform Detection ──
-  const config = toolDefToEquipConfig(toolDef, { logger });
-  const equip = new Augment(config);
-  let platforms = equip.detect();
-
-  // Filter out disabled platforms (from Equip desktop app)
-  const { isPlatformEnabled } = require("../dist/lib/platform-state");
-  const beforeFilter = platforms.length;
-  platforms = platforms.filter(p => isPlatformEnabled(p.platform));
-  if (platforms.length < beforeFilter) {
-    const skipped = beforeFilter - platforms.length;
-    const { DIM, RESET } = require("../dist/lib/cli");
-    log(`  ${DIM}${skipped} disabled platform${skipped === 1 ? "" : "s"} skipped${RESET}`);
-  }
-
-  // Filter by --platform if specified
-  if (parsedArgs.platform) {
-    const requested = parsedArgs.platform.split(",").map(s => resolvePlatformId(s.trim()));
-    platforms = platforms.filter(p => requested.includes(p.platform));
-    if (platforms.length === 0) {
-      fail(`None of the specified platforms detected: ${parsedArgs.platform}`);
-      process.exit(1);
-    }
-  }
-
-  if (platforms.length === 0) {
-    fail("No supported AI coding tools detected.");
-    log(`\n  Install one of: Claude Code, Cursor, Windsurf, VS Code, Cline, Roo Code`);
-    process.exit(1);
-  }
-
-  const names = platforms.map(p => platformName(p.platform)).join(", ");
-  log(`\n  Detected   ${names}`);
-
-  // ── Install Loop ──
-  const report = new InstallReportBuilder();
-  const stepList = ["MCP Server"];
-  if (config.rules) stepList.push("Behavioral Rules");
-  const hasSkills = (config.skills && config.skills.length > 0) || config.skill;
-  if (hasSkills) stepList.push("Skills");
-  stepList.push("Verification");
-  const totalSteps = stepList.length;
-  let stepNum = 0;
-
-  // MCP Server
-  step(++stepNum, totalSteps, "MCP Server");
-  const transport = toolDef.transport || "http";
-  log(`  Transport  ${transport}`);
-
-  for (const p of platforms) {
-    const result = equip.installMcp(p, apiKey, { transport, dryRun });
-    report.addResult(p.platform, result);
-    if (result.success) {
-      ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${DIM}(${transport}, ${result.method})${RESET}`);
-    } else {
-      fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
-    }
-  }
-
-  // Rules (only platforms with writable rules paths)
-  if (config.rules) {
-    step(++stepNum, totalSteps, "Behavioral Rules");
-    for (const p of platforms) {
-      if (!p.rulesPath) {
-        if (logger) logger.debug("Skipping rules — no writable rules path", { platform: p.platform });
-        continue;
-      }
-      const result = equip.installRules(p, { dryRun });
-      report.addResult(p.platform, result);
-      if (result.action === "created" || result.action === "updated") {
-        ok(`${platformName(p.platform)}   Rules v${config.rules.version} ${result.action}`);
-      } else if (result.action === "skipped" && result.attempted) {
-        ok(`${platformName(p.platform)}   Rules already current`);
-      }
-    }
-  }
-
-  // Skills
-  if (hasSkills) {
-    step(++stepNum, totalSteps, "Skills");
-    const skillNames = (config.skills || (config.skill ? [config.skill] : [])).map(s => s.name);
-    for (const p of platforms) {
-      const result = equip.installSkill(p, { dryRun });
-      report.addResult(p.platform, result);
-      if (result.action === "created") {
-        ok(`${platformName(p.platform)}   ${skillNames.length} skill${skillNames.length === 1 ? "" : "s"} installed (${skillNames.join(", ")})`);
-      } else if (result.action === "skipped" && result.attempted) {
-        ok(`${platformName(p.platform)}   Skills already current`);
-      }
-    }
-  }
-
-  // Verification
-  step(++stepNum, totalSteps, "Verification");
-  if (!dryRun) {
-    for (const p of platforms) {
-      const v = equip.verify(p);
-      if (v.ok) {
-        ok(`${platformName(p.platform)}   All checks passed`);
-      } else {
-        const failed = v.checks.filter(c => !c.ok).map(c => c.detail).join(", ");
-        warn(`${platformName(p.platform)}   ${failed}`);
-      }
-    }
-  }
-
-  report.complete();
-
-  // ── State Reconciliation ──
-  if (!dryRun) {
-    try {
-      const changed = reconcileState({
-        toolName: toolDef.name,
-        package: toolDef.npmPackage || toolDef.name,
-        marker: toolDef.rules?.marker || toolDef.name,
-        toolDef,
-      });
-      if (changed > 0 && logger) {
-        logger.debug("State reconciled", { platforms: changed });
-      }
-    } catch (e) {
-      if (logger) logger.warn("State reconciliation failed", { error: e.message });
-    }
-  }
-
-  // ── Telemetry — equip-backend (anonymous, fire and forget) ──
-  if (!dryRun) {
-    try {
-      const payload = {
-        tool: toolDef.name,
-        action: "install",
-        ...report.toJSON(),
-        os: process.platform,
-        arch: process.arch,
-        equipVersion: EQUIP_VERSION,
-        nodeVersion: process.version,
-      };
-      fetch("https://api.cg3.io/equip/telemetry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(3000),
-      }).catch(() => {});
-    } catch { /* fire and forget */ }
-  }
-
-  // ── Summary ──
-  log("");
-  const succeeded = platforms.length;
-  log(`${GREEN}${BOLD}  Done.${RESET} ${succeeded} platform${succeeded === 1 ? "" : "s"} configured.`);
-  if (report.warningCount > 0) {
-    log(`  ${DIM}${report.warningCount} warning${report.warningCount === 1 ? "" : "s"}${RESET}`);
-  }
-
-  // Platform hints
-  if (toolDef.platformHints) {
-    for (const p of platforms) {
-      const hint = toolDef.platformHints[p.platform];
-      if (hint) {
-        log(`\n  ${DIM}${platformName(p.platform)}: ${hint}${RESET}`);
-      }
-    }
-  }
-
-  // ── Post-Install Actions ──
-  if (!dryRun && toolDef.postInstall && toolDef.postInstall.length > 0) {
-    const isInteractive = !parsedArgs.nonInteractive;
-    for (const action of toolDef.postInstall) {
-      const cond = action.condition || "interactive";
-      if (cond === "interactive" && !isInteractive) continue;
-      if (cond === "non_interactive" && isInteractive) continue;
-
-      await executePostInstallAction(action, { apiKey, cli, BOLD, RESET, DIM, logger });
-    }
-  }
-
-  log("");
+async function cmdRestore(parsedArgs) {
+  const { runRestore } = require("../dist/lib/commands/snapshot");
+  await runRestore(parsedArgs);
 }
 
-// ─── Post-Install Action Executor ───────────────────────────
-
-async function executePostInstallAction(action, ctx) {
-  const { apiKey, cli, BOLD, RESET, DIM, logger } = ctx;
-
-  if (action.type === "open_with_code") {
-    cli.log("");
-    const open = await cli.promptEnterOrEsc(`  Press ${BOLD}Enter${RESET} to open your dashboard, or ${BOLD}Esc${RESET} to exit: `);
-    if (!open) return;
-
-    let targetUrl = action.targetUrl;
-
-    // Fetch one-time code
-    if (action.url && action.codePath) {
-      try {
-        const headers = { "Content-Type": "application/json" };
-        if (action.auth && apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-        const res = await fetch(action.url, {
-          method: "POST",
-          headers,
-          body: "{}",
-          signal: AbortSignal.timeout(5000),
-        });
-        const data = await res.json();
-
-        // Navigate codePath (e.g., "data.code")
-        const code = action.codePath.split(".").reduce((obj, key) => obj?.[key], data);
-        if (code) {
-          const separator = targetUrl.includes("?") ? "&" : "?";
-          targetUrl = `${targetUrl}${separator}${action.codeParam}=${encodeURIComponent(code)}`;
-        }
-      } catch (e) {
-        if (logger) logger.debug("Post-install code fetch failed, opening plain URL", { error: e.message });
-      }
-    }
-
-    const cp = require("child_process");
-    try {
-      if (process.platform === "win32") {
-        cp.execSync(`start "" "${targetUrl}"`, { shell: "cmd.exe", stdio: "ignore" });
-      } else if (process.platform === "darwin") {
-        cp.spawn("open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
-      } else {
-        cp.spawn("xdg-open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
-      }
-    } catch {}
-  }
-}
-
-// ─── Package-Mode Dispatch (existing) ──────────────────────
+// ─── Package-Mode Dispatch ──────────────────────────────────
 
 function isLocalPath(arg) {
   return arg.startsWith("./") || arg.startsWith("../") || arg.startsWith("/")
@@ -666,18 +200,16 @@ function isLocalPath(arg) {
 }
 
 function runLocal(localPath, extraArgs) {
-  const _path = require("path");
-  const _fs = require("fs");
   let scriptPath;
   let toolName = null;
 
-  if (localPath === "." || (_fs.existsSync(localPath) && _fs.statSync(localPath).isDirectory())) {
-    const pkgPath = _path.join(localPath, "package.json");
-    if (!_fs.existsSync(pkgPath)) {
+  if (localPath === "." || (fs.existsSync(localPath) && fs.statSync(localPath).isDirectory())) {
+    const pkgPath = path.join(localPath, "package.json");
+    if (!fs.existsSync(pkgPath)) {
       console.error(`No package.json found in ${localPath}`);
       process.exit(1);
     }
-    const pkg = JSON.parse(_fs.readFileSync(pkgPath, "utf-8"));
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
     toolName = pkg.name?.replace(/^@[^/]+\//, "") || null;
     const binEntries = pkg.bin;
     if (!binEntries || typeof binEntries !== "object") {
@@ -685,16 +217,23 @@ function runLocal(localPath, extraArgs) {
       process.exit(1);
     }
     const binScript = Object.values(binEntries)[0];
-    scriptPath = _path.resolve(localPath, binScript);
+    scriptPath = path.resolve(localPath, binScript);
   } else {
-    scriptPath = _path.resolve(localPath);
-    toolName = _path.basename(scriptPath, ".js");
+    scriptPath = path.resolve(localPath);
+    toolName = path.basename(scriptPath, ".js");
   }
 
-  if (!_fs.existsSync(scriptPath)) {
+  if (!fs.existsSync(scriptPath)) {
     console.error(`Script not found: ${scriptPath}`);
     process.exit(1);
   }
+
+  // Capture initial snapshots before the child process modifies configs
+  try {
+    const { detectPlatforms } = require("../dist/lib/detect");
+    const { ensureInitialSnapshots } = require("../dist/lib/snapshots");
+    ensureInitialSnapshots(detectPlatforms());
+  } catch {}
 
   const child = spawn(process.execPath, [scriptPath, ...extraArgs], {
     stdio: "inherit",
@@ -704,11 +243,7 @@ function runLocal(localPath, extraArgs) {
     if (toolName) {
       try {
         const { reconcileState } = require("../dist/lib/reconcile");
-        const changed = reconcileState({
-          toolName,
-          package: toolName,
-          marker: toolName,
-        });
+        const changed = reconcileState({ toolName, package: toolName, marker: toolName });
         if (changed > 0) {
           process.stderr.write(`\n  equip: tracked ${toolName} on ${changed} platform${changed === 1 ? "" : "s"}\n`);
         }
@@ -724,7 +259,14 @@ function runLocal(localPath, extraArgs) {
   });
 }
 
-function spawnTool(pkg, command, extraArgs, toolName) {
+function spawnPackage(pkg, command, extraArgs, augmentName) {
+  // Capture initial snapshots before the package modifies configs
+  try {
+    const { detectPlatforms } = require("../dist/lib/detect");
+    const { ensureInitialSnapshots } = require("../dist/lib/snapshots");
+    ensureInitialSnapshots(detectPlatforms());
+  } catch {}
+
   const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
   const child = spawn(npxCmd, ["-y", `${pkg}@latest`, command, ...extraArgs], {
     stdio: "inherit",
@@ -732,21 +274,12 @@ function spawnTool(pkg, command, extraArgs, toolName) {
     env: { ...process.env, EQUIP_VERSION },
   });
   child.on("close", (code) => {
-    if (toolName) {
+    if (augmentName) {
       try {
         const { reconcileState } = require("../dist/lib/reconcile");
-        const toolMeta = TOOLS[toolName] || {};
-        const hookDir = toolMeta.hookDir
-          ? toolMeta.hookDir.replace(/^~/, require("os").homedir())
-          : undefined;
-        const changed = reconcileState({
-          toolName,
-          package: pkg,
-          marker: toolMeta.marker || toolName,
-          hookDir,
-        });
+        const changed = reconcileState({ toolName: augmentName, package: pkg, marker: augmentName });
         if (changed > 0) {
-          process.stderr.write(`\n  equip: tracked ${toolName} on ${changed} platform${changed === 1 ? "" : "s"}\n`);
+          process.stderr.write(`\n  equip: tracked ${augmentName} on ${changed} platform${changed === 1 ? "" : "s"}\n`);
         }
       } catch (e) {
         process.stderr.write(`\n[equip] state reconciliation failed: ${e.message}\n`);
@@ -760,9 +293,9 @@ function spawnTool(pkg, command, extraArgs, toolName) {
   });
 }
 
-// ─── Tool Dispatch ──────────────────────────────────────────
+// ─── Augment Dispatch ───────────────────────────────────────
 
-async function dispatchTool(alias, parsedArgs) {
+async function dispatchAugment(alias, parsedArgs) {
   const extraArgs = parsedArgs._;
 
   // Local path: run directly with node
@@ -771,38 +304,34 @@ async function dispatchTool(alias, parsedArgs) {
     return;
   }
 
-  // Try to fetch tool definition from registry API / cache / registry.json
+  // Fetch augment definition from registry API (with cache fallback)
   const { fetchToolDef } = require("../dist/lib/registry");
+  const { createConsoleLogger } = require("../dist/lib/cli");
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
-  const toolDef = await fetchToolDef(alias, {
-    logger,
-    registryPath: path.join(__dirname, "..", "registry.json"),
-  });
+  const toolDef = await fetchToolDef(alias, { logger });
 
   if (toolDef && toolDef.installMode === "direct") {
-    // Direct-mode: in-process install
-    await directInstall(toolDef, parsedArgs);
+    const { runInstall } = require("../dist/lib/commands/install");
+    await runInstall(toolDef, parsedArgs, EQUIP_VERSION);
     return;
   }
 
   if (toolDef && toolDef.installMode === "package") {
-    // Package-mode: spawn npx
-    spawnTool(toolDef.npmPackage, toolDef.setupCommand || "setup", extraArgs, alias);
+    spawnPackage(toolDef.npmPackage, toolDef.setupCommand || "setup", extraArgs, alias);
     return;
   }
 
-  // Fallback: check local registry for package-mode entries
-  const localEntry = TOOLS[alias];
-  if (localEntry) {
-    spawnTool(localEntry.package, localEntry.command, extraArgs, alias);
+  // Unknown augment — treat as npm package name
+  if (!toolDef) {
+    const pkg = alias;
+    const command = extraArgs.length > 0 ? extraArgs.shift() : "setup";
+    const inferredName = pkg.includes("/") ? pkg.split("/").pop() : pkg;
+    spawnPackage(pkg, command, extraArgs, inferredName);
     return;
   }
 
-  // Unknown tool — treat as npm package name
-  const pkg = alias;
-  const command = extraArgs.length > 0 ? extraArgs.shift() : "setup";
-  const inferredName = pkg.includes("/") ? pkg.split("/").pop() : pkg;
-  spawnTool(pkg, command, extraArgs, inferredName);
+  console.error(`equip: unknown install mode "${toolDef.installMode}" for "${alias}"`);
+  process.exit(1);
 }
 
 // ─── Main ───────────────────────────────────────────────────
@@ -837,8 +366,9 @@ async function main() {
   // Parse remaining args (after the command)
   const parsedArgs = parseArgs(rawArgs.slice(1));
 
-  // Auto-refresh expired OAuth tokens (best effort, non-blocking for fast commands)
-  if (cmd !== "refresh" && cmd !== "reauth" && cmd !== "list" && cmd !== "demo") {
+  // Auto-refresh expired OAuth tokens (best effort)
+  if (cmd !== "refresh" && cmd !== "reauth" && cmd !== "demo") {
+    const { autoRefreshExpired } = require("../dist/lib/commands/refresh");
     await autoRefreshExpired(parsedArgs.verbose);
   }
 
@@ -846,12 +376,14 @@ async function main() {
     case "status":    cmdStatus(); break;
     case "doctor":    cmdDoctor(); break;
     case "update":    await cmdUpdate(parsedArgs); break;
-    case "list":      cmdList(); break;
     case "demo":      cmdDemo(parsedArgs._); break;
+    case "snapshot":  cmdSnapshot(parsedArgs); break;
+    case "snapshots": cmdSnapshots(parsedArgs); break;
+    case "restore":   await cmdRestore(parsedArgs); break;
     case "uninstall": cmdUninstall(parsedArgs._); break;
     case "reauth":    await cmdReauth(parsedArgs); break;
     case "refresh":   await cmdRefresh(parsedArgs); break;
-    default:          await dispatchTool(cmd, parsedArgs); break;
+    default:          await dispatchAugment(cmd, parsedArgs); break;
   }
 }
 

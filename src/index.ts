@@ -14,12 +14,13 @@ import * as cli from "./lib/cli";
 import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile } from "./lib/skills";
 import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, type EquipWarning, type EquipLogger, type EquipErrorCode, type EquipWarningCode, type ArtifactType, type ArtifactAction } from "./lib/types";
 import type { ReadMcpResult } from "./lib/mcp";
-import { fetchToolDef, toolDefToEquipConfig, type ToolDefinition, type LocalRegistryEntry, type PostInstallAction } from "./lib/registry";
+import { fetchToolDef, toolDefToEquipConfig, type ToolDefinition, type PostInstallAction } from "./lib/registry";
 import { resolveAuth, validateCredential, readStoredCredential, writeStoredCredential, deleteStoredCredential, listStoredCredentials, isCredentialExpired, refreshCredential, refreshAllExpired, type AuthConfig, type StoredCredential, type AuthResult, type RefreshResult } from "./lib/auth-engine";
 import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, hasAugmentDef, syncFromRegistry, createLocalAugment, wrapUnmanaged, modAugmentRules, resetAugmentRules, getAugmentsDir, type AugmentDef, type AugmentSource, type AugmentRules, type LocalAugmentConfig, type WrapConfig } from "./lib/augment-defs";
 import { readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled, getEnabledPlatformIds, isPlatformEnabled, readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms, getPlatformsDir, type PlatformsMeta, type PlatformMeta, type PlatformScan, type PlatformAugmentEntry } from "./lib/platform-state";
 import { readInstallations, writeInstallations, trackInstallation, trackUninstallation, getAugmentsForPlatform, getManagedAugmentNames, type Installations, type InstallationRecord, type ArtifactRecord } from "./lib/installations";
 import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, updatePreferences, type EquipMeta, type EquipPreferences } from "./lib/equip-meta";
+import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSnapshot, hasInitialSnapshot, ensureInitialSnapshots, pruneSnapshots, type Snapshot, type SnapshotSummary, type RestoreResult } from "./lib/snapshots";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -189,7 +190,7 @@ class Augment {
   }
 
   /**
-   * Verify that a tool is correctly installed on a platform.
+   * Verify that an augment is correctly installed on a platform.
    * Returns a structured result with per-check status.
    */
   verify(platform: DetectedPlatform): VerifyResult {
@@ -338,6 +339,15 @@ export {
   markEquipUpdated,
   markScanCompleted,
   updatePreferences,
+  // Snapshots
+  createSnapshot,
+  listSnapshots,
+  readSnapshot,
+  restoreSnapshot,
+  deleteSnapshot,
+  hasInitialSnapshot,
+  ensureInitialSnapshots,
+  pruneSnapshots,
 };
 
 // Types
@@ -358,7 +368,6 @@ export type {
   ArtifactAction,
   ReadMcpResult,
   ToolDefinition,
-  LocalRegistryEntry,
   PostInstallAction,
   AuthConfig,
   StoredCredential,
@@ -378,4 +387,7 @@ export type {
   EquipPreferences,
   LocalAugmentConfig,
   WrapConfig,
+  Snapshot,
+  SnapshotSummary,
+  RestoreResult,
 };

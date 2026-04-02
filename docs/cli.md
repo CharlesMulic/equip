@@ -32,7 +32,7 @@ equip prior --non-interactive      # No prompts (fail if info missing)
 
 Equip fetches the augment definition from the registry API (`api.cg3.io/equip`), syncs it to a local augment definition (`~/.equip/augments/<name>.json`), and installs MCP config, rules, hooks, and skills across all detected enabled platforms.
 
-Disabled platforms (toggled via the Equip desktop app) are automatically skipped.
+Disabled platforms are automatically skipped.
 
 If the API is unreachable, equip falls back to a locally cached definition (`~/.equip/cache/`).
 
@@ -124,9 +124,40 @@ equip .                            # Run current directory's package bin entry
 
 After the script exits, equip reconciles state — scanning all platform configs to track what was installed. This integrates local augments with `equip status`, `equip doctor`, and `equip uninstall`.
 
-### `equip list`
+### `equip snapshot [platform]`
 
-Show augments registered in the local registry.
+Capture the current config state for one or all detected platforms.
+
+```bash
+equip snapshot                     # Snapshot all detected platforms
+equip snapshot claude-code         # Snapshot Claude Code only
+```
+
+Equip automatically creates an initial snapshot the first time it detects a platform — before any config modifications. Use this command to create additional manual snapshots before experimenting.
+
+### `equip snapshots [platform]`
+
+List available config snapshots.
+
+```bash
+equip snapshots                    # Show all snapshots across platforms
+equip snapshots cursor             # Show snapshots for Cursor only
+```
+
+Shows snapshot ID, label, timestamp, and what was captured (config, rules).
+
+### `equip restore <platform> [snapshot-id]`
+
+Restore a platform's config to a previous snapshot.
+
+```bash
+equip restore claude-code          # Restore to initial (pre-equip) state
+equip restore cursor 20260401T143022Z  # Restore to a specific snapshot
+```
+
+If no snapshot ID is given, restores to the initial (first-detection) snapshot — the pristine state before equip ever modified anything.
+
+Before restoring, equip automatically saves a pre-restore snapshot of the current state. If you change your mind, you can restore to that snapshot to undo the restore.
 
 ### `equip demo`
 
@@ -177,15 +208,39 @@ Equip manages state across multiple files in `~/.equip/`:
 | `equip.json` | Equip version, timestamps, preferences. |
 | `credentials/<name>.json` | Stored auth credentials per augment. |
 | `cache/<name>.json` | Cached registry API responses (fallback when offline). |
+| `snapshots/<platform>/<id>.json` | Config snapshots — captured platform state for rollback. |
 
 State is reconciled from disk after every install/uninstall — equip scans what's actually in platform config files rather than relying solely on its records.
 
 ### Disabled Platforms
 
-Platforms can be disabled via the Equip desktop app. Disabled platforms are:
+Platforms can be disabled in `~/.equip/platforms.json`. Disabled platforms are:
 - Skipped during `equip install` and `equip uninstall`
 - Still scanned and visible in status (for informational purposes)
 - Preserved when re-enabled — nothing is modified while disabled
+
+## Backup and Recovery
+
+Equip uses several strategies to prevent data loss and recover from bad state:
+
+**Atomic writes.** All config file modifications go through `atomicWriteFileSync` — content is written to a `.tmp` file first, then renamed over the target. On most filesystems, rename is atomic, so the config file is never partially written.
+
+**Backups.** Before modifying a platform's config file, equip creates a `.bak` copy. If the write succeeds and verification passes, the backup is removed. If something goes wrong mid-write, the `.bak` file preserves the previous state.
+
+**Concurrent operation safety.** A process-level lockfile (`~/.equip/.lock`) prevents multiple equip commands from racing on shared state files. The lock is advisory and auto-expires after 60 seconds.
+
+**Reconciliation from disk.** After every install/uninstall, equip scans the actual platform config files to rebuild its state — it doesn't rely solely on its own records. This means manually editing a config file won't cause drift; the next equip command picks up the real state.
+
+**Recovery steps:**
+
+| Problem | Fix |
+|---|---|
+| Config file is corrupt or empty | Restore from `.bak` file in the same directory, or re-run `equip <augment>` to re-install |
+| `equip status` shows stale data | Run `equip update` to re-scan all platforms |
+| Lock file prevents operation | Delete `~/.equip/.lock` manually (the holding process likely crashed) |
+| Credentials invalid or expired | Run `equip reauth <augment>` for a fresh auth flow |
+| Augment definition out of date | Run `equip update <augment>` to re-fetch from registry |
+| Platform config was manually edited | Equip picks this up automatically on next reconciliation |
 
 ## Cache
 

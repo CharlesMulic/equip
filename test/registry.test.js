@@ -195,29 +195,6 @@ describe("fetchToolDef", () => {
     assert.equal(def, null);
   });
 
-  it("falls back to local registry.json", async () => {
-    // Create a test registry.json
-    const regPath = tmpPath("registry") + ".json";
-    fs.writeFileSync(regPath, JSON.stringify({
-      "local-tool": {
-        "package": "@test/local-tool",
-        "command": "setup",
-        "description": "A local-only tool"
-      }
-    }));
-
-    // Fetch a tool that doesn't exist in API but is in local registry
-    const logger = recordingLogger();
-    const def = await fetchToolDef("local-tool", { logger, registryPath: regPath });
-
-    assert.ok(def, "Should fall back to local registry");
-    assert.equal(def.name, "local-tool");
-    assert.equal(def.installMode, "package");
-    assert.equal(def.npmPackage, "@test/local-tool");
-
-    fs.unlinkSync(regPath);
-  });
-
   it("caches fetched definitions", async () => {
     // First fetch — hits API
     await fetchToolDef("demo-fetch");
@@ -259,7 +236,7 @@ describe("direct-mode CLI", () => {
       shell: true,
     });
     assert.ok(out.includes("[debug]"), "Should show debug-level output");
-    assert.ok(out.includes("Fetching tool definition from API"), "Should log API fetch");
+    assert.ok(out.includes("Fetching augment definition from API"), "Should log API fetch");
   });
 
   it("prior routes to direct-mode with auth", () => {

@@ -1,6 +1,6 @@
 {
   "name": "@cg3/equip",
-  "version": "0.16.2",
+  "version": "0.17.0",
   "description": "Augment your AI agents — MCP servers, behavioral rules, and skills across every platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,19 +9,17 @@
     "unequip": "bin/unequip.js"
   },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "require": "./dist/index.js" },
-    "./dist/*": "./dist/*",
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.js" },
     "./package.json": "./package.json"
   },
   "files": [
     "dist/",
     "bin/",
-    "demo/",
-    "registry.json"
+    "demo/"
   ],
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test test/equip.test.js test/observability.test.js test/registry.test.js test/auth.test.js test/docs.test.js test/augment-defs.test.js test/platform-state.test.js",
+    "test": "tsc && node --test test/equip.test.js test/observability.test.js test/registry.test.js test/auth.test.js test/docs.test.js test/augment-defs.test.js test/platform-state.test.js test/snapshots.test.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
