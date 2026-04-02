@@ -50,10 +50,11 @@ function isBuiltin(cmd) {
 
 function checkStaleVersion() {
   try {
-    const { readState } = require("../dist/lib/state");
-    const state = readState();
-    if (state.lastUpdated) {
-      const daysSince = (Date.now() - new Date(state.lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
+    const { readEquipMeta } = require("../dist/lib/equip-meta");
+    const meta = readEquipMeta();
+    const lastUpdated = meta.lastUpdated;
+    if (lastUpdated) {
+      const daysSince = (Date.now() - new Date(lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
       if (daysSince > 14) {
         const { YELLOW, RESET, DIM } = require("../dist/lib/cli");
         process.stderr.write(`  ${YELLOW}equip v${EQUIP_VERSION} is ${Math.floor(daysSince)} days old${RESET} ${DIM}— run "equip update" for platform fixes${RESET}\n\n`);
@@ -426,6 +427,16 @@ async function directInstall(toolDef, parsedArgs) {
   const equip = new Augment(config);
   let platforms = equip.detect();
 
+  // Filter out disabled platforms (from Equip desktop app)
+  const { isPlatformEnabled } = require("../dist/lib/platform-state");
+  const beforeFilter = platforms.length;
+  platforms = platforms.filter(p => isPlatformEnabled(p.platform));
+  if (platforms.length < beforeFilter) {
+    const skipped = beforeFilter - platforms.length;
+    const { DIM, RESET } = require("../dist/lib/cli");
+    log(`  ${DIM}${skipped} disabled platform${skipped === 1 ? "" : "s"} skipped${RESET}`);
+  }
+
   // Filter by --platform if specified
   if (parsedArgs.platform) {
     const requested = parsedArgs.platform.split(",").map(s => resolvePlatformId(s.trim()));
@@ -526,6 +537,7 @@ async function directInstall(toolDef, parsedArgs) {
         toolName: toolDef.name,
         package: toolDef.npmPackage || toolDef.name,
         marker: toolDef.rules?.marker || toolDef.name,
+        toolDef,
       });
       if (changed > 0 && logger) {
         logger.debug("State reconciled", { platforms: changed });
