@@ -13,7 +13,7 @@
 import * as fs from "fs";
 import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 import { readMcpEntry, buildHttpConfig, buildHttpConfigWithAuth } from "./mcp";
-import { readState } from "./state";
+import { readInstallations } from "./installations";
 import { safeReadJsonSync, atomicWriteFileSync } from "./fs";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -34,15 +34,15 @@ export interface MigrationResult {
  * Returns a list of migration actions taken.
  */
 export function migrateConfigs(): MigrationResult[] {
-  const state = readState();
+  const installations = readInstallations();
   const results: MigrationResult[] = [];
 
-  for (const [toolName, tool] of Object.entries(state.tools)) {
-    for (const [platformId, record] of Object.entries(tool.platforms)) {
+  for (const [toolName, augment] of Object.entries(installations.augments)) {
+    for (const platformId of augment.platforms) {
       const def = PLATFORM_REGISTRY.get(platformId);
       if (!def) continue;
 
-      const configPath = record.configPath || def.configPath();
+      const configPath = def.configPath();
 
       // Read the existing entry
       const existing = readMcpEntry(configPath, def.rootKey, toolName, def.configFormat);

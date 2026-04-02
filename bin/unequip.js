@@ -10,12 +10,13 @@ const fs = require("fs");
 const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8"));
 
 const { PLATFORM_REGISTRY, createManualPlatform, platformName, cli } = require("../dist/index");
-const { readState, trackUninstall } = require("../dist/lib/state");
+const { readInstallations, trackUninstallation } = require("../dist/lib/installations");
+const { isPlatformEnabled } = require("../dist/lib/platform-state");
 const { uninstallMcp } = require("../dist/lib/mcp");
 const { uninstallRules } = require("../dist/lib/rules");
 const { uninstallHooks } = require("../dist/lib/hooks");
-const { isPlatformEnabled } = require("../dist/lib/platform-state");
-const { trackUninstallation } = require("../dist/lib/installations");
+const { uninstallSkill } = require("../dist/lib/skills");
+const { deleteAugmentDef } = require("../dist/lib/augment-defs");
 
 const toolName = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
@@ -25,21 +26,21 @@ if (!toolName || toolName === "--help" || toolName === "-h") {
   console.log("");
   console.log("Usage: unequip <tool> [--dry-run]");
   console.log("");
-  console.log("Removes MCP config, behavioral rules, and hooks for <tool>");
-  console.log("from all platforms where it was installed.");
+  console.log("Removes MCP config, behavioral rules, hooks, and skills for <tool>");
+  console.log("from all enabled platforms where it was installed.");
   console.log("");
 
-  const state = readState();
-  const tools = Object.keys(state.tools);
-  if (tools.length > 0) {
-    console.log("Installed tools:");
-    for (const name of tools) {
-      const tool = state.tools[name];
-      const plats = Object.keys(tool.platforms).map(id => platformName(id)).join(", ");
+  const installations = readInstallations();
+  const augmentNames = Object.keys(installations.augments);
+  if (augmentNames.length > 0) {
+    console.log("Installed augments:");
+    for (const name of augmentNames) {
+      const record = installations.augments[name];
+      const plats = record.platforms.map(id => platformName(id)).join(", ");
       console.log(`  ${name}  →  ${plats}`);
     }
   } else {
-    console.log("No tools tracked. Run 'equip <tool>' to install one first.");
+    console.log("No augments tracked. Run 'equip <tool>' to install one first.");
   }
   console.log("");
   process.exit(0);
@@ -52,19 +53,19 @@ if (toolName === "--version" || toolName === "-v") {
 
 // ─── Uninstall ──────────────────────────────────────────────
 
-const state = readState();
-const tool = state.tools[toolName];
+const installations = readInstallations();
+const record = installations.augments[toolName];
 
-if (!tool) {
+if (!record) {
   cli.log(`\n${cli.BOLD}unequip ${toolName}${cli.RESET}\n`);
   cli.fail(`"${toolName}" is not tracked by equip.`);
   cli.log("");
 
-  const tools = Object.keys(state.tools);
-  if (tools.length > 0) {
-    cli.log(`  Tracked tools: ${tools.join(", ")}`);
+  const augmentNames = Object.keys(installations.augments);
+  if (augmentNames.length > 0) {
+    cli.log(`  Tracked augments: ${augmentNames.join(", ")}`);
   } else {
-    cli.log(`  No tools are currently tracked.`);
+    cli.log(`  No augments are currently tracked.`);
   }
   cli.log("");
   process.exit(1);
@@ -75,10 +76,9 @@ if (dryRun) cli.warn("Dry run — no files will be modified");
 cli.log("");
 
 let removed = 0;
-
 const removedPlatforms = [];
 
-for (const [platformId, record] of Object.entries(tool.platforms)) {
+for (const platformId of record.platforms) {
   // Skip disabled platforms
   if (!isPlatformEnabled(platformId)) {
     cli.info(`${platformName(platformId)}: disabled, skipping`);
@@ -92,14 +92,17 @@ for (const [platformId, record] of Object.entries(tool.platforms)) {
   }
 
   const platform = createManualPlatform(platformId);
+  const artifacts = record.artifacts[platformId] || {};
   const results = [];
 
   // Remove MCP config
-  const mcpRemoved = uninstallMcp(platform, toolName, dryRun);
-  if (mcpRemoved) results.push("config");
+  if (artifacts.mcp) {
+    const mcpRemoved = uninstallMcp(platform, toolName, dryRun);
+    if (mcpRemoved) results.push("config");
+  }
 
   // Remove rules
-  if (record.rulesPath) {
+  if (artifacts.rules) {
     const rulesRemoved = uninstallRules(platform, {
       marker: toolName,
       fileName: (platformId === "cline" || platformId === "roo-code") ? `${toolName}.md` : undefined,
@@ -109,12 +112,21 @@ for (const [platformId, record] of Object.entries(tool.platforms)) {
   }
 
   // Remove hooks
-  if (record.hookDir && record.hookScripts && record.hookScripts.length > 0) {
+  if (artifacts.hooks && artifacts.hooks.length > 0) {
+    const hookDir = path.join(require("os").homedir(), `.${toolName}`, "hooks");
     const hooksRemoved = uninstallHooks(platform,
-      record.hookScripts.map(s => ({ event: "", name: s.replace(/\.js$/, ""), script: "", matcher: "" })),
-      { hookDir: record.hookDir, dryRun }
+      artifacts.hooks.map(s => ({ event: "", name: s.replace(/\.js$/, ""), script: "", matcher: "" })),
+      { hookDir, dryRun }
     );
     if (hooksRemoved) results.push("hooks");
+  }
+
+  // Remove skills
+  if (artifacts.skills && artifacts.skills.length > 0) {
+    for (const skillName of artifacts.skills) {
+      uninstallSkill(platform, toolName, skillName, dryRun);
+    }
+    results.push(`${artifacts.skills.length} skill${artifacts.skills.length === 1 ? "" : "s"}`);
   }
 
   if (results.length > 0) {
@@ -126,10 +138,15 @@ for (const [platformId, record] of Object.entries(tool.platforms)) {
   }
 }
 
-// Update state (both old and new — dual-write bridge)
+// Update state
 if (!dryRun && removed > 0) {
-  trackUninstall(toolName);  // old state.json
-  try { trackUninstallation(toolName, removedPlatforms); } catch {} // new installations.json
+  trackUninstallation(toolName, removedPlatforms);
+
+  // If all platforms removed, also clean up augment definition
+  const updated = readInstallations();
+  if (!updated.augments[toolName]) {
+    deleteAugmentDef(toolName);
+  }
 }
 
 cli.log("");
