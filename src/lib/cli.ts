@@ -32,6 +32,38 @@ export function prompt(question: string): Promise<string> {
   });
 }
 
+/** Prompt for sensitive input — suppresses echo so the value isn't visible on screen. */
+export function promptSecret(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    process.stderr.write(question);
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    if (stdin.isTTY && stdin.setRawMode) {
+      stdin.setRawMode(true);
+    }
+    let input = "";
+    const onData = (chunk: Buffer) => {
+      const ch = chunk.toString();
+      if (ch === "\r" || ch === "\n") {
+        stdin.removeListener("data", onData);
+        if (stdin.isTTY && stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
+        process.stderr.write("\n");
+        resolve(input.trim());
+      } else if (ch === "\u0003") { // Ctrl+C
+        stdin.removeListener("data", onData);
+        if (stdin.isTTY && stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
+        process.exit(130);
+      } else if (ch === "\u007f" || ch === "\b") { // backspace
+        input = input.slice(0, -1);
+      } else {
+        input += ch;
+      }
+    };
+    stdin.resume();
+    stdin.on("data", onData);
+  });
+}
+
 /**
  * Prompt that resolves on Enter (true) or Esc (false).
  * Falls back to readline if stdin isn't a TTY.

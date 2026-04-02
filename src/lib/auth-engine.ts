@@ -96,10 +96,36 @@ export function writeStoredCredential(cred: StoredCredential): void {
   }
   const p = credentialPath(cred.toolName);
   fs.writeFileSync(p, JSON.stringify(cred, null, 2));
-  // Restrictive permissions on Unix
-  if (process.platform !== "win32") {
-    try { fs.chmodSync(p, 0o600); } catch {}
+  hardenCredentialPermissions(p);
+  ensureEquipGitignore();
+}
+
+/** Restrict file permissions to current user only. */
+function hardenCredentialPermissions(filePath: string): void {
+  if (process.platform === "win32") {
+    // Windows: use icacls to remove inherited ACLs and grant only current user
+    try {
+      const { execSync } = require("child_process");
+      execSync(`icacls "${filePath}" /inheritance:r /grant:r "%USERNAME%:(R,W,D)"`, {
+        stdio: "ignore", shell: "cmd.exe", timeout: 5000,
+      });
+      execSync(`icacls "${CREDENTIALS_DIR}" /inheritance:r /grant:r "%USERNAME%:(R,W,RD,D)"`, {
+        stdio: "ignore", shell: "cmd.exe", timeout: 5000,
+      });
+    } catch { /* best effort — may fail on some Windows configurations */ }
+  } else {
+    try { fs.chmodSync(filePath, 0o600); } catch {}
     try { fs.chmodSync(CREDENTIALS_DIR, 0o700); } catch {}
+  }
+}
+
+/** Create a .gitignore in ~/.equip/ to prevent accidental credential commits. */
+function ensureEquipGitignore(): void {
+  const gitignorePath = path.join(EQUIP_DIR, ".gitignore");
+  if (!fs.existsSync(gitignorePath)) {
+    try {
+      fs.writeFileSync(gitignorePath, "# Prevent accidental credential commits\ncredentials/\ncache/\n*.tmp\n");
+    } catch { /* best effort */ }
   }
 }
 
@@ -421,8 +447,8 @@ async function resolveApiKey(
     cli.log(`  Get a key at: ${auth.keyHelpUrl}`);
   }
 
-  const prompt = auth.keyPrompt || `Enter your ${toolName} API key`;
-  const key = await cli.prompt(`  ${prompt}: `);
+  const promptText = auth.keyPrompt || `Enter your ${toolName} API key`;
+  const key = await cli.promptSecret(`  ${promptText}: `);
 
   if (!key) {
     return { credential: null, method: "api_key", error: "No API key provided" };
@@ -745,7 +771,7 @@ async function exchangeTokenForKey(
         const choice = await cli.prompt("  Choice [1]: ");
 
         if (choice === "2") {
-          const manual = await cli.prompt("  Paste your API key: ");
+          const manual = await cli.promptSecret("  Paste your API key: ");
           if (manual) return { key: manual };
           return { key: null, error: "No key provided" };
         }
@@ -799,12 +825,18 @@ function openBrowser(url: string): void {
   } catch {}
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function callbackPageHtml(status: string, message: string): string {
   const isSuccess = status === "success";
   const title = isSuccess ? "Authentication Successful" : "Authentication Failed";
   const color = isSuccess ? "#34d399" : "#f87171";
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
   return `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>${title}</title>
+<html><head><meta charset="UTF-8"><title>${safeTitle}</title>
 <style>
 body{font-family:system-ui,sans-serif;background:#0a0b10;color:#e8eaf0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
 .card{max-width:400px;text-align:center;padding:40px;background:#12141f;border:1px solid #1e2030;border-radius:12px}
@@ -812,7 +844,7 @@ h1{font-size:1.25rem;margin:16px 0 8px;color:${color}}
 p{color:#8890a8;font-size:0.875rem;line-height:1.6}
 </style></head><body>
 <div class="card">
-<h1>${title}</h1>
-<p>${message}</p>
+<h1>${safeTitle}</h1>
+<p>${safeMessage}</p>
 </div></body></html>`;
 }
