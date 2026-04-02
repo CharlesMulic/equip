@@ -1,7 +1,6 @@
 // Installations — tracks what equip has installed and where.
 //
 // File: ~/.equip/installations.json
-// Replaces the tool-centric state.json with a cleaner model.
 //
 // Zero dependencies.
 

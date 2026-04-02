@@ -46,15 +46,6 @@ function isBuiltin(cmd) {
   return BUILTIN_COMMANDS.has(cmd);
 }
 
-// ─── One-Time State Migration ──────────────────────────────
-
-// Migrate from legacy state.json to new multi-file architecture on first run.
-// Idempotent — skips if already migrated.
-try {
-  const { migrateState } = require("../dist/lib/migration");
-  migrateState();
-} catch {}
-
 // ─── Stale Version Nudge ────────────────────────────────────
 
 function checkStaleVersion() {
