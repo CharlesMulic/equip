@@ -16,6 +16,12 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   const tmp = filePath + ".tmp";
+  // Create with restrictive permissions first, then write content.
+  // This prevents a window where the .tmp file has default (world-readable) permissions.
+  fs.writeFileSync(tmp, "");
+  if (process.platform !== "win32") {
+    try { fs.chmodSync(tmp, 0o600); } catch {}
+  }
   fs.writeFileSync(tmp, content);
   fs.renameSync(tmp, filePath);
 }

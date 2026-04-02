@@ -32,6 +32,11 @@ function parseArgs(argv) {
     else if (a === "--dry-run") { args.dryRun = true; }
     else if (a === "--non-interactive") { args.nonInteractive = true; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
+    else if (a === "--api-key-file" && i + 1 < argv.length) {
+      // Read API key from file — avoids exposing key in process list and shell history
+      try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }
+      catch (e) { process.stderr.write(`Error reading API key file: ${e.message}\n`); process.exit(1); }
+    }
     else if (a === "--platform" && i + 1 < argv.length) { args.platform = argv[++i]; }
     else { args._.push(a); }
   }
