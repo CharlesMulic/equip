@@ -98,7 +98,7 @@ Skills give agents detailed knowledge that loads on demand:
 const augment = new Augment({
   name: "my-augment",
   serverUrl: "https://mcp.example.com",
-  skill: {
+  skills: [{
     name: "lookup",
     files: [{
       path: "SKILL.md",
@@ -111,7 +111,7 @@ description: Look up documentation from the my-augment knowledge base
 
 Use this when the user asks about...`,
     }],
-  },
+  }],
 });
 
 const platforms = augment.detect();

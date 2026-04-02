@@ -168,7 +168,7 @@ Skills can include supporting files beyond SKILL.md:
 const equip = new Augment({
   name: "my-tool",
   serverUrl: "https://...",
-  skill: {
+  skills: [{
     name: "docs-lookup",
     files: [
       { path: "SKILL.md", content: skillMdContent },
@@ -176,7 +176,7 @@ const equip = new Augment({
       { path: "references/api-guide.md", content: apiGuide },
       { path: "assets/template.json", content: templateJson },
     ],
-  },
+  }],
 });
 ```
 

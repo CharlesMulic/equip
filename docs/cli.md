@@ -30,7 +30,9 @@ equip prior --verbose              # Show detailed logging
 equip prior --non-interactive      # No prompts (fail if info missing)
 ```
 
-Equip fetches the augment definition from the registry API (`api.cg3.io/equip`) and installs MCP config, rules, and skills across all detected platforms in a single process.
+Equip fetches the augment definition from the registry API (`api.cg3.io/equip`), syncs it to a local augment definition (`~/.equip/augments/<name>.json`), and installs MCP config, rules, hooks, and skills across all detected enabled platforms.
+
+Disabled platforms (toggled via the Equip desktop app) are automatically skipped.
 
 If the API is unreachable, equip falls back to a locally cached definition (`~/.equip/cache/`).
 
@@ -56,10 +58,11 @@ equip doctor
 
 Checks for each tracked augment:
 - Config file exists and is parseable
-- MCP entry present in config
+- MCP entry present in config (drift detection)
 - Auth headers present (JWT expiry checked)
 - Rules version matches expected
-- Skills installed
+- Hooks scripts exist
+- Skills installed (all skills, not just first)
 - Stored credentials valid (OAuth expiry, token health)
 
 ### `equip update [augment]`
@@ -99,14 +102,16 @@ Use when credentials are revoked, you want to switch accounts, or `equip doctor`
 
 ### `equip uninstall <augment>`
 
-Remove an augment from all platforms.
+Remove an augment from all enabled platforms.
 
 ```bash
 equip uninstall prior
 unequip prior                      # Alias — same behavior
 ```
 
-Removes MCP config entries, rules marker blocks, and skill files from all detected platforms. Does not remove stored credentials (use `equip reauth` to clear those).
+Removes MCP config entries, rules marker blocks, hook scripts, and skill files from all enabled platforms. Disabled platforms are left untouched. Does not remove stored credentials (use `equip reauth` to clear those).
+
+When all platforms are removed, the augment definition (`~/.equip/augments/<name>.json`) is also cleaned up.
 
 ### `equip ./script.js`
 
@@ -159,14 +164,28 @@ Credentials are stored at `~/.equip/credentials/` with restrictive file permissi
 - `equip doctor` — reports credential health and expiry
 - Auto-refresh runs on every equip command
 
-## State Tracking
+## State
 
-Equip tracks installed augments in `~/.equip/state.json`. State is reconciled from disk — equip scans what's actually installed in platform configs rather than relying on a cache.
+Equip manages state across multiple files in `~/.equip/`:
 
-State is used by:
-- `equip status` — shows what's installed and where
-- `equip doctor` — validates tracked augments
-- `equip uninstall` — knows what to remove
+| File | Purpose |
+|------|---------|
+| `augments/<name>.json` | Augment definitions — what each augment IS (server URL, rules, skills, hooks). Synced from registry on install, editable locally. |
+| `installations.json` | What equip has installed and on which platforms. Used by status, doctor, uninstall. |
+| `platforms.json` | Detected platform metadata and user preferences (enabled/disabled). |
+| `platforms/<id>.json` | Per-platform scan results — all MCP servers configured, managed vs unmanaged. |
+| `equip.json` | Equip version, timestamps, preferences. |
+| `credentials/<name>.json` | Stored auth credentials per augment. |
+| `cache/<name>.json` | Cached registry API responses (fallback when offline). |
+
+State is reconciled from disk after every install/uninstall — equip scans what's actually in platform config files rather than relying solely on its records.
+
+### Disabled Platforms
+
+Platforms can be disabled via the Equip desktop app. Disabled platforms are:
+- Skipped during `equip install` and `equip uninstall`
+- Still scanned and visible in status (for informational purposes)
+- Preserved when re-enabled — nothing is modified while disabled
 
 ## Cache
 
