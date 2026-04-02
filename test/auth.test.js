@@ -22,6 +22,20 @@ const {
 
 // ─── Test Helpers ───────────────────────────────────────────
 
+let originalHome;
+let tempHome;
+
+function setupTempHome() {
+  originalHome = os.homedir;
+  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-auth-"));
+  os.homedir = () => tempHome;
+}
+
+function teardownTempHome() {
+  os.homedir = originalHome;
+  fs.rmSync(tempHome, { recursive: true, force: true });
+}
+
 // Use a unique tool name per test to avoid collisions
 let testCounter = 0;
 function testToolName() {
@@ -42,6 +56,9 @@ function recordingLogger() {
 // ─── Credential Storage ────────────────────────────────────
 
 describe("credential storage", () => {
+  before(setupTempHome);
+  after(teardownTempHome);
+
   it("writes and reads a credential", () => {
     const name = testToolName();
     writeStoredCredential({
