@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// unequip — remove MCP tools installed by equip.
-// Usage: unequip <tool> [--dry-run]
+// unequip — remove augments installed by equip.
+// Usage: unequip <augment> [--dry-run]
 
 "use strict";
 
@@ -22,11 +22,11 @@ const toolName = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
 
 if (!toolName || toolName === "--help" || toolName === "-h") {
-  console.log(`unequip v${PKG.version} — remove MCP tools installed by equip`);
+  console.log(`unequip v${PKG.version} — remove augments installed by equip`);
   console.log("");
-  console.log("Usage: unequip <tool> [--dry-run]");
+  console.log("Usage: unequip <augment> [--dry-run]");
   console.log("");
-  console.log("Removes MCP config, behavioral rules, hooks, and skills for <tool>");
+  console.log("Removes MCP config, behavioral rules, hooks, and skills for <augment>");
   console.log("from all enabled platforms where it was installed.");
   console.log("");
 

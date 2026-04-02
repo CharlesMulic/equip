@@ -1,6 +1,7 @@
 // Platform registry — single source of truth for all platform-specific knowledge.
 // Zero dependencies.
 
+import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
@@ -68,6 +69,15 @@ function vsCodeUserDir(): string {
   if (process.platform === "win32") return path.join(process.env.APPDATA || path.join(h, "AppData", "Roaming"), "Code", "User");
   if (process.platform === "darwin") return path.join(h, "Library", "Application Support", "Code", "User");
   return path.join(h, ".config", "Code", "User");
+}
+
+/** Roo Code renamed cline_mcp_settings.json → mcp_settings.json (March 2025). Prefer new name. */
+function rooCodeConfigPath(): string {
+  const dir = path.join(vsCodeUserDir(), "globalStorage", "rooveterinaryinc.roo-cline", "settings");
+  const newPath = path.join(dir, "mcp_settings.json");
+  const oldPath = path.join(dir, "cline_mcp_settings.json");
+  try { if (fs.statSync(newPath).isFile()) return newPath; } catch {}
+  return oldPath;
 }
 
 function copilotJetBrainsDir(): string {
@@ -190,7 +200,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     id: "roo-code",
     name: "Roo Code",
     aliases: ["roo", "roocode"],
-    configPath: () => path.join(vsCodeUserDir(), "globalStorage", "rooveterinaryinc.roo-cline", "settings", "cline_mcp_settings.json"),
+    configPath: rooCodeConfigPath,
     rulesPath: () => path.join(home(), ".roo", "rules"),
     rootKey: "mcpServers",
     configFormat: "json",
@@ -198,7 +208,10 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     detection: {
       cli: null,
       dirs: [],
-      files: [() => path.join(vsCodeUserDir(), "globalStorage", "rooveterinaryinc.roo-cline", "settings", "cline_mcp_settings.json")],
+      files: [
+        () => path.join(vsCodeUserDir(), "globalStorage", "rooveterinaryinc.roo-cline", "settings", "mcp_settings.json"),
+        () => path.join(vsCodeUserDir(), "globalStorage", "rooveterinaryinc.roo-cline", "settings", "cline_mcp_settings.json"),
+      ],
     },
     hooks: null,
     skillsPath: () => path.join(home(), ".roo", "skills"),

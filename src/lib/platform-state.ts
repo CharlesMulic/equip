@@ -83,7 +83,7 @@ function getPlatformCapabilities(id: string): string[] {
   if (!def) return ["MCP"];
   const caps = ["MCP"];
   if (def.rulesPath) caps.push("Rules");
-  if ((def as any).hooks) caps.push("Hooks");
+  if (def.hooks) caps.push("Hooks");
   if (def.skillsPath) caps.push("Skills");
   return caps;
 }
@@ -237,7 +237,7 @@ export function scanPlatform(
       }
 
       // Check hooks
-      if ((def as any).hooks) {
+      if (def.hooks) {
         const hookDir = path.join(os.homedir(), `.${name}`, "hooks");
         try {
           const hookFiles = fs.readdirSync(hookDir).filter(f => f.endsWith(".js"));

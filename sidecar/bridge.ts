@@ -12,7 +12,9 @@
 
 import { detectPlatforms } from "../src/lib/detect";
 import { Augment, toolDefToEquipConfig, type AugmentConfig } from "../src/index";
-import { readStoredCredential } from "../src/lib/auth-engine";
+import { readStoredCredential, resolveAuth, validateCredential } from "../src/lib/auth-engine";
+import { fetchToolDef, toolDefToEquipConfig as toolDefToConfig } from "../src/lib/registry";
+import { ensureInitialSnapshots } from "../src/lib/snapshots";
 import {
   readPlatformsMeta, updatePlatformsMeta, setPlatformEnabled, isPlatformEnabled,
   readPlatformScan, scanAllPlatforms,
@@ -28,6 +30,10 @@ import { uninstallRules } from "../src/lib/rules";
 import { uninstallSkill } from "../src/lib/skills";
 import { trackUninstallation } from "../src/lib/installations";
 import { deleteAugmentDef } from "../src/lib/augment-defs";
+import {
+  createSnapshot as createSnapshotCore, listSnapshots as listSnapshotsCore,
+  restoreSnapshot as restoreSnapshotCore,
+} from "../src/lib/snapshots";
 import * as path from "path";
 import * as os from "os";
 
@@ -245,8 +251,94 @@ function getProcessInstances(name: string, execSync: any): any[] {
 }
 
 /**
+ * Full equip flow — fetch definition from registry, resolve auth (including OAuth),
+ * install on all enabled platforms, reconcile state.
+ * This is the desktop app equivalent of running `equip <name>` from CLI.
+ */
+async function equipAugment(params: { name: string; platforms?: string[] }) {
+  // 1. Fetch augment definition from registry API (with cache fallback)
+  const toolDef = await fetchToolDef(params.name);
+  if (!toolDef) throw new Error(`Augment "${params.name}" not found in registry`);
+
+  // 2. Resolve auth (opens browser for OAuth if needed)
+  let apiKey: string | null = null;
+  const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "api_key" as const } : { type: "none" as const });
+
+  if (authConfig.type !== "none") {
+    const authResult = await resolveAuth({
+      toolName: toolDef.name,
+      auth: authConfig,
+      // nonInteractive is false — browser OAuth flow works.
+      // stdin prompts (key conflict) auto-resolve via !process.stdin.isTTY check.
+    });
+
+    if (!authResult.credential) {
+      throw new Error(authResult.error || `${toolDef.name} requires authentication`);
+    }
+    apiKey = authResult.credential;
+
+    // Validate if possible
+    if (authConfig.validationUrl) {
+      const validation = await validateCredential(apiKey, authConfig);
+      if (validation.valid === false) {
+        throw new Error(`Credential invalid: ${validation.detail}`);
+      }
+    }
+  }
+
+  // 3. Build config and detect platforms
+  const config = toolDefToConfig(toolDef);
+  const augment = new Augment(config);
+  let platforms = augment.detect();
+
+  // Filter disabled platforms
+  platforms = platforms.filter(p => isPlatformEnabled(p.platform));
+  if (params.platforms && params.platforms.length > 0) {
+    platforms = platforms.filter(p => params.platforms!.includes(p.platform));
+  }
+
+  if (platforms.length === 0) {
+    return { installed: 0, platforms: [], error: "No enabled platforms detected" };
+  }
+
+  // 4. Capture initial snapshots before modifying configs
+  ensureInitialSnapshots(platforms);
+
+  // 5. Install on each platform
+  const transport = toolDef.transport || "http";
+  const results: { platform: string; name: string; success: boolean; error?: string }[] = [];
+
+  for (const p of platforms) {
+    try {
+      augment.installMcp(p, apiKey as string, { transport });
+      if (config.rules) augment.installRules(p);
+      augment.installSkill(p);
+      results.push({ platform: p.platform, name: platformName(p.platform), success: true });
+    } catch (e: any) {
+      results.push({ platform: p.platform, name: platformName(p.platform), success: false, error: e.message });
+    }
+  }
+
+  // 6. Reconcile state
+  try {
+    reconcileState({
+      toolName: toolDef.name,
+      package: toolDef.npmPackage || toolDef.name,
+      marker: toolDef.rules?.marker || toolDef.name,
+      toolDef,
+    });
+  } catch { /* best effort */ }
+
+  return {
+    installed: results.filter(r => r.success).length,
+    platforms: results,
+  };
+}
+
+/**
  * Install an augment on enabled platforms.
  * Reads the augment definition for config, reads stored credential for auth.
+ * Use equipAugment for the full flow including registry fetch and auth.
  */
 function installAugment(params: { name: string; platforms?: string[] }) {
   const def = readAugmentDef(params.name);
@@ -257,7 +349,7 @@ function installAugment(params: { name: string; platforms?: string[] }) {
   if (def.requiresAuth) {
     const cred = readStoredCredential(params.name);
     if (!cred) throw new Error(`No stored credential for ${params.name}. Run 'equip ${params.name}' from CLI to authenticate.`);
-    apiKey = cred.apiKey || cred.oauth?.accessToken || "";
+    apiKey = cred.credential || cred.oauth?.accessToken || "";
     if (!apiKey) throw new Error(`Stored credential for ${params.name} has no usable key. Run 'equip reauth ${params.name}'.`);
   }
 
@@ -434,6 +526,25 @@ function openFolder(params: { path: string }) {
   return { path: dir };
 }
 
+// --- Snapshots ---
+
+function bridgeListSnapshots(params: { platform?: string }) {
+  return listSnapshotsCore(params.platform);
+}
+
+function bridgeCreateSnapshot(params: { platform: string; label?: string }) {
+  const platform = createManualPlatform(params.platform);
+  const snap = createSnapshotCore(platform, {
+    label: params.label || "manual",
+    trigger: "manual",
+  });
+  return { id: snap.id, platform: snap.platform, label: snap.label, createdAt: snap.createdAt };
+}
+
+function bridgeRestoreSnapshot(params: { platform: string; snapshotId?: string }) {
+  return restoreSnapshotCore(params.platform, params.snapshotId);
+}
+
 // --- Main ---
 
 async function main() {
@@ -487,6 +598,10 @@ async function main() {
         result = checkRunning();
         break;
 
+      case "equip":
+        result = await equipAugment(request.params as any);
+        break;
+
       case "install":
         result = installAugment(request.params as any);
         break;
@@ -505,6 +620,18 @@ async function main() {
 
       case "openFolder":
         result = openFolder(request.params as any);
+        break;
+
+      case "listSnapshots":
+        result = bridgeListSnapshots(request.params as any);
+        break;
+
+      case "createSnapshot":
+        result = bridgeCreateSnapshot(request.params as any);
+        break;
+
+      case "restoreSnapshot":
+        result = bridgeRestoreSnapshot(request.params as any);
         break;
 
       case "ping":

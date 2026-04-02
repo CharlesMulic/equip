@@ -114,8 +114,36 @@ export function copyToClipboard(text: string): boolean {
   } catch { return false; }
 }
 
+// ─── Logger ─────────────────────────────────────────────────
+
+import type { EquipLogger } from "./types";
+
+/**
+ * Create a console logger that writes to stderr with color coding.
+ * Used by CLI commands when --verbose is passed.
+ */
+export function createConsoleLogger(): EquipLogger {
+  return {
+    debug(msg: string, ctx?: Record<string, unknown>) { process.stderr.write(`  ${DIM}[debug] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
+    info(msg: string, ctx?: Record<string, unknown>) { process.stderr.write(`  [info] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}\n`); },
+    warn(msg: string, ctx?: Record<string, unknown>) { process.stderr.write(`  ${YELLOW}[warn] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
+    error(msg: string, ctx?: Record<string, unknown>) { process.stderr.write(`  ${RED}[error] ${msg}${ctx ? " " + JSON.stringify(ctx) : ""}${RESET}\n`); },
+  };
+}
+
 // ─── Utilities ───────────────────────────────────────────────
 
 export function sanitizeError(msg: string): string {
   return msg.replace(os.homedir(), "~");
+}
+
+// ─── Parsed CLI Args ────────────────────────────────────────
+
+export interface ParsedArgs {
+  _: string[];
+  verbose: boolean;
+  dryRun: boolean;
+  apiKey: string | null;
+  nonInteractive: boolean;
+  platform: string | null;
 }

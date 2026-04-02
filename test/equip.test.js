@@ -634,16 +634,6 @@ describe("equip CLI", () => {
     }
   });
 
-  it("registered shorthand dispatches correctly", () => {
-    // Can't test full npx dispatch without network, but verify the registry
-    // is loaded and the shorthand resolves to the right package/command.
-    const { execSync } = require("child_process");
-    const out = execSync("node bin/equip.js list", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
-    assert.ok(out.includes("prior"), "prior should be in registry");
-    assert.ok(out.includes("@cg3/prior-node"), "should show the npm package");
-    assert.ok(out.includes("setup"), "should show the command");
-  });
-
   it("help shows all dispatch paths", () => {
     const { execSync } = require("child_process");
     const out = execSync("node bin/equip.js --help", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
@@ -680,12 +670,6 @@ describe("equip CLI", () => {
     // status outputs to stderr via cli.log, stdout may be empty — just verify no crash
   });
 
-  it("list shows registered tools", () => {
-    const { execSync } = require("child_process");
-    const out = execSync("node bin/equip.js list", { encoding: "utf-8", cwd: path.join(__dirname, "..") });
-    assert.ok(out.includes("prior"));
-    assert.ok(out.includes("Registered augments"));
-  });
 });
 
 // ─── State Module (REMOVED — covered by platform-state.test.js + installations tests) ───

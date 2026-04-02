@@ -105,7 +105,7 @@ Platforms without a verified skills path (Junie, Copilot JetBrains, Copilot CLI)
 
 ## Enabled / Disabled Platforms
 
-Platforms can be disabled via the Equip desktop app's Agents tab. A disabled platform is completely hands-off:
+Platforms can be disabled in `~/.equip/platforms.json`. A disabled platform is completely hands-off:
 
 - **Install:** Skipped — equip won't write MCP config, rules, hooks, or skills
 - **Uninstall:** Skipped — existing config is left untouched

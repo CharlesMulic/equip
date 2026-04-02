@@ -10,6 +10,10 @@ import * as path from "path";
  * Write a file atomically: write to a .tmp file, then rename over the target.
  * On most filesystems, rename is atomic — the file is never partially written.
  * Creates parent directories if they don't exist.
+ *
+ * On Windows, rename can fail with EPERM when the target is held open by another
+ * process (e.g., an IDE file watcher). In that case, falls back to direct write
+ * with a retry — less atomic but avoids hard failures on locked files.
  */
 export function atomicWriteFileSync(filePath: string, content: string): void {
   const dir = path.dirname(filePath);
@@ -23,7 +27,98 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
     try { fs.chmodSync(tmp, 0o600); } catch {}
   }
   fs.writeFileSync(tmp, content);
-  fs.renameSync(tmp, filePath);
+
+  try {
+    fs.renameSync(tmp, filePath);
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EPERM" && process.platform === "win32") {
+      // Target file is locked by another process (e.g., IDE file watcher).
+      // Fall back to direct write — less atomic but avoids hard failure.
+      try { fs.unlinkSync(tmp); } catch {}
+      fs.writeFileSync(filePath, content);
+    } else {
+      throw err;
+    }
+  }
+}
+
+// ─── Process Lockfile ────────────────────────────────────────
+
+import * as os from "os";
+
+const LOCK_STALE_MS = 60_000; // consider lock stale after 60 seconds
+let lockDepth = 0; // re-entrancy counter for same-process calls
+
+function lockPath(): string { return path.join(os.homedir(), ".equip", ".lock"); }
+
+/**
+ * Acquire a simple process-level lock. Prevents concurrent equip operations
+ * from racing on shared state files. The lock is advisory — it won't block
+ * a determined caller, but it prevents accidental concurrent runs.
+ *
+ * Re-entrant within the same process (nested calls increment a counter).
+ * Returns a release function. Call it when done.
+ * Throws if the lock is already held by another process.
+ */
+export function acquireLock(): () => void {
+  // Re-entrant: if we already hold the lock, just bump the counter
+  if (lockDepth > 0) {
+    lockDepth++;
+    return () => { lockDepth--; };
+  }
+
+  const lp = lockPath();
+  const dir = path.dirname(lp);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const lockContent = JSON.stringify({ pid: process.pid, timestamp: Date.now() });
+
+  // Try atomic exclusive creation (eliminates TOCTOU race)
+  try {
+    fs.writeFileSync(lp, lockContent, { flag: "wx" });
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== "EEXIST") throw e;
+
+    // Lock file exists — check if it's stale or held by a dead process
+    try {
+      const raw = fs.readFileSync(lp, "utf-8");
+      const lock = JSON.parse(raw);
+      const age = Date.now() - (lock.timestamp || 0);
+
+      if (lock.pid === process.pid) {
+        // We hold it (leftover from crash) — reclaim
+      } else if (age >= LOCK_STALE_MS) {
+        // Lock is stale — reclaim
+      } else {
+        // Check if the holding process is still alive
+        try {
+          process.kill(lock.pid, 0);
+          throw new Error(`Another equip process is running (PID ${lock.pid}). Wait for it to finish or delete ~/.equip/.lock`);
+        } catch (killErr: any) {
+          if (killErr.code !== "ESRCH") throw killErr;
+          // Process is dead — lock is stale, reclaim
+        }
+      }
+    } catch (readErr: any) {
+      if (readErr.message?.includes("Another equip process")) throw readErr;
+      // File is corrupt or disappeared — proceed to overwrite
+    }
+
+    // Overwrite the stale/dead lock
+    fs.writeFileSync(lp, lockContent);
+  }
+
+  lockDepth = 1;
+
+  // Return release function
+  return () => {
+    lockDepth--;
+    if (lockDepth === 0) {
+      try { fs.unlinkSync(lockPath()); } catch {}
+    }
+  };
 }
 
 // ─── Safe JSON Read ─────────────────────────────────────────

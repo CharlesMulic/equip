@@ -4,6 +4,7 @@
 // Zero non-Node dependencies.
 
 import * as fs from "fs";
+import { atomicWriteFileSync } from "./fs";
 import * as path from "path";
 import * as os from "os";
 import * as http from "http";
@@ -96,7 +97,7 @@ export function writeStoredCredential(cred: StoredCredential): void {
     fs.mkdirSync(getCredentialsDir(), { recursive: true });
   }
   const p = credentialPath(cred.toolName);
-  fs.writeFileSync(p, JSON.stringify(cred, null, 2));
+  atomicWriteFileSync(p, JSON.stringify(cred, null, 2));
   hardenCredentialPermissions(p);
   ensureEquipGitignore();
 }
@@ -749,7 +750,7 @@ async function exchangeTokenForKey(
     if (config.conflictCode && errorData.error?.code === config.conflictCode) {
       logger.warn("Key conflict detected", { code: config.conflictCode });
 
-      if (config.conflictResolution === "regenerate" || nonInteractive) {
+      if (config.conflictResolution === "regenerate" || nonInteractive || !process.stdin.isTTY) {
         // Auto-regenerate
         return exchangeTokenForKey(accessToken, {
           ...config,

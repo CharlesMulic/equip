@@ -37,6 +37,7 @@ equip doctor                   # Validate config integrity + credential health
 equip update prior             # Re-fetch and re-install latest version
 equip refresh                  # Refresh expired OAuth tokens
 equip reauth prior             # Re-authenticate and rotate credentials
+equip restore claude-code      # Restore a platform to its pre-equip state
 unequip prior                  # Remove an augment
 ```
 
@@ -84,6 +85,9 @@ See [Platforms](./docs/platforms.md) for config paths, detection, and per-platfo
 | `equip refresh [augment]` | Refresh expired OAuth tokens |
 | `equip reauth <augment>` | Re-authenticate and update credentials |
 | `equip uninstall <augment>` | Remove an augment (alias: `unequip`) |
+| `equip snapshot [platform]` | Capture current platform config state |
+| `equip snapshots [platform]` | List available config snapshots |
+| `equip restore <platform>` | Restore platform config to a previous snapshot |
 | `equip ./script.js` | Run a local setup script (for development) |
 
 Options: `--verbose`, `--dry-run`, `--api-key <key>`, `--platform <name>`, `--non-interactive`
@@ -134,8 +138,9 @@ Equip tracks everything in `~/.equip/`:
 - **`platforms.json`** — Detected platforms with capabilities and enabled/disabled preferences
 - **`platforms/`** — Per-platform scan results (all MCP servers, managed and unmanaged)
 - **`credentials/`** — Stored auth credentials per augment
+- **`snapshots/`** — Platform config snapshots for rollback (initial state captured automatically)
 
-State is reconciled from disk after every install/uninstall — equip scans actual platform config files rather than relying solely on its records.
+State is reconciled from disk after every install/uninstall — equip scans actual platform config files rather than relying solely on its records. Initial snapshots are captured before any modifications, guaranteeing you can always restore to your pre-equip state.
 
 ## Design Principles
 
@@ -145,6 +150,23 @@ State is reconciled from disk after every install/uninstall — equip scans actu
 - **Atomic file writes** — crash-safe config modifications
 - **Structured observability** — every install returns typed results with error codes and warnings
 - **Credential lifecycle** — store, validate, refresh, and rotate automatically
+
+## Telemetry
+
+Equip sends anonymous install metrics (augment name, platform, OS, equip version) to help improve equip. **No credentials, file paths, or personal data are included.**
+
+Telemetry is on by default and can be disabled:
+
+```bash
+# Disable via equip preferences
+# (set telemetry: false in ~/.equip/equip.json preferences)
+```
+
+Or programmatically:
+```typescript
+import { updatePreferences } from "@cg3/equip";
+updatePreferences({ telemetry: false });
+```
 
 ## License
 

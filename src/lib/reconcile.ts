@@ -11,11 +11,16 @@ import { PLATFORM_REGISTRY } from "./platforms";
 import { detectPlatforms } from "./detect";
 import { readMcpEntry } from "./mcp";
 import { dirExists, fileExists } from "./detect";
+import { acquireLock } from "./fs";
 import { trackInstallation, getManagedAugmentNames, type ArtifactRecord } from "./installations";
 import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
 import { syncFromRegistry } from "./augment-defs";
 import { markEquipUpdated } from "./equip-meta";
+import { createSnapshot, hasInitialSnapshot } from "./snapshots";
 import type { ToolDefinition } from "./registry";
+import type { DetectedPlatform } from "./platforms";
+import type { EquipLogger } from "./types";
+import { NOOP_LOGGER } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -30,6 +35,8 @@ export interface ReconcileOptions {
   hookDir?: string;
   /** Tool definition from registry (if available, used to sync augment definition) */
   toolDef?: ToolDefinition;
+  /** Logger for debug/warning output (silent by default) */
+  logger?: EquipLogger;
 }
 
 // ─── Reconcile ──────────────────────────────────────────────
@@ -39,13 +46,31 @@ export interface ReconcileOptions {
  * Returns the number of platforms where the tool was found.
  */
 export function reconcileState(options: ReconcileOptions): number {
-  const { toolName, package: pkg, marker = toolName, hookDir: customHookDir, toolDef } = options;
+  const { toolName, package: pkg, marker = toolName, hookDir: customHookDir, toolDef, logger = NOOP_LOGGER } = options;
   const defaultHookDir = path.join(os.homedir(), `.${toolName}`, "hooks");
   const hookDir = customHookDir || defaultHookDir;
 
+  const releaseLock = acquireLock();
+  try {
+    return reconcileStateInner(toolName, pkg, marker, hookDir, toolDef, logger);
+  } finally {
+    releaseLock();
+  }
+}
+
+function reconcileStateInner(
+  toolName: string,
+  pkg: string,
+  marker: string,
+  hookDir: string,
+  toolDef: ToolDefinition | undefined,
+  logger: EquipLogger,
+): number {
   // Sync augment definition from registry if available
   if (toolDef) {
-    try { syncFromRegistry(toolDef); } catch { /* best effort */ }
+    try { syncFromRegistry(toolDef); } catch (e: unknown) {
+      logger.debug("Failed to sync augment definition", { error: (e as Error).message });
+    }
   }
 
   let count = 0;
@@ -121,8 +146,7 @@ export function reconcileState(options: ReconcileOptions): number {
   // Write to installations.json
   if (installedPlatforms.length > 0) {
     try {
-      const firstArtifact = artifacts[installedPlatforms[0]];
-      const transport = firstArtifact?.mcp ? "http" : "stdio";
+      const transport = toolDef?.transport || (artifacts[installedPlatforms[0]]?.mcp ? "http" : "stdio");
       trackInstallation(toolName, {
         source: "registry",
         package: pkg,
@@ -132,16 +156,33 @@ export function reconcileState(options: ReconcileOptions): number {
         platforms: installedPlatforms,
         artifacts,
       });
-    } catch { /* best effort */ }
+    } catch (e: unknown) {
+      logger.debug("Failed to track installation", { error: (e as Error).message });
+    }
   }
 
   // Update platform scan files and metadata
   try {
     const detected = detectPlatforms();
+
+    // First-detection snapshots (best effort)
+    for (const p of detected) {
+      try {
+        if (!hasInitialSnapshot(p.platform)) {
+          createSnapshot(p, { label: "initial", trigger: "first-detection" });
+          logger.debug("Initial snapshot created", { platform: p.platform });
+        }
+      } catch (e: unknown) {
+        logger.debug("Failed to create initial snapshot", { platform: p.platform, error: (e as Error).message });
+      }
+    }
+
     const managedNames = getManagedAugmentNames();
     scanAllPlatforms(detected, managedNames);
     markEquipUpdated();
-  } catch { /* best effort */ }
+  } catch (e: unknown) {
+    logger.debug("Failed to update platform state", { error: (e as Error).message });
+  }
 
   return count;
 }
