@@ -4,7 +4,7 @@ Equip your AI agents with augments — packages of MCP servers, behavioral rules
 
 [![npm](https://img.shields.io/npm/v/@cg3/equip)](https://www.npmjs.com/package/@cg3/equip)
 
-[Discord](https://discord.gg/bBcRHT4J) · [Augment Author Guide](./docs/augment-author.md) · [Browse Augments](https://cg3.io/equip)
+[Discord](https://discord.gg/bBcRHT4J) · [Augment Author Guide](./docs/augment-author.md)
 
 ## What It Does
 
