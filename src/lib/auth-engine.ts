@@ -72,11 +72,12 @@ export interface AuthResult {
 
 // ─── Paths ─────────────────────────────────────────────────
 
-const EQUIP_DIR = path.join(os.homedir(), ".equip");
-const CREDENTIALS_DIR = path.join(EQUIP_DIR, "credentials");
+// Resolve dynamically so tests can override os.homedir()
+function getEquipDir(): string { return path.join(os.homedir(), ".equip"); }
+function getCredentialsDir(): string { return path.join(getEquipDir(), "credentials"); }
 
 function credentialPath(toolName: string): string {
-  return path.join(CREDENTIALS_DIR, `${toolName}.json`);
+  return path.join(getCredentialsDir(), `${toolName}.json`);
 }
 
 // ─── Credential Storage ────────────────────────────────────
@@ -91,8 +92,8 @@ export function readStoredCredential(toolName: string): StoredCredential | null 
 }
 
 export function writeStoredCredential(cred: StoredCredential): void {
-  if (!fs.existsSync(CREDENTIALS_DIR)) {
-    fs.mkdirSync(CREDENTIALS_DIR, { recursive: true });
+  if (!fs.existsSync(getCredentialsDir())) {
+    fs.mkdirSync(getCredentialsDir(), { recursive: true });
   }
   const p = credentialPath(cred.toolName);
   fs.writeFileSync(p, JSON.stringify(cred, null, 2));
@@ -102,26 +103,19 @@ export function writeStoredCredential(cred: StoredCredential): void {
 
 /** Restrict file permissions to current user only. */
 function hardenCredentialPermissions(filePath: string): void {
-  if (process.platform === "win32") {
-    // Windows: use icacls to remove inherited ACLs and grant only current user
-    try {
-      const { execSync } = require("child_process");
-      execSync(`icacls "${filePath}" /inheritance:r /grant:r "%USERNAME%:(R,W,D)"`, {
-        stdio: "ignore", shell: "cmd.exe", timeout: 5000,
-      });
-      execSync(`icacls "${CREDENTIALS_DIR}" /inheritance:r /grant:r "%USERNAME%:(R,W,RD,D)"`, {
-        stdio: "ignore", shell: "cmd.exe", timeout: 5000,
-      });
-    } catch { /* best effort — may fail on some Windows configurations */ }
-  } else {
+  // On Unix: chmod 600 for files, 700 for directories — standard practice.
+  // On Windows: rely on default user directory ACLs (user profile dirs already
+  // restrict access to the user + SYSTEM + Administrators). Attempting to modify
+  // ACLs via icacls from Node is fragile and has caused files to become inaccessible.
+  if (process.platform !== "win32") {
     try { fs.chmodSync(filePath, 0o600); } catch {}
-    try { fs.chmodSync(CREDENTIALS_DIR, 0o700); } catch {}
+    try { fs.chmodSync(getCredentialsDir(), 0o700); } catch {}
   }
 }
 
 /** Create a .gitignore in ~/.equip/ to prevent accidental credential commits. */
 function ensureEquipGitignore(): void {
-  const gitignorePath = path.join(EQUIP_DIR, ".gitignore");
+  const gitignorePath = path.join(getEquipDir(), ".gitignore");
   if (!fs.existsSync(gitignorePath)) {
     try {
       fs.writeFileSync(gitignorePath, "# Prevent accidental credential commits\ncredentials/\ncache/\n*.tmp\n");
@@ -138,7 +132,7 @@ export function deleteStoredCredential(toolName: string): void {
  */
 export function listStoredCredentials(): string[] {
   try {
-    return fs.readdirSync(CREDENTIALS_DIR)
+    return fs.readdirSync(getCredentialsDir())
       .filter(f => f.endsWith(".json"))
       .map(f => f.replace(/\.json$/, ""));
   } catch {
