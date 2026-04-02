@@ -2,16 +2,51 @@
 
 Implementation plan for migrating equip from the current `state.json` to the new multi-file architecture described in `STATE_REDESIGN.md`.
 
-**Current test suite:** 292 tests across 6 files (equip: 171, hooks: 34, auth: 28, registry: 18, observability: 32, docs: 9). All changes must maintain or expand test coverage.
+**Current test suite:** 325 tests, all passing.
 
 ---
 
-## Phase 1: Multi-Skill Support (Library Fix) ✅ COMPLETE
+## INTEGRATION STATUS (HONEST AUDIT)
+
+**Last audited:** 2026-04-01
+
+The modules for the new state architecture are built and unit-tested, but **the CLI does not use them yet**. The old `state.json` flow is still the only thing that runs during `equip install/uninstall`.
+
+| Component | Module Built | Unit Tested | Integrated into CLI | Integrated into Sidecar |
+|-----------|:-----------:|:-----------:|:-------------------:|:-----------------------:|
+| Multi-skill support | ✅ | ✅ | ✅ (Augment class, CLI output) | ✅ |
+| Augment definitions (`augments/`) | ✅ | ✅ | ❌ `syncFromRegistry()` never called during install | Read-only ✅ |
+| `platforms.json` | ✅ | ✅ | ❌ CLI doesn't read or write it | ✅ (scan writes) |
+| `platforms/<id>.json` | ✅ | ✅ | ❌ CLI doesn't read or write it | ✅ (scan writes) |
+| `installations.json` | ✅ | ✅ | ❌ `trackInstallation()` never called during install | Read-only ✅ |
+| `equip.json` | ✅ | ✅ | ❌ CLI doesn't read or write it | ✅ (scan writes meta) |
+| Migration (`state.json` → new files) | ✅ | ✅ | ❌ Not called by CLI | ✅ (first scan triggers it) |
+| `isPlatformEnabled()` filtering | ✅ | ✅ | ❌ CLI doesn't check it | ❌ Not enforced anywhere |
+| Install/uninstall via sidecar | ❌ Not built | ❌ | N/A | ❌ |
+
+**What this means:**
+- Running `equip prior` from the CLI writes to `state.json` (old) — not to `installations.json`, `augments/prior.json`, or `platforms/*.json` (new)
+- The new files only get populated by: (1) the one-time migration, and (2) the sidecar's `scan` method
+- If a user installs something via CLI after migration, the new files go stale immediately
+- The `enabled` flag in `platforms.json` is ignored by everything except the UI display
+
+**What needs to happen to make this real:**
+1. CLI `directInstall` must call `syncFromRegistry()` after fetching tool definition
+2. CLI `directInstall` must filter platforms through `isPlatformEnabled()`
+3. CLI post-install must call `trackInstallation()` (new) alongside `reconcileState()` (old, for backward compat)
+4. CLI post-install must call `scanAllPlatforms()` to update per-platform files
+5. CLI uninstall must call `trackUninstallation()`
+6. Eventually: drop `state.json` writes entirely
+
+---
+
+## Phase 1: Multi-Skill Support (Library Fix) ✅ FULLY INTEGRATED
 
 **Completed:** 2026-04-01
 **Commit:** e08f373
 **Tests:** 258 → 266 (8 new multi-skill tests)
 **Risk:** Low — additive change, existing single-skill behavior preserved.
+**Integration:** Fully integrated — Augment class, CLI output, reconcileState, and registry mapping all use `skills[]`.
 
 ### Changes
 
@@ -63,11 +98,12 @@ describe("multi-skill support", () => {
 
 ---
 
-## Phase 2: Augment Definitions (`~/.equip/augments/`)
+## Phase 2: Augment Definitions (`~/.equip/augments/`) ⚠️ MODULE BUILT — NOT INTEGRATED
 
-**Completed:** 2026-04-01
+**Module completed:** 2026-04-01
 **Tests:** 266 → 288 (22 new tests in augment-defs.test.js)
 **Risk:** Medium — new concept, but doesn't change existing install flow yet. Additive.
+**Integration gap:** `syncFromRegistry()` is never called during CLI `equip install`. Augment definitions only get created by the one-time migration (from cache) or manually. Normal usage does NOT populate `augments/*.json`.
 
 ### Changes
 
@@ -136,11 +172,12 @@ describe("augment-defs", () => {
 
 ---
 
-## Phase 3: New Platform State Files ✅ COMPLETE
+## Phase 3: New Platform State Files ⚠️ MODULES BUILT — NOT INTEGRATED INTO CLI
 
-**Completed:** 2026-04-01
+**Modules completed:** 2026-04-01
 **Tests:** 288 → 322 (34 new tests across platform-state.test.js and migration.test.js)
 **Risk:** High — changes the core state model. Must maintain backward compatibility during migration.
+**Integration gap:** The CLI still writes exclusively to `state.json` via the old `reconcileState()` → `trackInstall()` path. None of `platforms.json`, `platforms/*.json`, `installations.json`, or `equip.json` are written during normal CLI install/uninstall. These files only exist from: (1) one-time migration, (2) sidecar scan. They go stale immediately after any CLI operation.
 
 ### Sub-phase 3a: `platforms.json` (metadata only)
 
@@ -240,21 +277,29 @@ describe("migration", () => {
 
 ---
 
-## Phase 4: Sidecar Bridge Updates ✅ COMPLETE
+## Phase 4: Sidecar Bridge Updates ⚠️ PARTIALLY COMPLETE (READ-ONLY)
 
-**Completed:** 2026-04-01
+**Module completed:** 2026-04-01
 **Risk:** Low — sidecar is a thin wrapper, changes follow from Phase 3.
+**Integration status:** Sidecar can scan and read new state files. Cannot install, uninstall, wrap, or detect drift.
 
-### Changes
+### Implemented
 
-- `scan` method: reads `platforms.json` + `platforms/<id>.json` instead of live-scanning every time (with a `force` param to trigger re-scan)
-- `augments` method: list all augment definitions from `augments/`
-- `install` method: read augment definition, install via Augment class, update state files
-- `uninstall` method: read installations, uninstall via Augment class, update state files
-- `running` method: check for running platform processes
-- `enable`/`disable` method: toggle platform enabled flag
-- `wrap` method: wrap unmanaged entry as local augment
-- `drift` method: compare installations.json against platform scan files
+- ✅ `scan` method: detects platforms, reads configs, writes all new state files, triggers migration
+- ✅ `read` method: returns cached state without re-scanning
+- ✅ `augments` method: list all augment definitions
+- ✅ `augment` method: get single augment definition
+- ✅ `setEnabled` method: toggle platform enabled flag
+- ✅ `running` method: check for running processes with per-instance details
+- ✅ `meta` method: read equip metadata
+
+### NOT Implemented
+
+- ❌ `install` method: install augment via Augment class + update all state files
+- ❌ `uninstall` method: uninstall + update state files
+- ❌ `wrap` method: wrap unmanaged entry as local augment
+- ❌ `drift` method: compare installations.json against platform scan files
+- ❌ Install/uninstall respecting `isPlatformEnabled()` filter
 
 ### Sidecar Recompilation
 
@@ -265,11 +310,23 @@ bun build equip/sidecar/bridge.ts --compile --outfile equip-app/src-tauri/binari
 
 ---
 
-## Phase 5: Desktop App Integration ✅ COMPLETE (Agents tab)
+## Phase 5: Desktop App Integration ⚠️ AGENTS TAB ONLY (READ-ONLY)
 
-**Completed:** 2026-04-01
+**Agents tab completed:** 2026-04-01
 **Risk:** Low — UI changes only, no library changes.
-**Note:** Agents tab fully wired. Equip tab and other pages still use placeholder content.
+**Integration status:** Agents tab displays live platform data from new state files. Enable/disable works (persists flag). But no install/uninstall actions — Equip page is placeholder, Discover page is placeholder.
+
+**What works:**
+- ✅ Agents tab shows detected platforms with capabilities, augment counts, running status
+- ✅ Enable/disable toggle persists to `platforms.json`
+- ✅ Open config folder button
+- ✅ Debug dump system (Ctrl+Shift+D)
+
+**What doesn't work:**
+- ❌ Equip page: placeholder, no augment cards from real data
+- ❌ Discover page: placeholder, no registry connection
+- ❌ No install/uninstall from UI (sidecar methods don't exist)
+- ❌ Carry weight bar: always shows 0
 
 ### Changes
 
@@ -282,30 +339,81 @@ bun build equip/sidecar/bridge.ts --compile --outfile equip-app/src-tauri/binari
 
 ---
 
+## Phase 6: CLI Integration (NOT STARTED)
+
+**Goal:** Make the CLI use the new state modules so that `equip install/uninstall` keeps all state files in sync.
+**Risk:** Medium — modifying the live install flow. Must maintain backward compat with state.json during transition.
+**Prerequisite:** Phases 2 and 3 modules exist (done). This phase wires them into the actual CLI.
+
+### Changes Required
+
+**`bin/equip.js` — `directInstall()` function:**
+
+1. **After fetching tool definition:** Call `syncFromRegistry(toolDef)` to create/update `augments/<name>.json`
+2. **Before install loop:** Filter platforms through `isPlatformEnabled()`
+3. **After install loop:** Call `trackInstallation()` to write `installations.json`
+4. **After install loop:** Call `scanAllPlatforms()` to update `platforms.json` + `platforms/*.json`
+5. **Keep existing:** `reconcileState()` still writes `state.json` for backward compat
+
+**`bin/equip.js` — uninstall flow:**
+
+6. **Before uninstall:** Read `isPlatformEnabled()`, skip disabled platforms
+7. **After uninstall:** Call `trackUninstallation()` to update `installations.json`
+8. **After uninstall:** Call `scanAllPlatforms()` to refresh platform files
+
+**`bin/equip.js` — update flow:**
+
+9. **After re-fetching tool def:** Call `syncFromRegistry()` to update augment definition (preserving mods)
+
+### Tests Required
+
+- CLI install with disabled platform → platform is skipped
+- CLI install writes `augments/<name>.json`
+- CLI install writes `installations.json` with correct platforms + artifacts
+- CLI install updates `platforms/*.json` for affected platforms
+- CLI uninstall removes from `installations.json`
+- CLI uninstall skips disabled platforms
+- All existing CLI tests still pass (backward compat)
+
+---
+
+## Phase 7: Sidecar Install/Uninstall (NOT STARTED)
+
+**Goal:** Enable the desktop app to install and uninstall augments.
+**Risk:** Medium — requires auth handling, augment definition resolution.
+**Prerequisite:** Phase 6 (CLI integration) should be done first so both paths use the same logic.
+
+### Changes Required
+
+- Sidecar `install` method: resolve augment definition → resolve auth → call Augment class per platform → update all state files
+- Sidecar `uninstall` method: read installations → call Augment class per platform → update all state files
+- Sidecar `wrap` method: extract MCP entry from platform config → create augment definition
+- Both methods respect `isPlatformEnabled()`
+
+---
+
 ## Implementation Order & Dependencies
 
 ```
-Phase 1: Multi-Skill Support
-  ↓ (no dependency, can start immediately)
-Phase 2: Augment Definitions
-  ↓ (Phase 1 must be done — skills array in definitions)
-Phase 3a: platforms.json
-Phase 3b: platforms/<id>.json
-Phase 3c: installations.json
-Phase 3d: equip.json
-  ↓ (3a-3d can be built in parallel, but 3e depends on all of them)
-Phase 3e: Migration
+Phase 1: Multi-Skill Support ✅ FULLY INTEGRATED
   ↓
-Phase 4: Sidecar Updates
-  ↓
-Phase 5: Desktop App
+Phase 2: Augment Definitions ⚠️ MODULE BUILT, not integrated into CLI
+Phase 3: Platform State Files ⚠️ MODULES BUILT, not integrated into CLI
+  ↓ (these exist in parallel, not wired into the live flow)
+Phase 4: Sidecar (read-only) ⚠️ READS new files, can't write/install
+Phase 5: Desktop App (read-only) ⚠️ DISPLAYS data, can't take action
+  ↓ (everything above is read-only infrastructure)
+Phase 6: CLI Integration ❌ NOT STARTED — THE CRITICAL GAP
+  ↓ (this makes the new state files actually get written during normal usage)
+Phase 7: Sidecar Install/Uninstall ❌ NOT STARTED
+  ↓ (this makes the desktop app functional for equipping/unequipping)
 ```
 
-**Phases 1 and 2 are independent and safe.** They add new capabilities without changing existing behavior. Ship and test each before moving on.
+**Phase 1 is the only phase that's fully integrated.** Everything else is built but not wired into the live flow.
 
-**Phase 3 is the big one.** It changes the core state model. The sub-phases can be built incrementally, with the old `state.json` still being written in parallel until the migration is proven stable.
+**Phase 6 is the critical gap.** Until the CLI writes to the new state files during install/uninstall, the entire new architecture is a parallel system that goes stale after any CLI operation. This is the next thing to build.
 
-**Phases 4 and 5 are consumers** — they read/use what the earlier phases built.
+**Phase 7 depends on Phase 6** — the sidecar's install/uninstall should use the same code paths as the CLI to keep both in sync.
 
 ---
 
