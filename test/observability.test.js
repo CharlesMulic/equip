@@ -14,7 +14,7 @@ const { installRules } = require("../dist/lib/rules");
 const { installHooks } = require("../dist/lib/hooks");
 const { installSkill } = require("../dist/lib/skills");
 const { safeReadJsonSync } = require("../dist/lib/fs");
-const { readState } = require("../dist/lib/state");
+const { readInstallations } = require("../dist/lib/installations");
 
 // ─── Test Helpers ───────────────────────────────────────────
 
@@ -278,10 +278,10 @@ describe("Blind spot #4: TOML read failure handling", () => {
 
 // ─── Blind Spot #5: State corruption ───────────────────────
 
-describe("Blind spot #5: corrupt state.json", () => {
-  it("returns empty state and logs warning on corrupt state file", () => {
-    const logger = recordingLogger();
-    const statePath = require("../dist/lib/state").getStatePath();
+describe("Blind spot #5: corrupt installations.json", () => {
+  it("returns empty installations on corrupt file", () => {
+    const os = require("os");
+    const statePath = path.join(os.homedir(), ".equip", "installations.json");
 
     // Save current state
     let originalContent = null;
@@ -292,17 +292,10 @@ describe("Blind spot #5: corrupt state.json", () => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(statePath, "corrupt state {{{");
 
-    const state = readState(logger);
-    assert.equal(state.equipVersion, "");
-    assert.deepEqual(state.tools, {});
-
-    // Verify warning was logged
-    const warns = logger.calls.filter(c => c.level === "warn");
-    assert.ok(warns.length > 0, "Expected a warning to be logged");
-    assert.ok(warns[0].msg.includes("corrupt"), "Warning should mention corruption");
-
-    // Verify .corrupt.bak was created
-    assert.ok(fs.existsSync(statePath + ".corrupt.bak"), "Corrupt backup should be created");
+    // readInstallations uses safeReadJsonSync — returns empty on corrupt
+    const inst = readInstallations();
+    assert.equal(inst.lastUpdated, "");
+    assert.deepEqual(inst.augments, {});
 
     // Restore original state
     if (originalContent) {

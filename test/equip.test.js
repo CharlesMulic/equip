@@ -688,58 +688,7 @@ describe("equip CLI", () => {
   });
 });
 
-// ─── State Module ───────────────────────────────────────────
-
-describe("state module", () => {
-  const { readState, writeState, trackInstall, trackUninstall, getStatePath } = require("../dist/lib/state");
-
-  // Clean up any state pollution from Augment class tests (they use name: "test", "myserver")
-  function cleanupTestState() {
-    const state = readState();
-    let changed = false;
-    for (const name of Object.keys(state.tools)) {
-      const tool = state.tools[name];
-      // Remove entries with tmp paths (test artifacts)
-      const hasTmpPaths = Object.values(tool.platforms).some(p => p.configPath && p.configPath.includes("Temp"));
-      if (hasTmpPaths || name === "test-tool") {
-        delete state.tools[name];
-        changed = true;
-      }
-    }
-    if (changed) writeState(state);
-  }
-
-  it("reads state", () => {
-    const state = readState();
-    assert.ok(state.tools);
-    assert.equal(typeof state.tools, "object");
-  });
-
-  it("trackInstall and trackUninstall roundtrip", () => {
-    trackInstall("test-tool", "@test/pkg", "claude-code", {
-      transport: "http",
-      configPath: "/tmp/test.json",
-    });
-    const state = readState();
-    assert.ok(state.tools["test-tool"]);
-    assert.equal(state.tools["test-tool"].platforms["claude-code"].transport, "http");
-
-    trackUninstall("test-tool", "claude-code");
-    const after = readState();
-    assert.ok(!after.tools["test-tool"]);
-  });
-
-  it("cleanup: remove test artifacts from state", () => {
-    cleanupTestState();
-    const state = readState();
-    // Verify no test artifacts remain
-    for (const [name, tool] of Object.entries(state.tools)) {
-      for (const [, plat] of Object.entries(tool.platforms)) {
-        assert.ok(!plat.configPath || !plat.configPath.includes("Temp"), `${name} has tmp configPath`);
-      }
-    }
-  });
-});
+// ─── State Module (REMOVED — covered by platform-state.test.js + installations tests) ───
 
 // ─── Atomic Write ───────────────────────────────────────────
 
@@ -989,8 +938,6 @@ describe("Augment.verify()", () => {
 // ─── Reconcile State ────────────────────────────────────────
 
 describe("reconcileState", () => {
-  const { readState, writeState, trackUninstall } = require("../dist/lib/state");
-
   it("finds installed tools across platforms", () => {
     // Set up a mock config file with a tool entry
     const p = mockPlatform();
@@ -1006,7 +953,7 @@ describe("reconcileState", () => {
     assert.equal(typeof count, "number");
 
     // Clean up any state artifacts
-    trackUninstall("test-reconcile");
+    trackUninstallation("test-reconcile");
     cleanup(p.configPath);
   });
 
@@ -1033,23 +980,7 @@ describe("reconcileState", () => {
 
 // ─── equipVersionAtInstall ──────────────────────────────────
 
-describe("equipVersionAtInstall tracking", () => {
-  const { readState, trackInstall, trackUninstall } = require("../dist/lib/state");
-
-  it("records equipVersion on each platform record", () => {
-    trackInstall("version-test", "@test/pkg", "claude-code", {
-      transport: "http",
-      configPath: "/tmp/test.json",
-    });
-    const state = readState();
-    const record = state.tools["version-test"]?.platforms["claude-code"];
-    assert.ok(record);
-    assert.ok(record.equipVersion, "should have equipVersion");
-    assert.match(record.equipVersion, /^\d+\.\d+\.\d+/);
-
-    trackUninstall("version-test");
-  });
-});
+// ─── equipVersionAtInstall (REMOVED — version tracking is in equip-meta now) ───
 
 // ─── Hooks Subsystem ────────────────────────────────────────
 

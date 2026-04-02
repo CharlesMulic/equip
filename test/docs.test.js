@@ -18,7 +18,7 @@ const fs = require("fs");
 const { execSync } = require("child_process");
 
 const EQUIP_ROOT = path.join(__dirname, "..");
-const { trackUninstall } = require("../dist/lib/state");
+const { trackUninstallation } = require("../dist/lib/installations");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ for (const p of platforms) {
   });
 
   after(() => {
-    trackUninstall("piratehat");
+    trackUninstallation("piratehat");
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 });
@@ -243,7 +243,7 @@ for (const p of platforms) {
   });
 
   after(() => {
-    trackUninstall("piratehat");
+    trackUninstallation("piratehat");
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 });
@@ -309,7 +309,7 @@ console.log("Local package setup complete");
   });
 
   after(() => {
-    trackUninstall("test-local-pkg");
+    trackUninstallation("test-local-pkg");
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 });
