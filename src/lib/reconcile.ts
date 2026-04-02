@@ -1,17 +1,28 @@
 // State reconciliation — scans platform configs after tool dispatch
-// and records what's actually on disk in ~/.equip/state.json.
+// and records what's actually on disk.
+//
+// DUAL-WRITE BRIDGE: During the state migration, this module writes to BOTH
+// the old state.json (via trackInstall) AND the new state files (via
+// trackInstallation, scanAllPlatforms, etc.). Once all consumers are migrated
+// to read from new files, the old write path will be removed.
 //
 // Called by the global CLI after a tool's setup completes.
-// This is the single source of truth for state writes.
 // Zero dependencies.
 
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { PLATFORM_REGISTRY } from "./platforms";
+import { detectPlatforms } from "./detect";
 import { readMcpEntry } from "./mcp";
 import { trackInstall, type ToolPlatformRecord } from "./state";
 import { dirExists, fileExists } from "./detect";
+import { trackInstallation, getManagedAugmentNames, type ArtifactRecord } from "./installations";
+import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
+import { syncFromRegistry } from "./augment-defs";
+import { markEquipUpdated } from "./equip-meta";
+import { migrateState } from "./migration";
+import type { ToolDefinition } from "./registry";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -24,20 +35,33 @@ export interface ReconcileOptions {
   marker?: string;
   /** Hook directory path. Defaults to ~/.{toolName}/hooks if not provided. */
   hookDir?: string;
+  /** Tool definition from registry (if available, used to sync augment definition) */
+  toolDef?: ToolDefinition;
 }
 
 // ─── Reconcile ──────────────────────────────────────────────
 
 /**
  * Scan all platform configs and update state based on what's on disk.
+ * Writes to BOTH old state.json and new state files (dual-write bridge).
  * Returns the number of platforms where the tool was found.
  */
 export function reconcileState(options: ReconcileOptions): number {
-  const { toolName, package: pkg, marker = toolName, hookDir: customHookDir } = options;
+  const { toolName, package: pkg, marker = toolName, hookDir: customHookDir, toolDef } = options;
   const defaultHookDir = path.join(os.homedir(), `.${toolName}`, "hooks");
   const hookDir = customHookDir || defaultHookDir;
 
+  // Ensure one-time migration has run
+  migrateState();
+
+  // Sync augment definition from registry if available
+  if (toolDef) {
+    try { syncFromRegistry(toolDef); } catch { /* best effort */ }
+  }
+
   let count = 0;
+  const installedPlatforms: string[] = [];
+  const artifacts: Record<string, ArtifactRecord> = {};
 
   for (const [id, def] of PLATFORM_REGISTRY) {
     // Quick presence check (fast fs stat)
@@ -50,12 +74,14 @@ export function reconcileState(options: ReconcileOptions): number {
     // Check ALL artifact types — a tool may have only rules, only skills,
     // only MCP config, or any combination. Track the platform if ANY artifact exists.
     const record: Partial<ToolPlatformRecord> = { configPath };
+    const artifactRecord: ArtifactRecord = { mcp: false };
     let hasAnyArtifact = false;
 
     // Check MCP config
     const entry = readMcpEntry(configPath, def.rootKey, toolName, def.configFormat);
     if (entry) {
       record.transport = (entry as Record<string, unknown>).command ? "stdio" : "http";
+      artifactRecord.mcp = true;
       hasAnyArtifact = true;
     }
 
@@ -68,6 +94,7 @@ export function reconcileState(options: ReconcileOptions): number {
         if (versionMatch) {
           record.rulesPath = rulesPath;
           record.rulesVersion = versionMatch[1];
+          artifactRecord.rules = versionMatch[1];
           hasAnyArtifact = true;
         }
       } catch { /* rules file may not exist */ }
@@ -80,6 +107,7 @@ export function reconcileState(options: ReconcileOptions): number {
         if (hookFiles.length > 0) {
           record.hookDir = hookDir;
           record.hookScripts = hookFiles;
+          artifactRecord.hooks = hookFiles;
           hasAnyArtifact = true;
         }
       } catch { /* hook dir may not exist */ }
@@ -99,7 +127,8 @@ export function reconcileState(options: ReconcileOptions): number {
         if (skillsWithMd.length > 0) {
           record.skillsPath = toolSkillDir;
           record.skillName = skillsWithMd[0]; // backward compat: first skill
-          record.skillNames = skillsWithMd;    // new: all skills
+          record.skillNames = skillsWithMd;    // all skills
+          artifactRecord.skills = skillsWithMd;
           hasAnyArtifact = true;
         }
       } catch { /* skill dir may not exist */ }
@@ -107,9 +136,39 @@ export function reconcileState(options: ReconcileOptions): number {
 
     if (!hasAnyArtifact) continue;
 
+    // OLD PATH: write to state.json (will be removed after migration)
     trackInstall(toolName, pkg, id, record);
+
+    // NEW PATH: collect for installations.json
+    installedPlatforms.push(id);
+    artifacts[id] = artifactRecord;
+
     count++;
   }
+
+  // NEW PATH: write to installations.json
+  if (installedPlatforms.length > 0) {
+    try {
+      const transport = artifacts[installedPlatforms[0]]?.mcp ? "http" : "stdio";
+      trackInstallation(toolName, {
+        source: "registry",
+        package: pkg,
+        displayName: toolDef?.displayName || toolName,
+        transport: (transport as "http" | "stdio"),
+        serverUrl: toolDef?.serverUrl,
+        platforms: installedPlatforms,
+        artifacts,
+      });
+    } catch { /* best effort — don't fail reconcile if new state write fails */ }
+  }
+
+  // NEW PATH: update platform scan files and metadata
+  try {
+    const detected = detectPlatforms();
+    const managedNames = getManagedAugmentNames();
+    scanAllPlatforms(detected, managedNames);
+    markEquipUpdated();
+  } catch { /* best effort */ }
 
   return count;
 }

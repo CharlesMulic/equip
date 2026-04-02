@@ -14,6 +14,8 @@ const { readState, trackUninstall } = require("../dist/lib/state");
 const { uninstallMcp } = require("../dist/lib/mcp");
 const { uninstallRules } = require("../dist/lib/rules");
 const { uninstallHooks } = require("../dist/lib/hooks");
+const { isPlatformEnabled } = require("../dist/lib/platform-state");
+const { trackUninstallation } = require("../dist/lib/installations");
 
 const toolName = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
@@ -74,7 +76,15 @@ cli.log("");
 
 let removed = 0;
 
+const removedPlatforms = [];
+
 for (const [platformId, record] of Object.entries(tool.platforms)) {
+  // Skip disabled platforms
+  if (!isPlatformEnabled(platformId)) {
+    cli.info(`${platformName(platformId)}: disabled, skipping`);
+    continue;
+  }
+
   const def = PLATFORM_REGISTRY.get(platformId);
   if (!def) {
     cli.warn(`${platformId}: unknown platform, skipping`);
@@ -110,14 +120,16 @@ for (const [platformId, record] of Object.entries(tool.platforms)) {
   if (results.length > 0) {
     cli.ok(`${def.name}: removed ${results.join(" + ")}`);
     removed++;
+    removedPlatforms.push(platformId);
   } else {
     cli.info(`${def.name}: nothing to remove`);
   }
 }
 
-// Update state
+// Update state (both old and new — dual-write bridge)
 if (!dryRun && removed > 0) {
-  trackUninstall(toolName);
+  trackUninstall(toolName);  // old state.json
+  try { trackUninstallation(toolName, removedPlatforms); } catch {} // new installations.json
 }
 
 cli.log("");
