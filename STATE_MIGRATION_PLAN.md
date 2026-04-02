@@ -2,27 +2,29 @@
 
 Implementation plan for migrating equip from the current `state.json` to the new multi-file architecture described in `STATE_REDESIGN.md`.
 
-**Current test suite:** 325 tests, all passing.
+**Current test suite:** 321 tests, all passing.
 
 ---
 
-## INTEGRATION STATUS (HONEST AUDIT)
+## INTEGRATION STATUS
 
 **Last audited:** 2026-04-01
+**Status: MIGRATION COMPLETE.** `state.ts` deleted. All production code uses new state modules.
 
-The modules for the new state architecture are built and unit-tested, but **the CLI does not use them yet**. The old `state.json` flow is still the only thing that runs during `equip install/uninstall`.
+All modules are built, tested, and integrated. `state.ts` has been deleted. The CLI, sidecar, and desktop app all use the new state files exclusively.
 
 | Component | Module Built | Unit Tested | Integrated into CLI | Integrated into Sidecar |
 |-----------|:-----------:|:-----------:|:-------------------:|:-----------------------:|
-| Multi-skill support | ✅ | ✅ | ✅ (Augment class, CLI output) | ✅ |
-| Augment definitions (`augments/`) | ✅ | ✅ | ❌ `syncFromRegistry()` never called during install | Read-only ✅ |
-| `platforms.json` | ✅ | ✅ | ❌ CLI doesn't read or write it | ✅ (scan writes) |
-| `platforms/<id>.json` | ✅ | ✅ | ❌ CLI doesn't read or write it | ✅ (scan writes) |
-| `installations.json` | ✅ | ✅ | ❌ `trackInstallation()` never called during install | Read-only ✅ |
-| `equip.json` | ✅ | ✅ | ❌ CLI doesn't read or write it | ✅ (scan writes meta) |
-| Migration (`state.json` → new files) | ✅ | ✅ | ❌ Not called by CLI | ✅ (first scan triggers it) |
-| `isPlatformEnabled()` filtering | ✅ | ✅ | ❌ CLI doesn't check it | ❌ Not enforced anywhere |
-| Install/uninstall via sidecar | ❌ Not built | ❌ | N/A | ❌ |
+| Multi-skill support | ✅ | ✅ | ✅ | ✅ |
+| Augment definitions (`augments/`) | ✅ | ✅ | ✅ `syncFromRegistry()` called via reconcile | ✅ |
+| `platforms.json` | ✅ | ✅ | ✅ Written by reconcile after install | ✅ |
+| `platforms/<id>.json` | ✅ | ✅ | ✅ Written by reconcile after install | ✅ |
+| `installations.json` | ✅ | ✅ | ✅ Written by reconcile + unequip | ✅ |
+| `equip.json` | ✅ | ✅ | ✅ Written by reconcile + update | ✅ |
+| Migration (`state.json` → new files) | ✅ | ✅ | ✅ Called on CLI startup | ✅ |
+| `isPlatformEnabled()` filtering | ✅ | ✅ | ✅ Checked in install + uninstall | ✅ |
+| `state.ts` deleted | ✅ | ✅ | ✅ Zero references | ✅ |
+| Install/uninstall via sidecar | ❌ Not built | ❌ | N/A | ❌ (future Phase 7) |
 
 **What this means:**
 - Running `equip prior` from the CLI writes to `state.json` (old) — not to `installations.json`, `augments/prior.json`, or `platforms/*.json` (new)
