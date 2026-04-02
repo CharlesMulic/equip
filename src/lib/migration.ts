@@ -7,8 +7,34 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import type { EquipState, ToolPlatformRecord } from "./state";
 import { readInstallations, writeInstallations, type Installations, type InstallationRecord, type ArtifactRecord } from "./installations";
+
+// Legacy types inlined from the deleted state.ts module — only used for reading old state.json
+interface LegacyToolPlatformRecord {
+  configPath: string;
+  transport: string;
+  rulesPath?: string;
+  rulesVersion?: string;
+  hookDir?: string;
+  hookScripts?: string[];
+  skillsPath?: string;
+  skillName?: string;
+  skillNames?: string[];
+  equipVersion?: string;
+}
+
+interface LegacyToolRecord {
+  package: string;
+  installedAt: string;
+  updatedAt?: string;
+  platforms: Record<string, LegacyToolPlatformRecord>;
+}
+
+interface LegacyEquipState {
+  equipVersion: string;
+  lastUpdated: string;
+  tools: Record<string, LegacyToolRecord>;
+}
 import { readAugmentDef, writeAugmentDef, syncFromRegistry, type AugmentDef } from "./augment-defs";
 import { writeEquipMeta, type EquipMeta } from "./equip-meta";
 import { safeReadJsonSync } from "./fs";
@@ -136,7 +162,7 @@ function createAugmentFromState(toolName: string, toolRecord: any): void {
     syncFromRegistry(cached);
   } else {
     // No cache — create a minimal definition from what state knows
-    const firstPlatform = Object.values(toolRecord.platforms || {})[0] as ToolPlatformRecord | undefined;
+    const firstPlatform = Object.values(toolRecord.platforms || {})[0] as LegacyToolPlatformRecord | undefined;
 
     const def: AugmentDef = {
       name: toolName,
@@ -163,7 +189,7 @@ function readCachedToolDef(name: string): ToolDefinition | null {
   return data as unknown as ToolDefinition;
 }
 
-function buildInstallations(state: EquipState): Installations {
+function buildInstallations(state: LegacyEquipState): Installations {
   const installations: Installations = {
     lastUpdated: state.lastUpdated || new Date().toISOString(),
     augments: {},
@@ -174,7 +200,7 @@ function buildInstallations(state: EquipState): Installations {
     const artifacts: Record<string, ArtifactRecord> = {};
 
     for (const [platId, platRecord] of Object.entries(toolRecord.platforms || {})) {
-      const pr = platRecord as ToolPlatformRecord;
+      const pr = platRecord as LegacyToolPlatformRecord;
       artifacts[platId] = {
         mcp: true,
         rules: pr.rulesVersion,
@@ -183,7 +209,7 @@ function buildInstallations(state: EquipState): Installations {
       };
     }
 
-    const firstPlatform = Object.values(toolRecord.platforms || {})[0] as ToolPlatformRecord | undefined;
+    const firstPlatform = Object.values(toolRecord.platforms || {})[0] as LegacyToolPlatformRecord | undefined;
 
     installations.augments[toolName] = {
       source: "registry",
@@ -201,7 +227,7 @@ function buildInstallations(state: EquipState): Installations {
 }
 
 /** Read state.json from a specific path (bypasses the hardcoded path in state.ts). */
-function readStateFromPath(filePath: string): EquipState | null {
+function readStateFromPath(filePath: string): LegacyEquipState | null {
   try {
     const raw = fs.readFileSync(filePath, "utf-8");
     return JSON.parse(raw);

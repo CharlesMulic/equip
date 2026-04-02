@@ -30,6 +30,7 @@ const { getHookCapabilities, buildHooksConfig, installHooks, uninstallHooks, has
 const { installSkill, uninstallSkill, hasSkill } = require("../dist/lib/skills");
 const { buildStdioConfig } = require("../dist/lib/mcp");
 const { migrateConfigs } = require("../dist/lib/migrate");
+const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
 const { checkAuth, extractAuthHeader } = require("../dist/lib/auth");
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -1960,17 +1961,39 @@ describe("auth checking", () => {
 // versions with different platform definitions, then migrated by current version.
 
 describe("config migration", () => {
-  const { readState, writeState, trackInstall, trackUninstall } = require("../dist/lib/state");
+  const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
+  const { getPlatform } = require("../dist/lib/platforms");
 
-  // Helper: write a config file and track it in state, then run migration
+  // Helper: write a config file to the platform's canonical path and track it,
+  // then run migration. Backs up and restores the original config.
   function setupAndMigrate(platformId, toolName, configContent) {
-    const configPath = tmpPath("migrate") + ".json";
+    const def = getPlatform(platformId);
+    const configPath = def.configPath();
+    const configDir = path.dirname(configPath);
+
+    // Ensure config directory exists
+    if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+
+    // Backup existing config (if any)
+    let backup = null;
+    try { backup = fs.readFileSync(configPath, "utf-8"); } catch {}
+
     fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
-    trackInstall(toolName, "@test/pkg", platformId, { configPath, transport: "http" });
+    trackInstallation(toolName, {
+      source: "registry", displayName: toolName, transport: "http",
+      platforms: [platformId],
+      artifacts: { [platformId]: { mcp: true } },
+    });
     const results = migrateConfigs();
     const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    trackUninstall(toolName);
-    cleanup(configPath);
+
+    // Restore original config
+    if (backup !== null) {
+      fs.writeFileSync(configPath, backup);
+    } else {
+      try { fs.unlinkSync(configPath); } catch {}
+    }
+    trackUninstallation(toolName);
     return { results, content };
   }
 
@@ -2051,19 +2074,31 @@ describe("config migration", () => {
       }
     });
 
-    const migration = results.find(r => r.platform === "claude-code");
-    assert.equal(migration.action, "skipped");
-    assert.ok(migration.detail.includes("current"));
+    const migration = results.find(r => r.toolName === "test-migrate" && r.platform === "claude-code");
+    assert.ok(migration, "should have result for test-migrate on claude-code");
+    assert.equal(migration.action, "skipped", `expected skipped but got ${migration.action}: ${migration.detail}`);
   });
 
   it("skips platforms with no MCP entry", () => {
     // Tool is tracked on platform but has no MCP config (rules-only install)
-    const configPath = tmpPath("migrate-empty") + ".json";
-    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
-    trackInstall("test-migrate", "@test/pkg", "claude-code", { configPath, transport: "http" });
+    const def = getPlatform("claude-code");
+    const configPath = def.configPath();
+    const backup = (() => { try { return fs.readFileSync(configPath, "utf-8"); } catch { return null; } })();
+
+    // Write config WITHOUT the tool entry (empty mcpServers)
+    const origContent = backup ? JSON.parse(backup) : {};
+    const testContent = { ...origContent, mcpServers: { ...(origContent.mcpServers || {}) } };
+    // Don't add test-migrate — that's the point
+    delete testContent.mcpServers["test-migrate"];
+    fs.writeFileSync(configPath, JSON.stringify(testContent, null, 2));
+
+    trackInstallation("test-migrate", {
+      source: "registry", displayName: "test-migrate", transport: "http",
+      platforms: ["claude-code"], artifacts: { "claude-code": { mcp: true } },
+    });
     const results = migrateConfigs();
-    trackUninstall("test-migrate");
-    cleanup(configPath);
+    trackUninstallation("test-migrate");
+    if (backup) fs.writeFileSync(configPath, backup); // restore
 
     const migration = results.find(r => r.toolName === "test-migrate" && r.platform === "claude-code");
     assert.ok(migration, "should have result for test-migrate on claude-code");
@@ -2072,27 +2107,18 @@ describe("config migration", () => {
   });
 
   it("preserves other servers during migration", () => {
-    // Config has multiple servers — migration should only touch the target tool
-    const configPath = tmpPath("migrate-multi") + ".json";
-    fs.writeFileSync(configPath, JSON.stringify({
+    const { results, content } = setupAndMigrate("cursor", "test-migrate", {
       mcpServers: {
         "other-tool": { url: "https://other.com/mcp", type: "http", headers: { "X-Key": "keep" } },
         "test-migrate": { url: "https://api.example.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer old" } }
       }
-    }));
-    trackInstall("test-migrate", "@test/pkg", "cursor", { configPath, transport: "http" });
-    migrateConfigs();
-
-    const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    });
     // Other tool should be completely untouched
     assert.equal(content.mcpServers["other-tool"].type, "http", "other tool should not be modified");
     assert.equal(content.mcpServers["other-tool"].headers["X-Key"], "keep");
     // Migrated tool should have type removed (Cursor)
     assert.equal(content.mcpServers["test-migrate"].type, undefined, "cursor should lose type");
     assert.equal(content.mcpServers["test-migrate"].url, "https://api.example.com/mcp");
-
-    trackUninstall("test-migrate");
-    cleanup(configPath);
   });
 
   it("preserves extra fields like alwaysAllow and disabled", () => {
@@ -2132,7 +2158,10 @@ describe("config migration", () => {
   });
 
   it("handles migration of multiple tools at once", () => {
-    const configPath = tmpPath("migrate-batch") + ".json";
+    const def = getPlatform("cursor");
+    const configPath = def.configPath();
+    const backup = (() => { try { return fs.readFileSync(configPath, "utf-8"); } catch { return null; } })();
+
     fs.writeFileSync(configPath, JSON.stringify({
       mcpServers: {
         "tool-a": { url: "https://a.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer a" } },
@@ -2140,9 +2169,14 @@ describe("config migration", () => {
       }
     }));
 
-    // Track both on Cursor (which should NOT have type field)
-    trackInstall("tool-a", "@test/a", "cursor", { configPath, transport: "http" });
-    trackInstall("tool-b", "@test/b", "cursor", { configPath, transport: "http" });
+    trackInstallation("tool-a", {
+      source: "registry", displayName: "tool-a", transport: "http",
+      platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
+    });
+    trackInstallation("tool-b", {
+      source: "registry", displayName: "tool-b", transport: "http",
+      platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
+    });
 
     const results = migrateConfigs();
     const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
@@ -2151,8 +2185,8 @@ describe("config migration", () => {
     assert.equal(content.mcpServers["tool-a"].type, undefined, "tool-a type removed");
     assert.equal(content.mcpServers["tool-b"].type, undefined, "tool-b type removed");
 
-    trackUninstall("tool-a");
-    trackUninstall("tool-b");
-    cleanup(configPath);
+    trackUninstallation("tool-a");
+    trackUninstallation("tool-b");
+    if (backup) fs.writeFileSync(configPath, backup); else try { fs.unlinkSync(configPath); } catch {}
   });
 });
