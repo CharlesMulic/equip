@@ -8,6 +8,7 @@ const os = require("os");
 
 const {
   readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled,
+  getEnabledPlatformIds, isPlatformEnabled,
   readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms,
 } = require("../dist/lib/platform-state");
 
@@ -127,6 +128,38 @@ describe("platform-state: platforms.json", () => {
     const meta = updatePlatformsMeta([]);
     assert.ok(!meta.platforms["test-a"].detected);
     assert.ok(meta.platforms["test-a"].enabled); // preference preserved
+  });
+
+  it("getEnabledPlatformIds returns only enabled platforms", () => {
+    updatePlatformsMeta([
+      mockDetectedPlatform("test-a"),
+      mockDetectedPlatform("test-b"),
+      mockDetectedPlatform("test-c"),
+    ]);
+    setPlatformEnabled("test-b", false);
+
+    const enabled = getEnabledPlatformIds();
+    assert.ok(enabled.has("test-a"));
+    assert.ok(!enabled.has("test-b"));
+    assert.ok(enabled.has("test-c"));
+    assert.equal(enabled.size, 2);
+  });
+
+  it("isPlatformEnabled returns correct state", () => {
+    updatePlatformsMeta([mockDetectedPlatform("test-a")]);
+    assert.ok(isPlatformEnabled("test-a"));
+
+    setPlatformEnabled("test-a", false);
+    assert.ok(!isPlatformEnabled("test-a"));
+
+    setPlatformEnabled("test-a", true);
+    assert.ok(isPlatformEnabled("test-a"));
+  });
+
+  it("isPlatformEnabled returns true for unknown platforms", () => {
+    // Unknown platforms default to enabled (don't block install on platforms
+    // that haven't been scanned yet)
+    assert.ok(isPlatformEnabled("never-seen-before"));
   });
 });
 

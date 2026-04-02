@@ -157,6 +157,23 @@ export function setPlatformEnabled(id: string, enabled: boolean): void {
   writePlatformsMeta(meta);
 }
 
+/** Get the set of platform IDs that are currently enabled. */
+export function getEnabledPlatformIds(): Set<string> {
+  const meta = readPlatformsMeta();
+  const enabled = new Set<string>();
+  for (const [id, platform] of Object.entries(meta.platforms)) {
+    if (platform.enabled) enabled.add(id);
+  }
+  return enabled;
+}
+
+/** Check if a specific platform is enabled. Returns true if platform is unknown (not yet in metadata). */
+export function isPlatformEnabled(id: string): boolean {
+  const meta = readPlatformsMeta();
+  const platform = meta.platforms[id];
+  return platform ? platform.enabled : true; // unknown platforms default to enabled
+}
+
 // ─── Per-Platform Scan (platforms/<id>.json) ────────────────
 
 /** Read a per-platform scan file. Returns null if not found. */
