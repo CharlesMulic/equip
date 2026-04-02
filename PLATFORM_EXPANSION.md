@@ -114,30 +114,77 @@ The other 99% use LLMs through interfaces Equip can't touch.
 
 **Users:** Unknown subset of Claude's 20M users, but growing — Anthropic is pushing Desktop Extensions hard
 
-**What's available:**
-- MCP support via Desktop Extensions (one-click install, .mcpb bundles)
-- Extensions already exist for: Google Drive, Slack, GitHub, Notion
-- Remote MCP servers for Pro/Max/Team/Enterprise users
-- General-purpose, not coding-specific — used by marketers, researchers, analysts, etc.
+**Three tabs with different capabilities:**
+
+| Feature | Chat Tab | Code Tab | Cowork Tab |
+|---------|----------|----------|-----------|
+| **MCP tools** | Available but **manual** — user must explicitly ask | Full access (runs Claude Code) | **Proactive** — autonomously decides to use tools |
+| **Behavioral rules** | None | CLAUDE.md (via Claude Code) | **Yes — Project-level CLAUDE.md** |
+| **Tool invocation** | User-prompted | Agent-driven | Fully autonomous |
+| **Best for** | Q&A, research | Coding | Multi-step task execution |
+
+**Key finding: Cowork is the real opportunity, not Chat.** Chat mode requires users to manually prompt tool usage ("search Prior for X"), making MCP tools passive. Cowork runs autonomously, proactively uses connected MCP tools, and supports Projects with persistent CLAUDE.md instructions.
+
+**MCP configuration:**
+- Config file: `%APPDATA%\Claude\claude_desktop_config.json` (Windows), `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+- Uses `mcpServers` key (same as coding agents)
+- **Only supports stdio transport** in config file — HTTP MCP servers require a bridge (`mcp-remote` or `npx @cg3/prior-mcp` as local stdio)
+- Also supports Desktop Extensions (.mcpb bundles) for one-click install
+- **Requires full app restart** after config changes (worse than coding agents)
 
 **Equip capabilities:**
 
-| Capability | Current | Potential |
-|-----------|---------|-----------|
-| MCP | ⚠️ Not covered yet | HIGH — Desktop Extensions use a different install mechanism (.mcpb bundles) but the concept is identical. Equip could manage Desktop Extensions. |
-| Rules | ❌ No rules file for Claude Desktop | LOW — Claude Desktop doesn't have a CLAUDE.md equivalent. Instructions go through the Project knowledge or system prompt. |
-| Hooks | ❌ Not applicable | None — Claude Desktop has no hook system |
-| Skills | ❌ Not applicable | None — Claude Desktop doesn't have skills |
+| Capability | Current | Potential | Notes |
+|-----------|---------|-----------|-------|
+| MCP (stdio) | ⚠️ Not covered yet | HIGH | Same `mcpServers` format, different config path. Direct registry addition. |
+| MCP (HTTP) | ❌ | MEDIUM | Requires stdio bridge wrapper. Prior would use `npx @cg3/prior-mcp` as a local stdio server instead of direct HTTP. |
+| Rules (global) | ❌ | LOW | No global CLAUDE.md for Desktop Chat. |
+| Rules (project) | ❌ | **HIGH** | Cowork Projects support CLAUDE.md. Equip could create/manage project-level rules. |
+| Skills | ❌ | LOW | Not supported in Desktop. |
+| Hooks | ❌ | NONE | Not supported in Desktop. |
 
-**The opportunity:** Claude Desktop is the bridge to non-developers. Adding support would open Equip to researchers, analysts, marketers, and knowledge workers who use Claude Desktop with MCP extensions for Google Drive, Slack, database access, etc.
+**The Cowork + Projects approach:**
+1. Connect Prior MCP via stdio (`npx @cg3/prior-mcp`) in Desktop config
+2. Create a Cowork Project with CLAUDE.md containing Prior's behavioral rules
+3. In that Project context, Cowork proactively searches Prior on errors, contributes solutions
+4. This is a different workflow than "write to a config file" — Equip would help set up the Project
 
 **What Equip would need:**
-1. Detect Claude Desktop installation
-2. Understand the Desktop Extensions config format
-3. Install/uninstall MCP extensions via the same mechanism Desktop Extensions use
-4. The Equip app's augment cards would work for non-technical users — "click to equip" is simpler than understanding MCP config JSON
+1. Detect Claude Desktop installation (config path differs from Claude Code)
+2. Write MCP entries to `claude_desktop_config.json` (stdio transport only)
+3. For HTTP augments like Prior: use the npm MCP package as a stdio bridge
+4. Optionally: create/manage Cowork Project directories with CLAUDE.md files
+5. Handle the restart requirement (notify user that Desktop must be restarted)
 
-**Priority: HIGH** — this is the single biggest expansion opportunity with minimal architectural changes.
+**Priority: HIGH** — this is the single biggest expansion opportunity. MCP support is straightforward (same format, different path). The interesting part is Cowork Project integration.
+
+### Broader Implication: Per-Project Instructions
+
+Today Equip only targets **global** rules files (e.g., `~/.claude/CLAUDE.md`). But the research reveals that per-project behavioral instructions are increasingly important:
+
+- **Claude Desktop Cowork**: Projects have their own CLAUDE.md
+- **Claude Code**: Already supports project-level `.mcp.json` and directory-level CLAUDE.md
+- **VS Code / Cursor**: Workspace-level settings override global
+
+This opens a new dimension for Equip: **augments that carry project-scoped instructions**, not just global ones. An augment definition could include:
+
+```json
+{
+  "rules": {
+    "global": { "content": "## Prior\nSearch on every error...", "version": "0.6.0" },
+    "project": { "content": "## Prior (Project)\nSearch Prior before investigating. Use tags: {project_tags}...", "version": "0.6.0" }
+  }
+}
+```
+
+The Equip app could then manage which rules go where:
+- **Global rules**: Written to `~/.claude/CLAUDE.md` (current behavior)
+- **Project rules**: Written to `{project_dir}/CLAUDE.md` or Cowork Project directories
+- **Per-project augment configuration**: Different augments active for different projects (this is essentially what Sets are, but scoped to project directories)
+
+This is a future enhancement, but the state architecture (`augments/` definitions + per-platform scan) already supports it. The augment definition just needs global vs project rule variants, and the Equip app needs a project selection UI.
+
+**Tabled for now** — worth revisiting when we build the Equip page and Sets functionality.
 
 ### Category 3: ChatGPT (NOT COVERED — MASSIVE MARKET, NO PATH)
 
