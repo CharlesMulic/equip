@@ -20,7 +20,6 @@ import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, has
 import { readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled, getEnabledPlatformIds, isPlatformEnabled, readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms, getPlatformsDir, type PlatformsMeta, type PlatformMeta, type PlatformScan, type PlatformAugmentEntry } from "./lib/platform-state";
 import { readInstallations, writeInstallations, trackInstallation, trackUninstallation, getAugmentsForPlatform, getManagedAugmentNames, type Installations, type InstallationRecord, type ArtifactRecord } from "./lib/installations";
 import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, updatePreferences, type EquipMeta, type EquipPreferences } from "./lib/equip-meta";
-import { migrateState, type MigrationResult } from "./lib/migration";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -339,8 +338,6 @@ export {
   markEquipUpdated,
   markScanCompleted,
   updatePreferences,
-  // Migration
-  migrateState,
 };
 
 // Types
@@ -379,7 +376,6 @@ export type {
   ArtifactRecord,
   EquipMeta,
   EquipPreferences,
-  MigrationResult,
   LocalAugmentConfig,
   WrapConfig,
 };

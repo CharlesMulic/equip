@@ -15,7 +15,6 @@ import { trackInstallation, getManagedAugmentNames, type ArtifactRecord } from "
 import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
 import { syncFromRegistry } from "./augment-defs";
 import { markEquipUpdated } from "./equip-meta";
-import { migrateState } from "./migration";
 import type { ToolDefinition } from "./registry";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -43,9 +42,6 @@ export function reconcileState(options: ReconcileOptions): number {
   const { toolName, package: pkg, marker = toolName, hookDir: customHookDir, toolDef } = options;
   const defaultHookDir = path.join(os.homedir(), `.${toolName}`, "hooks");
   const hookDir = customHookDir || defaultHookDir;
-
-  // Ensure one-time migration has run
-  migrateState();
 
   // Sync augment definition from registry if available
   if (toolDef) {

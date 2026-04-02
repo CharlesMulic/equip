@@ -22,7 +22,6 @@ import { readInstallations, getManagedAugmentNames, type Installations } from ".
 import { readAugmentDef, listAugmentDefs, createLocalAugment, wrapUnmanaged, type AugmentDef } from "../src/lib/augment-defs";
 import { readEquipMeta, markScanCompleted, type EquipMeta } from "../src/lib/equip-meta";
 import { reconcileState } from "../src/lib/reconcile";
-import { migrateState, type MigrationResult } from "../src/lib/migration";
 import { createManualPlatform, platformName } from "../src/lib/platforms";
 import { uninstallMcp } from "../src/lib/mcp";
 import { uninstallRules } from "../src/lib/rules";
@@ -47,9 +46,6 @@ interface RpcRequest {
  * Returns the complete picture for the UI.
  */
 function scan() {
-  // Run migration if needed (first launch with new code)
-  const migration = migrateState();
-
   // Detect all platforms
   const detected = detectPlatforms();
 
@@ -65,7 +61,6 @@ function scan() {
   return {
     platforms: meta,
     scans,
-    migration: migration.migrated ? migration : undefined,
   };
 }
 

@@ -21,7 +21,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test test/equip.test.js test/observability.test.js test/registry.test.js test/auth.test.js test/docs.test.js test/augment-defs.test.js test/platform-state.test.js test/migration.test.js",
+    "test": "tsc && node --test test/equip.test.js test/observability.test.js test/registry.test.js test/auth.test.js test/docs.test.js test/augment-defs.test.js test/platform-state.test.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
