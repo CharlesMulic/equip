@@ -11,16 +11,26 @@
  */
 
 import { detectPlatforms } from "../src/lib/detect";
+import { Augment, toolDefToEquipConfig, type AugmentConfig } from "../src/index";
+import { readStoredCredential } from "../src/lib/auth-engine";
 import {
-  readPlatformsMeta, updatePlatformsMeta, setPlatformEnabled,
+  readPlatformsMeta, updatePlatformsMeta, setPlatformEnabled, isPlatformEnabled,
   readPlatformScan, scanAllPlatforms,
   type PlatformsMeta, type PlatformScan,
 } from "../src/lib/platform-state";
 import { readInstallations, getManagedAugmentNames, type Installations } from "../src/lib/installations";
-import { readAugmentDef, listAugmentDefs, type AugmentDef } from "../src/lib/augment-defs";
+import { readAugmentDef, listAugmentDefs, createLocalAugment, wrapUnmanaged, type AugmentDef } from "../src/lib/augment-defs";
 import { readEquipMeta, markScanCompleted, type EquipMeta } from "../src/lib/equip-meta";
+import { reconcileState } from "../src/lib/reconcile";
 import { migrateState, type MigrationResult } from "../src/lib/migration";
+import { createManualPlatform, platformName } from "../src/lib/platforms";
+import { uninstallMcp } from "../src/lib/mcp";
+import { uninstallRules } from "../src/lib/rules";
+import { uninstallSkill } from "../src/lib/skills";
+import { trackUninstallation } from "../src/lib/installations";
+import { deleteAugmentDef } from "../src/lib/augment-defs";
 import * as path from "path";
+import * as os from "os";
 
 // --- Types ---
 
@@ -240,6 +250,188 @@ function getProcessInstances(name: string, execSync: any): any[] {
 }
 
 /**
+ * Install an augment on enabled platforms.
+ * Reads the augment definition for config, reads stored credential for auth.
+ */
+function installAugment(params: { name: string; platforms?: string[] }) {
+  const def = readAugmentDef(params.name);
+  if (!def) throw new Error(`Augment definition not found: ${params.name}. Install via CLI first or create a local augment.`);
+
+  // Resolve API key from stored credentials
+  let apiKey = "";
+  if (def.requiresAuth) {
+    const cred = readStoredCredential(params.name);
+    if (!cred) throw new Error(`No stored credential for ${params.name}. Run 'equip ${params.name}' from CLI to authenticate.`);
+    apiKey = cred.apiKey || cred.oauth?.accessToken || "";
+    if (!apiKey) throw new Error(`Stored credential for ${params.name} has no usable key. Run 'equip reauth ${params.name}'.`);
+  }
+
+  // Build Augment config from definition
+  const config: AugmentConfig = {
+    name: def.name,
+    serverUrl: def.serverUrl,
+    rules: def.rules || undefined,
+    skills: def.skills,
+    hooks: def.hooks,
+    hookDir: def.hookDir,
+  };
+  if (def.stdio) {
+    config.stdio = { command: def.stdio.command, args: def.stdio.args, envKey: def.envKey || "" };
+  }
+
+  const augment = new Augment(config);
+  let platforms = augment.detect();
+
+  // Filter disabled platforms
+  platforms = platforms.filter(p => isPlatformEnabled(p.platform));
+
+  // Filter to requested platforms if specified
+  if (params.platforms && params.platforms.length > 0) {
+    platforms = platforms.filter(p => params.platforms!.includes(p.platform));
+  }
+
+  if (platforms.length === 0) {
+    return { installed: 0, platforms: [], error: "No enabled platforms detected" };
+  }
+
+  const transport = def.transport || "http";
+  const results: { platform: string; success: boolean; error?: string }[] = [];
+
+  for (const p of platforms) {
+    try {
+      augment.installMcp(p, apiKey, { transport });
+      if (config.rules) augment.installRules(p);
+      augment.installSkill(p);
+      results.push({ platform: p.platform, success: true });
+    } catch (e: any) {
+      results.push({ platform: p.platform, success: false, error: e.message });
+    }
+  }
+
+  // Reconcile state — writes to all new state files
+  try {
+    reconcileState({
+      toolName: def.name,
+      package: def.name,
+      marker: def.rules?.marker || def.name,
+    });
+  } catch { /* best effort */ }
+
+  return {
+    installed: results.filter(r => r.success).length,
+    platforms: results,
+  };
+}
+
+/**
+ * Uninstall an augment from enabled platforms.
+ */
+function uninstallAugment(params: { name: string; platforms?: string[] }) {
+  const installations = readInstallations();
+  const record = installations.augments[params.name];
+  if (!record) throw new Error(`${params.name} is not installed.`);
+
+  let targetPlatforms = record.platforms;
+
+  // Filter disabled
+  targetPlatforms = targetPlatforms.filter(id => isPlatformEnabled(id));
+
+  // Filter to requested platforms
+  if (params.platforms && params.platforms.length > 0) {
+    targetPlatforms = targetPlatforms.filter(id => params.platforms!.includes(id));
+  }
+
+  const results: { platform: string; removed: string[] }[] = [];
+  const removedPlatforms: string[] = [];
+
+  for (const platformId of targetPlatforms) {
+    const platform = createManualPlatform(platformId);
+    const artifacts = record.artifacts[platformId] || {};
+    const removed: string[] = [];
+
+    if (artifacts.mcp && uninstallMcp(platform, params.name)) removed.push("mcp");
+    if (artifacts.rules) {
+      uninstallRules(platform, { marker: params.name });
+      removed.push("rules");
+    }
+    if (artifacts.skills) {
+      for (const sk of artifacts.skills) uninstallSkill(platform, params.name, sk);
+      removed.push("skills");
+    }
+
+    if (removed.length > 0) {
+      results.push({ platform: platformId, removed });
+      removedPlatforms.push(platformId);
+    }
+  }
+
+  // Update state
+  if (removedPlatforms.length > 0) {
+    trackUninstallation(params.name, removedPlatforms);
+    const updated = readInstallations();
+    if (!updated.augments[params.name]) {
+      deleteAugmentDef(params.name);
+    }
+  }
+
+  // Re-scan to update platform files
+  try {
+    const detected = detectPlatforms();
+    const managedNames = getManagedAugmentNames();
+    scanAllPlatforms(detected, managedNames);
+  } catch { /* best effort */ }
+
+  return {
+    removed: removedPlatforms.length,
+    platforms: results,
+  };
+}
+
+/**
+ * Wrap an unmanaged MCP entry as a local augment definition.
+ */
+function wrapAugment(params: { name: string; platform: string; displayName?: string }) {
+  // Read the MCP entry from the platform's scan file
+  const scan = readPlatformScan(params.platform);
+  if (!scan) throw new Error(`No scan data for platform ${params.platform}`);
+
+  const entry = scan.augments[params.name];
+  if (!entry) throw new Error(`${params.name} not found on ${params.platform}`);
+  if (entry.managed) throw new Error(`${params.name} is already managed by equip`);
+
+  const def = wrapUnmanaged({
+    name: params.name,
+    displayName: params.displayName || params.name,
+    transport: entry.transport === "unknown" ? "http" : entry.transport,
+    url: entry.url,
+    command: entry.command,
+    fromPlatform: params.platform,
+  });
+
+  return def;
+}
+
+/**
+ * Create a new local augment definition.
+ */
+function createLocal(params: {
+  name: string; displayName?: string; description?: string;
+  transport: "http" | "stdio"; serverUrl?: string;
+  command?: string; args?: string[];
+}) {
+  return createLocalAugment({
+    name: params.name,
+    displayName: params.displayName,
+    description: params.description,
+    transport: params.transport,
+    serverUrl: params.serverUrl,
+    stdio: params.transport === "stdio" && params.command
+      ? { command: params.command, args: params.args || [] }
+      : undefined,
+  });
+}
+
+/**
  * Get the folder path for a config file (for "Open in Explorer").
  */
 function openFolder(params: { path: string }) {
@@ -300,12 +492,28 @@ async function main() {
         result = checkRunning();
         break;
 
+      case "install":
+        result = installAugment(request.params as any);
+        break;
+
+      case "uninstall":
+        result = uninstallAugment(request.params as any);
+        break;
+
+      case "wrap":
+        result = wrapAugment(request.params as any);
+        break;
+
+      case "createLocal":
+        result = createLocal(request.params as any);
+        break;
+
       case "openFolder":
         result = openFolder(request.params as any);
         break;
 
       case "ping":
-        result = { ok: true, version: "0.2.0" };
+        result = { ok: true, version: "0.3.0" };
         break;
 
       default:
