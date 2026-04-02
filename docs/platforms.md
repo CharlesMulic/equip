@@ -103,6 +103,19 @@ For platforms with a directory-based rules path (Cline, Roo Code), equip writes 
 
 Platforms without a verified skills path (Junie, Copilot JetBrains, Copilot CLI) have `skillsPath: null` and skill installation is skipped.
 
+## Enabled / Disabled Platforms
+
+Platforms can be disabled via the Equip desktop app's Agents tab. A disabled platform is completely hands-off:
+
+- **Install:** Skipped — equip won't write MCP config, rules, hooks, or skills
+- **Uninstall:** Skipped — existing config is left untouched
+- **Scan:** Still scanned (read-only) — the UI shows what's there, but equip won't modify it
+- **Re-enable:** When re-enabled, the platform returns to normal — equip can install/uninstall again
+
+The enabled/disabled state is stored in `~/.equip/platforms.json`. The CLI respects this flag via `isPlatformEnabled()`.
+
+Platforms default to **enabled** when first detected. Unknown platforms (not yet in `platforms.json`) are treated as enabled to avoid blocking installs on newly detected platforms.
+
 ## Detection Mechanism
 
 When you call `equip.detect()`, equip checks for each platform in this order:

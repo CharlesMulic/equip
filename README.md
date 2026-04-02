@@ -123,7 +123,19 @@ Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-
 | [Behavioral Rules](./docs/rules.md) | Marker-based versioned instructions |
 | [Agent Skills](./docs/skills.md) | SKILL.md format, cross-platform distribution |
 | [Lifecycle Hooks](./docs/hooks.md) | Event-driven enforcement scripts |
-| [CLI Reference](./docs/cli.md) | Commands, state tracking, options |
+| [CLI Reference](./docs/cli.md) | Commands, state, options |
+
+## State Management
+
+Equip tracks everything in `~/.equip/`:
+
+- **`augments/`** — Augment definitions: what each augment IS (synced from registry, locally editable)
+- **`installations.json`** — What equip installed and on which platforms
+- **`platforms.json`** — Detected platforms with capabilities and enabled/disabled preferences
+- **`platforms/`** — Per-platform scan results (all MCP servers, managed and unmanaged)
+- **`credentials/`** — Stored auth credentials per augment
+
+State is reconciled from disk after every install/uninstall — equip scans actual platform config files rather than relying solely on its records.
 
 ## Design Principles
 
