@@ -5,7 +5,7 @@
 import * as os from "os";
 import { spawn } from "child_process";
 import { Augment, type AugmentConfig } from "../../index";
-import { toolDefToEquipConfig, type ToolDefinition } from "../registry";
+import { toolDefToEquipConfig, REGISTRY_API, type ToolDefinition } from "../registry";
 import { platformName, resolvePlatformId } from "../platforms";
 import { InstallReportBuilder } from "../types";
 import { resolveAuth, validateCredential } from "../auth-engine";
@@ -236,7 +236,7 @@ export async function runInstall(toolDef: ToolDefinition, parsedArgs: ParsedArgs
           equipVersion,
           nodeVersion: process.version,
         };
-        fetch("https://api.cg3.io/equip/telemetry", {
+        fetch(`${REGISTRY_API}/telemetry`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

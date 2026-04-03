@@ -203,11 +203,32 @@ export function previewEquipWeight(augmentName: string): WeightPreview {
   const allDefs = listAugmentDefs();
   const def = allDefs.find(d => d.name === augmentName);
 
+  // Weight priority: introspection > declared > estimated (same as computeWeightReport)
+  let baseWeight = 0;
+  let loadedWeight = 0;
+  if (def) {
+    if (def.introspection && typeof (def.introspection as any).toolTokens === "number") {
+      // Introspection data available — most accurate
+      const intro = def.introspection as { toolTokens?: number; resourceTokens?: number };
+      const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
+      baseWeight = (intro.toolTokens || 0) + rulesTokens;
+      loadedWeight = (intro.resourceTokens || 0) + estimateLoadedWeight(def);
+    } else if (def.baseWeight > 0) {
+      // Declared weight
+      baseWeight = def.baseWeight;
+      loadedWeight = def.loadedWeight || estimateLoadedWeight(def);
+    } else {
+      // Estimated weight
+      baseWeight = estimateBaseWeight(def);
+      loadedWeight = estimateLoadedWeight(def);
+    }
+  }
+
   const augment: AugmentWeight = {
     name: augmentName,
     displayName: def?.displayName || augmentName,
-    baseWeight: def?.baseWeight || (def ? estimateBaseWeight(def) : 0),
-    loadedWeight: def?.loadedWeight || (def ? estimateLoadedWeight(def) : 0),
+    baseWeight,
+    loadedWeight,
   };
 
   // Build projected report

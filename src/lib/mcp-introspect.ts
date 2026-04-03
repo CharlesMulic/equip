@@ -5,6 +5,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
+import { resolvePackageVersion } from "./fs";
 
 // ─── Types: MCP Protocol ────────────────────────────────────
 
@@ -107,7 +108,7 @@ export interface IntrospectOptions {
 const DEFAULT_TIMEOUT = 15_000;
 const STDIO_EXIT_TIMEOUT = 5_000;
 const PROTOCOL_VERSION = "2025-03-26";
-const CLIENT_INFO = { name: "equip", version: "0.17.0" };
+const CLIENT_INFO = { name: "equip", version: resolvePackageVersion(__dirname) || "0.0.0" };
 
 // ─── SSE Parser ─────────────────────────────────────────────
 

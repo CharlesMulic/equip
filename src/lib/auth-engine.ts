@@ -20,7 +20,7 @@ export interface AuthConfig {
 
   /**
    * Identity provider for this augment's OAuth flow.
-   * - "cg3": uses Prior (api.cg3.io) as the OAuth server — eligible for session-assisted auth
+   * - "cg3": uses the CG3 platform as the OAuth server — eligible for session-assisted auth
    * - "github", "google": recognized third-party providers (future: may support token exchange)
    * - "custom": augment runs its own OAuth server, no SSO possible
    *
@@ -57,7 +57,7 @@ export interface AuthConfig {
      * attempt session-assisted auth (skip browser OAuth) by sending the Equip
      * session token directly to this endpoint.
      *
-     * Only meaningful when provider is "cg3" or the OAuth server is api.cg3.io.
+     * Only meaningful when provider is "cg3" or the OAuth server is the CG3 platform.
      * Third-party augment authors who use CG3 as their identity provider can
      * set this to true to enable automatic SSO for their users.
      *
