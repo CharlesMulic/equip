@@ -159,7 +159,7 @@ describe("toolDefToEquipConfig", () => {
 
 // ─── fetchToolDef ──────────────────────────────────────────
 
-describe("fetchToolDef", () => {
+describe("fetchToolDef", { skip: !!process.env.CI && "requires network access" }, () => {
   it("fetches demo-fetch from live API", async () => {
     const logger = recordingLogger();
     const def = await fetchToolDef("demo-fetch", { logger });
@@ -211,7 +211,7 @@ describe("fetchToolDef", () => {
 
 // ─── Direct-mode CLI integration ───────────────────────────
 
-describe("direct-mode CLI", () => {
+describe("direct-mode CLI", { skip: !!process.env.CI && "requires detected platforms and network" }, () => {
   it("dry-run installs demo-fetch without writing files", () => {
     const { execSync } = require("child_process");
     // CLI writes to stderr, redirect stderr to stdout to capture

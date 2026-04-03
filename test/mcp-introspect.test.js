@@ -257,7 +257,7 @@ rl.on("line", (line) => {
 
 // ─── HTTP Transport Tests ───────────────────────────────────
 
-describe("introspect — HTTP transport (Prior remote)", () => {
+describe("introspect — HTTP transport (Prior remote)", { skip: !!process.env.CI && "requires stored Prior credential" }, () => {
   let apiKey;
 
   before(() => {
