@@ -686,6 +686,16 @@ export async function oauthBrowserFlow(
             client_id: oauthConfig.clientId,
           }).toString(),
         });
+        const contentType = tokenRes.headers.get("content-type") || "";
+        if (!contentType.includes("json")) {
+          const body = await tokenRes.text().catch(() => "");
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end(callbackPageHtml("error", `Token endpoint returned ${contentType || "unknown content-type"}`));
+          logger.error("Token exchange returned non-JSON", { status: tokenRes.status, contentType, body: body.slice(0, 200) });
+          cleanup();
+          resolve(null);
+          return;
+        }
         const tokenData = await tokenRes.json() as Record<string, unknown>;
 
         if (tokenData.access_token) {
@@ -839,7 +849,7 @@ async function exchangeTokenForKey(
 
 function storeApiKey(toolName: string, key: string, auth: AuthConfig): void {
   writeStoredCredential({
-    authType: auth.type,
+    authType: "api_key",
     credential: key,
     keyPrefix: auth.keyPrefix,
     toolName,
