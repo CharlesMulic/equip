@@ -1,5 +1,7 @@
 # Equip
 
+[![SafeSkill 20/100](https://img.shields.io/badge/SafeSkill-20%2F100_Blocked-red)](https://safeskill.dev/scan/charlesmulic-equip)
+
 Equip your AI agents with augments — packages of MCP servers, behavioral rules, and agent skills that work across every platform.
 
 [![CI](https://github.com/CharlesMulic/equip/actions/workflows/ci.yml/badge.svg)](https://github.com/CharlesMulic/equip/actions/workflows/ci.yml)
