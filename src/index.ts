@@ -287,6 +287,13 @@ export {
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
+  // Artifact install/uninstall
+  installMcp,
+  uninstallMcp,
+  installRules,
+  uninstallRules,
+  installSkill,
+  uninstallSkill,
   // Rules utilities (used by consumers for version checking)
   parseRulesVersion,
   markerPatterns,
