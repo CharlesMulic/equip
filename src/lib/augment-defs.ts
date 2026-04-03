@@ -101,8 +101,8 @@ export interface AugmentDef {
   /** @deprecated Use baseWeight. Kept for backward compat during migration. */
   weight?: number;
 
-  /** Cached MCP server introspection results */
-  introspection?: import("./mcp-introspect").IntrospectionResult | null;
+  /** Cached MCP server introspection results (opaque — typed in desktop app) */
+  introspection?: Record<string, unknown> | null;
 
   // ── Mod tracking ──
 

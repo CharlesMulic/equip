@@ -13,6 +13,7 @@ import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { readEquipMeta } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
+import { readAugmentDef, writeAugmentDef } from "../augment-defs";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 
@@ -194,28 +195,23 @@ export async function runInstall(toolDef: ToolDefinition, parsedArgs: ParsedArgs
     }
   }
 
-  // ── Introspect MCP server for accurate weight ──
+  // ── Introspect MCP server for accurate weight (optional) ──
+  // mcp-introspect and weight modules are in the desktop app sidecar, not in this
+  // package. If available (e.g., when run from the sidecar), introspection runs.
+  // If not (pure CLI), this silently skips — install still works, just without
+  // accurate weight data. The desktop app will introspect on next load.
   if (!dryRun) {
     try {
-      const { introspect } = await import("../mcp-introspect.js");
-      const { readAugmentDef, writeAugmentDef } = await import("../augment-defs.js");
-
-      let introAuth: string | undefined;
-      if (apiKey) introAuth = `Bearer ${apiKey}`;
-
-      let introResult;
-      if (toolDef.serverUrl) {
-        introResult = await introspect({ serverUrl: toolDef.serverUrl, auth: introAuth, timeout: 10000 });
-      } else if (toolDef.stdioCommand) {
-        introResult = await introspect({ stdio: { command: toolDef.stdioCommand, args: toolDef.stdioArgs || [] }, timeout: 10000 });
-      }
-
-      if (introResult) {
-        const { applyIntrospectionWeights } = await import("../weight.js");
-        const def = readAugmentDef(toolDef.name);
-        if (def) {
-          def.introspection = introResult;
-          applyIntrospectionWeights(def, introResult);
+      const def = readAugmentDef(toolDef.name);
+      if (def) {
+        // Estimate weight from the definition (no introspection needed)
+        const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
+        const skillTokens = (def.skills || []).reduce((sum: number, s: { files?: { content?: string }[] }) =>
+          sum + (s.files || []).reduce((fsum: number, f: { content?: string }) =>
+            fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
+        if (def.baseWeight === 0 && rulesTokens > 0) {
+          def.baseWeight = rulesTokens;
+          def.loadedWeight = skillTokens;
           writeAugmentDef(def);
         }
       }

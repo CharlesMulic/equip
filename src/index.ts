@@ -21,12 +21,8 @@ import { readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatform
 import { readInstallations, writeInstallations, trackInstallation, trackUninstallation, getAugmentsForPlatform, getManagedAugmentNames, type Installations, type InstallationRecord, type ArtifactRecord } from "./lib/installations";
 import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, updatePreferences, type EquipMeta, type EquipPreferences } from "./lib/equip-meta";
 import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSnapshot, hasInitialSnapshot, ensureInitialSnapshots, pruneSnapshots, type Snapshot, type SnapshotSummary, type RestoreResult } from "./lib/snapshots";
-import { computeWeightReport, previewEquipWeight, getEncumbrance, estimateBaseWeight, estimateLoadedWeight, applyIntrospectionWeights, DEFAULT_THRESHOLDS, type WeightReport, type WeightPreview, type AugmentWeight, type WeightThresholds, type Encumbrance } from "./lib/weight";
-import { listSets, getSet, saveSet, deleteSet, renameSet, duplicateSet, getActiveSet, setActiveSet, type AugmentSet, type SetsData } from "./lib/sets";
 import { reconcileState } from "./lib/reconcile";
 import type { BrowserOpener } from "./lib/auth-engine";
-import { introspect, type IntrospectionResult, type IntrospectOptions } from "./lib/mcp-introspect";
-import { createFileLogger, createCompositeLogger } from "./lib/log";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -362,30 +358,8 @@ export {
   hasInitialSnapshot,
   ensureInitialSnapshots,
   pruneSnapshots,
-  // Weight
-  computeWeightReport,
-  previewEquipWeight,
-  getEncumbrance,
-  estimateBaseWeight,
-  estimateLoadedWeight,
-  applyIntrospectionWeights,
-  DEFAULT_THRESHOLDS,
-  // Sets
-  listSets,
-  getSet,
-  saveSet,
-  deleteSet as deleteSetDef,
-  renameSet,
-  duplicateSet,
-  getActiveSet,
-  setActiveSet,
-  // Logging
-  createFileLogger,
-  createCompositeLogger,
   // Reconciliation
   reconcileState,
-  // MCP introspection
-  introspect,
 };
 
 // Types
@@ -428,14 +402,5 @@ export type {
   Snapshot,
   SnapshotSummary,
   RestoreResult,
-  WeightReport,
-  WeightPreview,
-  AugmentWeight,
-  WeightThresholds,
-  Encumbrance,
-  AugmentSet,
-  SetsData,
   BrowserOpener,
-  IntrospectionResult,
-  IntrospectOptions,
 };
