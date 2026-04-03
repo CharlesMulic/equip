@@ -109,6 +109,17 @@ export function estimateLoadedWeight(def: AugmentDef): number {
   return Math.round(bytes / 4);
 }
 
+/**
+ * Compute and apply accurate weights from introspection data onto an AugmentDef.
+ * Mutates def.baseWeight, def.loadedWeight, and def.introspection.
+ */
+export function applyIntrospectionWeights(def: AugmentDef, introResult: { toolTokens?: number; resourceTokens?: number }): void {
+  const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
+  const skillTokens = estimateLoadedWeight(def);
+  def.baseWeight = (introResult.toolTokens || 0) + rulesTokens;
+  def.loadedWeight = (introResult.resourceTokens || 0) + skillTokens;
+}
+
 // ─── Compute ────────────────────────────────────────────────
 
 /**
@@ -140,7 +151,7 @@ export function computeWeightReport(): WeightReport {
     const def = defMap.get(name);
 
     // Weight priority: introspection data > declared values > heuristic estimate
-    const introspection = (def as any)?.introspection;
+    const introspection = def?.introspection;
     let base: number;
     let loaded: number;
 

@@ -42,6 +42,18 @@ export interface AugmentDef {
   /** Rarity tier */
   rarity?: "common" | "uncommon" | "rare" | "epic" | "legendary";
 
+  /** Short title for compact display (e.g., "Prior") */
+  title?: string;
+
+  /** Subtitle shown below title (e.g., "Agent Knowledge Base") */
+  subtitle?: string;
+
+  /** Flavor text for epic/legendary tooltips */
+  flavorText?: string;
+
+  /** Install count from registry */
+  installCount?: number;
+
   // ── Infrastructure (publisher-owned, not user-editable) ──
 
   /** Transport type */
@@ -90,7 +102,7 @@ export interface AugmentDef {
   weight?: number;
 
   /** Cached MCP server introspection results */
-  introspection?: Record<string, unknown> | null;
+  introspection?: import("./mcp-introspect").IntrospectionResult | null;
 
   // ── Mod tracking ──
 

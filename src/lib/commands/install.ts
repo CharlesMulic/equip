@@ -211,14 +211,11 @@ export async function runInstall(toolDef: ToolDefinition, parsedArgs: ParsedArgs
       }
 
       if (introResult) {
+        const { applyIntrospectionWeights } = await import("../weight.js");
         const def = readAugmentDef(toolDef.name);
         if (def) {
-          def.introspection = introResult as unknown as Record<string, unknown>;
-          const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
-          const skillTokens = (def.skills || []).reduce((sum: number, s: any) =>
-            sum + ((s.files || []) as any[]).reduce((fsum: number, f: any) => fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
-          def.baseWeight = (introResult as any).toolTokens + rulesTokens;
-          def.loadedWeight = ((introResult as any).resourceTokens || 0) + skillTokens;
+          def.introspection = introResult;
+          applyIntrospectionWeights(def, introResult);
           writeAugmentDef(def);
         }
       }
