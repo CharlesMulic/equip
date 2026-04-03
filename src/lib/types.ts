@@ -2,6 +2,8 @@
 // Used across all install methods and by consumers for telemetry collection.
 // Zero dependencies.
 
+import * as os from "os";
+
 // ─── Artifact Types ─────────────────────────────────────────
 
 export type ArtifactType = "mcp" | "rules" | "skills" | "hooks";
@@ -194,7 +196,7 @@ export class InstallReportBuilder {
             success: r.success,
             action: r.action,
             errorCode: r.errorCode,
-            error: r.error,
+            error: r.error?.replace(os.homedir(), "~"),
             warnings: r.warnings.length > 0 ? r.warnings : undefined,
           }])
         ),
