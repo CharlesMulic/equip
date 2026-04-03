@@ -47,7 +47,7 @@ function runEquip(args, options = {}) {
 // This is the EXACT code from the docs, saved to a temp file
 // and run via `equip ./piratehat.js`.
 
-describe("docs/tool-author.md — Pirate Hat Layer 1", () => {
+describe("docs/tool-author.md — Pirate Hat Layer 1", { skip: !!process.env.CI && "requires detected platforms" }, () => {
   const workDir = tmpDir("piratehat");
   const scriptPath = path.join(workDir, "piratehat.js");
 
@@ -135,7 +135,7 @@ for (const p of platforms) {
 // FROM: docs/tool-author.md → "Layer 2: Add a Skill"
 // Tests both rules and skills installation together.
 
-describe("docs/tool-author.md — Pirate Hat Layer 2 (Rules + Skills)", () => {
+describe("docs/tool-author.md — Pirate Hat Layer 2 (Rules + Skills)", { skip: !!process.env.CI && "requires detected platforms" }, () => {
   const workDir = tmpDir("piratehat-skill");
   const scriptPath = path.join(workDir, "piratehat.js");
 
@@ -253,7 +253,7 @@ for (const p of platforms) {
 // FROM: docs/tool-author.md → "From Local Script to equip <name>" → Step 1
 // Tests `equip .` reading package.json bin field.
 
-describe("docs/tool-author.md — equip . (local package)", () => {
+describe("docs/tool-author.md — equip . (local package)", { skip: !!process.env.CI && "requires detected platforms" }, () => {
   const workDir = tmpDir("local-pkg");
 
   // Create a minimal package with a setup script
