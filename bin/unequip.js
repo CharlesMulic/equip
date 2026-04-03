@@ -141,12 +141,6 @@ for (const platformId of record.platforms) {
 // Update state
 if (!dryRun && removed > 0) {
   trackUninstallation(toolName, removedPlatforms);
-
-  // If all platforms removed, also clean up augment definition
-  const updated = readInstallations();
-  if (!updated.augments[toolName]) {
-    deleteAugmentDef(toolName);
-  }
 }
 
 cli.log("");

@@ -39,6 +39,9 @@ export interface AugmentDef {
   /** One-line description */
   description: string;
 
+  /** Rarity tier */
+  rarity?: "common" | "uncommon" | "rare" | "epic" | "legendary";
+
   // ── Infrastructure (publisher-owned, not user-editable) ──
 
   /** Transport type */
@@ -77,8 +80,17 @@ export interface AugmentDef {
   /** Hook directory */
   hookDir?: string;
 
-  /** Estimated token weight */
-  weight: number;
+  /** Token weight — always-paid cost of having the augment installed */
+  baseWeight: number;
+
+  /** Token weight — additional cost when augment is fully loaded in context */
+  loadedWeight: number;
+
+  /** @deprecated Use baseWeight. Kept for backward compat during migration. */
+  weight?: number;
+
+  /** Cached MCP server introspection results */
+  introspection?: Record<string, unknown> | null;
 
   // ── Mod tracking ──
 
@@ -134,7 +146,8 @@ export interface LocalAugmentConfig {
   rules?: AugmentRules;
   skills?: SkillConfig[];
   hooks?: HookDefinition[];
-  weight?: number;
+  baseWeight?: number;
+  loadedWeight?: number;
 }
 
 /** Options for wrapping an unmanaged MCP entry */
@@ -146,7 +159,8 @@ export interface WrapConfig {
   url?: string;
   command?: string;
   fromPlatform: string;
-  weight?: number;
+  baseWeight?: number;
+  loadedWeight?: number;
 }
 
 // ─── Paths ──────────────────────────────────────────────────
@@ -180,7 +194,18 @@ export function readAugmentDef(name: string): AugmentDef | null {
     return null;
   }
 
-  return data as unknown as AugmentDef;
+  const def = data as unknown as AugmentDef;
+
+  // Lazy migration: old single `weight` → baseWeight + loadedWeight
+  if (def.baseWeight === undefined && (def as any).weight !== undefined) {
+    def.baseWeight = (def as any).weight;
+    def.loadedWeight = 0;
+  }
+  // Ensure defaults
+  if (def.baseWeight === undefined) def.baseWeight = 0;
+  if (def.loadedWeight === undefined) def.loadedWeight = 0;
+
+  return def;
 }
 
 /** Write an augment definition. Creates the augments directory if needed. */
@@ -261,7 +286,8 @@ export function syncFromRegistry(registryDef: ToolDefinition): AugmentDef {
     skills: registryDef.skills || [],
     hooks: registryDef.hooks,
     hookDir: registryDef.hookDir,
-    weight: 0, // TODO: compute or receive from registry
+    baseWeight: 0,
+    loadedWeight: 0,
     modded: false,
     registryVersion: registryDef.rules?.version || "1.0.0",
     syncedAt: now,
@@ -349,7 +375,8 @@ export function createLocalAugment(config: LocalAugmentConfig): AugmentDef {
     rules: config.rules,
     skills: config.skills || [],
     hooks: config.hooks,
-    weight: config.weight || 0,
+    baseWeight: config.baseWeight || 0,
+    loadedWeight: config.loadedWeight || 0,
     modded: false,
     createdAt: now,
     updatedAt: now,
@@ -377,7 +404,8 @@ export function wrapUnmanaged(config: WrapConfig): AugmentDef {
       : undefined,
     requiresAuth: false,
     skills: [],
-    weight: config.weight || 0,
+    baseWeight: config.baseWeight || 0,
+    loadedWeight: config.loadedWeight || 0,
     modded: false,
     wrappedFrom: config.fromPlatform,
     createdAt: now,

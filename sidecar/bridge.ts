@@ -30,6 +30,12 @@ import { uninstallRules } from "../src/lib/rules";
 import { uninstallSkill } from "../src/lib/skills";
 import { trackUninstallation } from "../src/lib/installations";
 import { deleteAugmentDef } from "../src/lib/augment-defs";
+import { computeWeightReport, previewEquipWeight } from "../src/lib/weight";
+import {
+  listSets as listSetsCore, saveSet as saveSetCore, deleteSet as deleteSetCore,
+  renameSet as renameSetCore, duplicateSet as duplicateSetCore,
+  getActiveSet, setActiveSet,
+} from "../src/lib/sets";
 import {
   createSnapshot as createSnapshotCore, listSnapshots as listSnapshotsCore,
   restoreSnapshot as restoreSnapshotCore,
@@ -131,6 +137,45 @@ function setEnabled(params: { platform: string; enabled: boolean }) {
  */
 function getMeta() {
   return readEquipMeta();
+}
+
+function bridgeUpdatePreferences(params: Record<string, unknown>) {
+  const { updatePreferences } = require("../src/lib/equip-meta") as typeof import("../src/lib/equip-meta");
+  updatePreferences(params as any);
+  return readEquipMeta();
+}
+
+function bridgeClearCache() {
+  const fs = require("fs") as typeof import("fs");
+  const cacheDir = path.join(os.homedir(), ".equip", "cache");
+  let cleared = 0;
+  try {
+    const files = fs.readdirSync(cacheDir);
+    for (const f of files) {
+      try { fs.unlinkSync(path.join(cacheDir, f)); cleared++; } catch {}
+    }
+  } catch {}
+  return { cleared };
+}
+
+function bridgeClearSnapshots() {
+  const fs = require("fs") as typeof import("fs");
+  const snapDir = path.join(os.homedir(), ".equip", "snapshots");
+  let cleared = 0;
+  try {
+    const platforms = fs.readdirSync(snapDir);
+    for (const pid of platforms) {
+      const pdir = path.join(snapDir, pid);
+      try {
+        const files = fs.readdirSync(pdir);
+        for (const f of files) {
+          try { fs.unlinkSync(path.join(pdir, f)); cleared++; } catch {}
+        }
+        fs.rmdirSync(pdir);
+      } catch {}
+    }
+  } catch {}
+  return { cleared };
 }
 
 /**
@@ -329,6 +374,35 @@ async function equipAugment(params: { name: string; platforms?: string[] }) {
     });
   } catch { /* best effort */ }
 
+  // 7. Introspect MCP server for accurate weight (best effort)
+  try {
+    const { introspect } = await import("../src/lib/mcp-introspect");
+    const { readAugmentDef: readDef, writeAugmentDef: writeDef } = await import("../src/lib/augment-defs");
+
+    let introAuth: string | undefined;
+    if (apiKey) introAuth = `Bearer ${apiKey}`;
+
+    let introResult;
+    if (toolDef.serverUrl) {
+      introResult = await introspect({ serverUrl: toolDef.serverUrl, auth: introAuth, timeout: 10000 });
+    } else if (toolDef.stdioCommand) {
+      introResult = await introspect({ stdio: { command: toolDef.stdioCommand, args: toolDef.stdioArgs || [] }, timeout: 10000 });
+    }
+
+    if (introResult) {
+      const def = readDef(toolDef.name);
+      if (def) {
+        def.introspection = introResult as unknown as Record<string, unknown>;
+        const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
+        const skillTokens = (def.skills || []).reduce((sum: number, s: any) =>
+          sum + ((s.files || []) as any[]).reduce((fsum: number, f: any) => fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
+        def.baseWeight = (introResult as any).toolTokens + rulesTokens;
+        def.loadedWeight = ((introResult as any).resourceTokens || 0) + skillTokens;
+        writeDef(def);
+      }
+    }
+  } catch { /* best effort — don't fail the install */ }
+
   return {
     installed: results.filter(r => r.success).length,
     platforms: results,
@@ -452,13 +526,9 @@ function uninstallAugment(params: { name: string; platforms?: string[] }) {
     }
   }
 
-  // Update state
+  // Update state — keep augment def so it shows as "available" for re-equipping
   if (removedPlatforms.length > 0) {
     trackUninstallation(params.name, removedPlatforms);
-    const updated = readInstallations();
-    if (!updated.augments[params.name]) {
-      deleteAugmentDef(params.name);
-    }
   }
 
   // Re-scan to update platform files
@@ -526,6 +596,224 @@ function openFolder(params: { path: string }) {
   return { path: dir };
 }
 
+// --- Composite Endpoints (one spawn per page) ---
+
+/**
+ * Everything the Equip/Loadout page needs in a single call.
+ * Replaces: scan_platforms + get_installations + get_augment_defs + read_platforms + get_weight
+ */
+function loadout() {
+  // Read platform state (cached, no re-scan — use "scan" for fresh data)
+  const platformsMeta = readPlatformsMeta();
+  const installations = readInstallations();
+  const allDefs = listAugmentDefs();
+  const weight = computeWeightReport();
+
+  // Build enabled platform set
+  const enabledPlatforms = new Set<string>();
+  for (const [id, p] of Object.entries(platformsMeta.platforms || {})) {
+    if ((p as any).enabled) enabledPlatforms.add(id);
+  }
+
+  // Build editor list
+  const editors = Object.entries(platformsMeta.platforms || {}).map(([id, p]: [string, any]) => ({
+    id,
+    name: p.name || id,
+    detected: p.detected ?? true,
+    enabled: p.enabled ?? true,
+    configPath: p.configPath || '',
+    capabilities: p.capabilities || [],
+  }));
+
+  // Build augment list (installed + available)
+  const augments: any[] = [];
+  const defMap = new Map(allDefs.map(d => [d.name, d]));
+
+  for (const [name, inst] of Object.entries(installations.augments || {}) as [string, any][]) {
+    const def = defMap.get(name);
+    const installedPlatforms: string[] = inst.platforms || [];
+    const equippedOn = installedPlatforms.filter((id: string) => enabledPlatforms.has(id));
+
+    augments.push({
+      name,
+      displayName: inst.displayName || def?.displayName || name,
+      title: (def as any)?.title || undefined,
+      subtitle: (def as any)?.subtitle || undefined,
+      description: def?.description || '',
+      rarity: def?.rarity || 'common',
+      baseWeight: def?.baseWeight || 0,
+      loadedWeight: def?.loadedWeight || 0,
+      installCount: def?.installCount || 0,
+      transport: inst.transport || 'http',
+      requiresAuth: def?.requiresAuth || false,
+      categories: def?.categories || [],
+      equipped: equippedOn.length > 0,
+      installedOn: equippedOn,
+      installedAt: inst.installedAt || '',
+      rulesVersion: Object.values(inst.artifacts || {}).find((a: any) => a?.rules)
+        ? (Object.values(inst.artifacts || {}).find((a: any) => a?.rules) as any).rules
+        : undefined,
+      homepage: def?.homepage,
+      repository: def?.repository,
+      license: def?.license,
+      flavorText: (def as any)?.flavorText,
+    });
+  }
+
+  // Include available (not installed) augment defs
+  for (const def of allDefs) {
+    if (!installations.augments?.[def.name]) {
+      augments.push({
+        name: def.name,
+        displayName: def.displayName || def.name,
+        title: (def as any).title || undefined,
+        subtitle: (def as any).subtitle || undefined,
+        description: def.description || '',
+        rarity: (def as any).rarity || 'common',
+        baseWeight: def.baseWeight || 0,
+        loadedWeight: def.loadedWeight || 0,
+        installCount: (def as any).installCount || 0,
+        transport: def.transport || 'http',
+        requiresAuth: def.requiresAuth || false,
+        categories: def.categories || [],
+        equipped: false,
+        installedOn: [],
+        installedAt: '',
+      });
+    }
+  }
+
+  return { editors, augments, weight };
+}
+
+/**
+ * Everything the augment detail page needs in a single call.
+ * Returns def + installed status + cached introspection (no live MCP call).
+ */
+function augmentDetail(params: { name: string }) {
+  const def = readAugmentDef(params.name);
+  if (!def) throw new Error(`Augment "${params.name}" not found`);
+
+  const installations = readInstallations();
+  const inst = installations.augments?.[params.name];
+  const platformsMeta = readPlatformsMeta();
+
+  const enabledPlatforms = new Set<string>();
+  for (const [id, p] of Object.entries(platformsMeta.platforms || {})) {
+    if ((p as any).enabled) enabledPlatforms.add(id);
+  }
+
+  const installedPlatforms: string[] = inst?.platforms || [];
+  const equippedOn = installedPlatforms.filter((id: string) => enabledPlatforms.has(id));
+
+  return {
+    augment: {
+      name: def.name,
+      displayName: def.displayName || def.name,
+      title: (def as any).title || undefined,
+      subtitle: (def as any).subtitle || undefined,
+      description: def.description || '',
+      rarity: (def as any).rarity || 'common',
+      baseWeight: def.baseWeight || 0,
+      loadedWeight: def.loadedWeight || 0,
+      installCount: (def as any).installCount || 0,
+      transport: def.transport,
+      requiresAuth: def.requiresAuth,
+      categories: def.categories || [],
+      equipped: equippedOn.length > 0,
+      installedOn: equippedOn,
+      installedAt: inst?.installedAt || '',
+      source: def.source,
+      rules: def.rules || null,
+      skills: def.skills || [],
+      hooks: def.hooks || [],
+      homepage: def.homepage,
+      repository: def.repository,
+      license: def.license,
+      flavorText: (def as any).flavorText,
+    },
+    introspection: def.introspection || null,
+    weight: computeWeightReport(),
+  };
+}
+
+// --- Introspection ---
+
+async function bridgeIntrospect(params: { name: string }) {
+  const def = readAugmentDef(params.name);
+  if (!def) throw new Error(`Augment "${params.name}" not found`);
+
+  const { introspect } = await import("../src/lib/mcp-introspect");
+
+  // Resolve auth if needed
+  let auth: string | undefined;
+  if (def.requiresAuth) {
+    const cred = readStoredCredential(params.name);
+    if (cred?.credential) auth = `Bearer ${cred.credential}`;
+  }
+
+  let result;
+  if (def.serverUrl) {
+    result = await introspect({ serverUrl: def.serverUrl, auth });
+  } else if (def.stdio) {
+    result = await introspect({ stdio: { command: def.stdio.command, args: def.stdio.args } });
+  } else {
+    throw new Error(`Augment "${params.name}" has no server URL or stdio config`);
+  }
+
+  // Cache introspection and update weight fields on the augment def
+  const { writeAugmentDef } = await import("../src/lib/augment-defs");
+  def.introspection = result as unknown as Record<string, unknown>;
+
+  // Compute and persist accurate weights from introspection
+  const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
+  const skillTokens = (def.skills || []).reduce((sum: number, s: any) =>
+    sum + ((s.files || []) as any[]).reduce((fsum: number, f: any) => fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
+  def.baseWeight = (result as any).toolTokens + rulesTokens;
+  def.loadedWeight = ((result as any).resourceTokens || 0) + skillTokens;
+
+  writeAugmentDef(def);
+
+  return result;
+}
+
+// --- Weight ---
+
+function bridgeWeight() {
+  return computeWeightReport();
+}
+
+function bridgeWeightPreview(params: { name: string }) {
+  return previewEquipWeight(params.name);
+}
+
+// --- Sets ---
+
+function bridgeListSets() {
+  return listSetsCore();
+}
+
+function bridgeSaveSet(params: { name: string; augments: string[] }) {
+  return saveSetCore(params.name, params.augments);
+}
+
+function bridgeDeleteSet(params: { name: string }) {
+  return deleteSetCore(params.name);
+}
+
+function bridgeRenameSet(params: { oldName: string; newName: string }) {
+  return renameSetCore(params.oldName, params.newName);
+}
+
+function bridgeDuplicateSet(params: { sourceName: string; newName: string }) {
+  return duplicateSetCore(params.sourceName, params.newName);
+}
+
+function bridgeSwitchSet(params: { name: string | null }) {
+  setActiveSet(params.name);
+  return { activeSet: getActiveSet() };
+}
+
 // --- Snapshots ---
 
 function bridgeListSnapshots(params: { platform?: string }) {
@@ -574,6 +862,14 @@ async function main() {
         result = read();
         break;
 
+      case "loadout":
+        result = loadout();
+        break;
+
+      case "augmentDetail":
+        result = augmentDetail(request.params as any);
+        break;
+
       case "installations":
         result = getInstallations();
         break;
@@ -592,6 +888,18 @@ async function main() {
 
       case "meta":
         result = getMeta();
+        break;
+
+      case "updatePreferences":
+        result = bridgeUpdatePreferences(request.params as any);
+        break;
+
+      case "clearCache":
+        result = bridgeClearCache();
+        break;
+
+      case "clearSnapshots":
+        result = bridgeClearSnapshots();
         break;
 
       case "running":
@@ -620,6 +928,42 @@ async function main() {
 
       case "openFolder":
         result = openFolder(request.params as any);
+        break;
+
+      case "introspect":
+        result = await bridgeIntrospect(request.params as any);
+        break;
+
+      case "weight":
+        result = bridgeWeight();
+        break;
+
+      case "weightPreview":
+        result = bridgeWeightPreview(request.params as any);
+        break;
+
+      case "sets.list":
+        result = bridgeListSets();
+        break;
+
+      case "sets.save":
+        result = bridgeSaveSet(request.params as any);
+        break;
+
+      case "sets.delete":
+        result = bridgeDeleteSet(request.params as any);
+        break;
+
+      case "sets.rename":
+        result = bridgeRenameSet(request.params as any);
+        break;
+
+      case "sets.duplicate":
+        result = bridgeDuplicateSet(request.params as any);
+        break;
+
+      case "sets.switch":
+        result = bridgeSwitchSet(request.params as any);
         break;
 
       case "listSnapshots":

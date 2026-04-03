@@ -194,6 +194,37 @@ export async function runInstall(toolDef: ToolDefinition, parsedArgs: ParsedArgs
     }
   }
 
+  // ── Introspect MCP server for accurate weight ──
+  if (!dryRun) {
+    try {
+      const { introspect } = await import("../mcp-introspect.js");
+      const { readAugmentDef, writeAugmentDef } = await import("../augment-defs.js");
+
+      let introAuth: string | undefined;
+      if (apiKey) introAuth = `Bearer ${apiKey}`;
+
+      let introResult;
+      if (toolDef.serverUrl) {
+        introResult = await introspect({ serverUrl: toolDef.serverUrl, auth: introAuth, timeout: 10000 });
+      } else if (toolDef.stdioCommand) {
+        introResult = await introspect({ stdio: { command: toolDef.stdioCommand, args: toolDef.stdioArgs || [] }, timeout: 10000 });
+      }
+
+      if (introResult) {
+        const def = readAugmentDef(toolDef.name);
+        if (def) {
+          def.introspection = introResult as unknown as Record<string, unknown>;
+          const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
+          const skillTokens = (def.skills || []).reduce((sum: number, s: any) =>
+            sum + ((s.files || []) as any[]).reduce((fsum: number, f: any) => fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
+          def.baseWeight = (introResult as any).toolTokens + rulesTokens;
+          def.loadedWeight = ((introResult as any).resourceTokens || 0) + skillTokens;
+          writeAugmentDef(def);
+        }
+      }
+    } catch { /* best effort */ }
+  }
+
   // ── Telemetry ──
   if (!dryRun) {
     try {
