@@ -24,8 +24,7 @@ import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSna
 import { computeWeightReport, previewEquipWeight, getEncumbrance, estimateBaseWeight, estimateLoadedWeight, applyIntrospectionWeights, DEFAULT_THRESHOLDS, type WeightReport, type WeightPreview, type AugmentWeight, type WeightThresholds, type Encumbrance } from "./lib/weight";
 import { listSets, getSet, saveSet, deleteSet, renameSet, duplicateSet, getActiveSet, setActiveSet, type AugmentSet, type SetsData } from "./lib/sets";
 import { reconcileState } from "./lib/reconcile";
-import { atomicWriteFileSync, acquireLock } from "./lib/fs";
-import { oauthBrowserFlow, type BrowserOpener } from "./lib/auth-engine";
+import type { BrowserOpener } from "./lib/auth-engine";
 import { introspect, type IntrospectionResult, type IntrospectOptions } from "./lib/mcp-introspect";
 import { createFileLogger, createCompositeLogger } from "./lib/log";
 
@@ -385,10 +384,6 @@ export {
   createCompositeLogger,
   // Reconciliation
   reconcileState,
-  // Low-level utilities (used by sidecar session management)
-  atomicWriteFileSync,
-  acquireLock,
-  oauthBrowserFlow,
   // MCP introspection
   introspect,
 };
