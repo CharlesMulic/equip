@@ -23,6 +23,10 @@ import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, upd
 import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSnapshot, hasInitialSnapshot, ensureInitialSnapshots, pruneSnapshots, type Snapshot, type SnapshotSummary, type RestoreResult } from "./lib/snapshots";
 import { computeWeightReport, previewEquipWeight, getEncumbrance, estimateBaseWeight, estimateLoadedWeight, applyIntrospectionWeights, DEFAULT_THRESHOLDS, type WeightReport, type WeightPreview, type AugmentWeight, type WeightThresholds, type Encumbrance } from "./lib/weight";
 import { listSets, getSet, saveSet, deleteSet, renameSet, duplicateSet, getActiveSet, setActiveSet, type AugmentSet, type SetsData } from "./lib/sets";
+import { reconcileState } from "./lib/reconcile";
+import { atomicWriteFileSync, acquireLock } from "./lib/fs";
+import { oauthBrowserFlow, type BrowserOpener } from "./lib/auth-engine";
+import { introspect, type IntrospectionResult, type IntrospectOptions } from "./lib/mcp-introspect";
 import { createFileLogger, createCompositeLogger } from "./lib/log";
 
 // ─── Equip Class ────────────────────────────────────────────
@@ -371,6 +375,14 @@ export {
   // Logging
   createFileLogger,
   createCompositeLogger,
+  // Reconciliation
+  reconcileState,
+  // Low-level utilities (used by sidecar session management)
+  atomicWriteFileSync,
+  acquireLock,
+  oauthBrowserFlow,
+  // MCP introspection
+  introspect,
 };
 
 // Types
@@ -420,4 +432,7 @@ export type {
   Encumbrance,
   AugmentSet,
   SetsData,
+  BrowserOpener,
+  IntrospectionResult,
+  IntrospectOptions,
 };
