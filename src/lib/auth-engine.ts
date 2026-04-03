@@ -147,7 +147,15 @@ function ensureEquipGitignore(): void {
   const gitignorePath = path.join(getEquipDir(), ".gitignore");
   if (!fs.existsSync(gitignorePath)) {
     try {
-      fs.writeFileSync(gitignorePath, "# Prevent accidental credential commits\ncredentials/\ncache/\n*.tmp\n");
+      fs.writeFileSync(gitignorePath, "# Prevent accidental credential commits\ncredentials/\nsession.json\ncache/\n*.tmp\n");
+    } catch { /* best effort */ }
+  } else {
+    // Ensure session.json is covered in existing gitignore
+    try {
+      const content = fs.readFileSync(gitignorePath, "utf-8");
+      if (!content.includes("session.json")) {
+        fs.writeFileSync(gitignorePath, content.trimEnd() + "\nsession.json\n");
+      }
     } catch { /* best effort */ }
   }
 }
@@ -602,16 +610,24 @@ async function resolveOAuthToApiKey(
 
 // ─── OAuth Browser Flow (PKCE) ─────────────────────────────
 
-interface OAuthTokens {
+export interface OAuthTokens {
   accessToken: string;
   refreshToken?: string;
   expiresAt?: string;
 }
 
-async function oauthBrowserFlow(
+/**
+ * Browser opener function type. Called with the authorize URL.
+ * Returns an optional cleanup function to close the browser after auth completes.
+ */
+export type BrowserOpener = (url: string) => (() => void) | void;
+
+export async function oauthBrowserFlow(
   oauthConfig: NonNullable<AuthConfig["oauth"]>,
   logger: EquipLogger,
+  options?: { provider?: string; openBrowser?: BrowserOpener },
 ): Promise<OAuthTokens | null> {
+  let closeBrowserFn: (() => void) | null = null;
   const codeVerifier = crypto.randomBytes(32).toString("base64url");
   const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
   const state = crypto.randomBytes(16).toString("hex");
@@ -677,6 +693,7 @@ async function oauthBrowserFlow(
           res.end(callbackPageHtml("success", "Authenticated successfully. You can close this window."));
           logger.info("OAuth tokens received");
           cleanup();
+          if (closeBrowserFn) closeBrowserFn();
           resolve({
             accessToken: tokenData.access_token as string,
             refreshToken: tokenData.refresh_token as string | undefined,
@@ -705,7 +722,8 @@ async function oauthBrowserFlow(
 
     function cleanup() {
       clearTimeout(timeout);
-      try { server.closeAllConnections(); } catch {}
+      // server.close() stops accepting new connections but lets in-flight
+      // responses finish delivering. No need for closeAllConnections().
       server.close();
     }
 
@@ -720,13 +738,15 @@ async function oauthBrowserFlow(
         state,
       });
       if (oauthConfig.scopes) params.set("scope", oauthConfig.scopes.join(" "));
+      if (options?.provider) params.set("provider", options.provider);
 
       const authorizeUrl = `${oauthConfig.authorizeUrl}?${params.toString()}`;
 
       cli.log("  Opening browser for authentication...");
       cli.log(`  If the browser doesn't open, visit:\n  ${authorizeUrl}`);
 
-      openBrowser(authorizeUrl);
+      const opener = options?.openBrowser || defaultOpenBrowser;
+      closeBrowserFn = opener(authorizeUrl) || null;
     });
 
     // 3-minute timeout
@@ -734,6 +754,7 @@ async function oauthBrowserFlow(
       logger.warn("OAuth flow timed out");
       cli.warn("Authentication timed out after 3 minutes");
       cleanup();
+      if (closeBrowserFn) closeBrowserFn();
       resolve(null);
     }, 3 * 60 * 1000);
     timeout.unref();
@@ -835,7 +856,8 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   }, obj);
 }
 
-function openBrowser(url: string): void {
+/** Default browser opener for CLI — opens the system default browser. */
+function defaultOpenBrowser(url: string): void {
   const cp = require("child_process");
   try {
     if (process.platform === "win32") {
@@ -869,5 +891,5 @@ p{color:#8890a8;font-size:0.875rem;line-height:1.6}
 <div class="card">
 <h1>${safeTitle}</h1>
 <p>${safeMessage}</p>
-</div></body></html>`;
+</div>${isSuccess ? "<script>setTimeout(function(){window.close()},1000)</script>" : ""}</body></html>`;
 }

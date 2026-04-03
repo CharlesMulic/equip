@@ -23,6 +23,7 @@ import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, upd
 import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSnapshot, hasInitialSnapshot, ensureInitialSnapshots, pruneSnapshots, type Snapshot, type SnapshotSummary, type RestoreResult } from "./lib/snapshots";
 import { computeWeightReport, previewEquipWeight, getEncumbrance, estimateBaseWeight, estimateLoadedWeight, applyIntrospectionWeights, DEFAULT_THRESHOLDS, type WeightReport, type WeightPreview, type AugmentWeight, type WeightThresholds, type Encumbrance } from "./lib/weight";
 import { listSets, getSet, saveSet, deleteSet, renameSet, duplicateSet, getActiveSet, setActiveSet, type AugmentSet, type SetsData } from "./lib/sets";
+import { createFileLogger, createCompositeLogger } from "./lib/log";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -367,6 +368,9 @@ export {
   duplicateSet,
   getActiveSet,
   setActiveSet,
+  // Logging
+  createFileLogger,
+  createCompositeLogger,
 };
 
 // Types
