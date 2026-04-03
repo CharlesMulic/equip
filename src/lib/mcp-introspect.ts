@@ -243,7 +243,17 @@ async function introspectStdio(
 
   let idCounter = 0;
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  let spawnError: Error | null = null;
   let stdoutBuffer = "";
+
+  // Handle spawn failures (e.g., ENOENT for missing binaries)
+  child.on("error", (err: Error) => {
+    spawnError = err;
+    for (const [id, handler] of pending) {
+      pending.delete(id);
+      handler.reject(err);
+    }
+  });
 
   // Read stdout line by line
   child.stdout!.on("data", (chunk: Buffer) => {
@@ -287,6 +297,9 @@ async function introspectStdio(
       ...(actualId !== undefined ? { id: actualId } : {}),
       ...(params ? { params } : {}),
     };
+
+    // Fail immediately if the process never started
+    if (spawnError) return Promise.reject(spawnError);
 
     // For notifications (no id), just write and return
     if (id === undefined && !params && method.startsWith("notifications/")) {
