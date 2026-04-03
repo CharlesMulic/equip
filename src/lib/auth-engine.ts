@@ -17,6 +17,19 @@ import * as cli from "./cli";
 
 export interface AuthConfig {
   type: "none" | "api_key" | "oauth" | "oauth_to_api_key";
+
+  /**
+   * Identity provider for this augment's OAuth flow.
+   * - "cg3": uses Prior (api.cg3.io) as the OAuth server — eligible for session-assisted auth
+   * - "github", "google": recognized third-party providers (future: may support token exchange)
+   * - "custom": augment runs its own OAuth server, no SSO possible
+   *
+   * When omitted, detected from oauth.authorizeUrl hostname.
+   * Future: session-assisted auth will use this to skip browser OAuth when the user
+   * is already logged into Equip with a compatible provider.
+   */
+  provider?: "cg3" | "github" | "google" | "custom";
+
   keyEnvVar?: string;
   keyPrefix?: string;
   keyPrompt?: string;
@@ -37,6 +50,21 @@ export interface AuthConfig {
     conflictCode?: string;
     conflictResolution?: "regenerate" | "prompt";
     regenerateBody?: Record<string, unknown>;
+
+    /**
+     * Whether this key exchange endpoint accepts delegated CG3 session tokens.
+     * When true and the user has a valid Equip session, the auth engine will
+     * attempt session-assisted auth (skip browser OAuth) by sending the Equip
+     * session token directly to this endpoint.
+     *
+     * Only meaningful when provider is "cg3" or the OAuth server is api.cg3.io.
+     * Third-party augment authors who use CG3 as their identity provider can
+     * set this to true to enable automatic SSO for their users.
+     *
+     * Future: not yet implemented. Currently all auth goes through the full
+     * browser OAuth flow regardless of this flag.
+     */
+    acceptsCg3Token?: boolean;
   };
 }
 
