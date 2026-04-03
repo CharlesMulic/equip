@@ -23,6 +23,8 @@ export interface EquipPreferences {
   telemetry: boolean;
   autoScan: boolean;
   scanIntervalMinutes: number;
+  /** Max tokens the user wants to dedicate to augment overhead (default 30000) */
+  contextBudget: number;
 }
 
 // ─── Paths ──────────────────────────────────────────────────
@@ -36,6 +38,7 @@ const DEFAULT_PREFERENCES: EquipPreferences = {
   telemetry: true,
   autoScan: true,
   scanIntervalMinutes: 60,
+  contextBudget: 30000,
 };
 
 function defaultMeta(): EquipMeta {
