@@ -324,8 +324,7 @@ async function executePostInstallAction(
 
     try {
       if (process.platform === "win32") {
-        const { execSync } = require("child_process") as typeof import("child_process");
-        execSync(`start "" "${targetUrl}"`, { shell: "cmd.exe" as string, stdio: "ignore" });
+        spawn("cmd", ["/c", "start", "", targetUrl], { stdio: "ignore", shell: false }).unref();
       } else if (process.platform === "darwin") {
         spawn("open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
       } else {

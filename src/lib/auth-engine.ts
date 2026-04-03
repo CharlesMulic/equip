@@ -9,6 +9,7 @@ import * as path from "path";
 import * as os from "os";
 import * as http from "http";
 import * as crypto from "crypto";
+import * as child_process from "child_process";
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
 import * as cli from "./cli";
@@ -132,11 +133,12 @@ export function writeStoredCredential(cred: StoredCredential): void {
 
 /** Restrict file permissions to current user only. */
 function hardenCredentialPermissions(filePath: string): void {
-  // On Unix: chmod 600 for files, 700 for directories — standard practice.
-  // On Windows: rely on default user directory ACLs (user profile dirs already
-  // restrict access to the user + SYSTEM + Administrators). Attempting to modify
-  // ACLs via icacls from Node is fragile and has caused files to become inaccessible.
-  if (process.platform !== "win32") {
+  if (process.platform === "win32") {
+    // Windows: restrict to current user via icacls
+    try {
+      child_process.execSync(`icacls "${filePath}" /inheritance:r /grant:r "%USERNAME%:F"`, { stdio: "ignore", shell: "cmd.exe" });
+    } catch {}
+  } else {
     try { fs.chmodSync(filePath, 0o600); } catch {}
     try { fs.chmodSync(getCredentialsDir(), 0o700); } catch {}
   }
@@ -868,14 +870,14 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
 
 /** Default browser opener for CLI — opens the system default browser. */
 function defaultOpenBrowser(url: string): void {
-  const cp = require("child_process");
   try {
     if (process.platform === "win32") {
-      cp.execSync(`start "" "${url}"`, { shell: "cmd.exe", stdio: "ignore" });
+      // Use spawn with argument array to avoid shell metacharacter injection
+      child_process.spawn("cmd", ["/c", "start", "", url], { stdio: "ignore", shell: false }).unref();
     } else if (process.platform === "darwin") {
-      cp.spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+      child_process.spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
     } else {
-      cp.spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
+      child_process.spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
     }
   } catch {}
 }
