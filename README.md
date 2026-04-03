@@ -2,7 +2,10 @@
 
 Equip your AI agents with augments — packages of MCP servers, behavioral rules, and agent skills that work across every platform.
 
+[![CI](https://github.com/CharlesMulic/equip/actions/workflows/ci.yml/badge.svg)](https://github.com/CharlesMulic/equip/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@cg3/equip)](https://www.npmjs.com/package/@cg3/equip)
+[![node](https://img.shields.io/node/v/@cg3/equip)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/@cg3/equip)](./LICENSE)
 
 [Discord](https://discord.gg/bBcRHT4J) · [Augment Author Guide](./docs/augment-author.md)
 
