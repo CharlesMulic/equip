@@ -281,6 +281,7 @@ export interface VerifyResult {
 export {
   Augment,
   // Platform utilities
+  detectPlatforms,
   createManualPlatform,
   platformName,
   resolvePlatformId,
