@@ -18,6 +18,7 @@ const {
   syncFromRegistry,
   createLocalAugment,
   wrapUnmanaged,
+  promoteWrappedToLocal,
   modAugmentRules,
   resetAugmentRules,
 } = require("../dist/lib/augment-defs");
@@ -386,5 +387,147 @@ describe("modding", () => {
     // Local augments have no upstream — rulesUpstream should be the original
     assert.ok(modded.rulesUpstream);
     assert.equal(modded.rulesUpstream.content, "original");
+  });
+});
+
+// ─── Authoring lifecycle fields ───────────────────────────────
+
+describe("Authoring lifecycle fields", () => {
+  beforeEach(setupTempHome);
+  afterEach(teardownTempHome);
+
+  it("wrappedFrom string is migrated to structured format on read", () => {
+    // Write a def with old string format
+    const dir = path.join(os.homedir(), ".equip", "augments");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "old-wrap.json"), JSON.stringify({
+      name: "old-wrap",
+      source: "wrapped",
+      displayName: "Old Wrap",
+      description: "",
+      transport: "stdio",
+      requiresAuth: false,
+      skills: [],
+      baseWeight: 0,
+      loadedWeight: 0,
+      modded: false,
+      wrappedFrom: "claude-code",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    }));
+
+    const def = readAugmentDef("old-wrap");
+    assert.ok(def);
+    assert.equal(typeof def.wrappedFrom, "object");
+    assert.equal(def.wrappedFrom.type, "mcp");
+    assert.equal(def.wrappedFrom.platform, "claude-code");
+  });
+
+  it("wrappedFrom structured format is preserved on read", () => {
+    const dir = path.join(os.homedir(), ".equip", "augments");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "new-wrap.json"), JSON.stringify({
+      name: "new-wrap",
+      source: "wrapped",
+      displayName: "New Wrap",
+      description: "",
+      transport: "http",
+      serverUrl: "http://localhost:3000",
+      requiresAuth: false,
+      skills: [],
+      baseWeight: 0,
+      loadedWeight: 0,
+      modded: false,
+      wrappedFrom: { type: "mcp", platform: "cursor", path: "/some/config.json", originalName: "my-server" },
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    }));
+
+    const def = readAugmentDef("new-wrap");
+    assert.ok(def);
+    assert.equal(def.wrappedFrom.type, "mcp");
+    assert.equal(def.wrappedFrom.platform, "cursor");
+    assert.equal(def.wrappedFrom.originalName, "my-server");
+  });
+
+  it("promoteWrappedToLocal changes source but preserves wrappedFrom", () => {
+    const dir = path.join(os.homedir(), ".equip", "augments");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "wrapped-test.json"), JSON.stringify({
+      name: "wrapped-test",
+      source: "wrapped",
+      displayName: "Wrapped Test",
+      description: "",
+      transport: "stdio",
+      requiresAuth: false,
+      skills: [],
+      baseWeight: 0,
+      loadedWeight: 0,
+      modded: false,
+      wrappedFrom: { type: "skill", platform: "claude-code", path: "/skills/test/SKILL.md" },
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    }));
+
+    const promoted = promoteWrappedToLocal("wrapped-test");
+    assert.ok(promoted);
+    assert.equal(promoted.source, "local");
+    assert.equal(promoted.wrappedFrom.type, "skill");
+    assert.equal(promoted.wrappedFrom.platform, "claude-code");
+
+    // Read again to confirm persisted
+    const reread = readAugmentDef("wrapped-test");
+    assert.equal(reread.source, "local");
+    assert.ok(reread.wrappedFrom);
+  });
+
+  it("promoteWrappedToLocal is a no-op for non-wrapped augments", () => {
+    const dir = path.join(os.homedir(), ".equip", "augments");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "local-test.json"), JSON.stringify({
+      name: "local-test",
+      source: "local",
+      displayName: "Local Test",
+      description: "",
+      transport: "http",
+      requiresAuth: false,
+      skills: [],
+      baseWeight: 0,
+      loadedWeight: 0,
+      modded: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    }));
+
+    const result = promoteWrappedToLocal("local-test");
+    assert.ok(result);
+    assert.equal(result.source, "local"); // unchanged
+  });
+
+  it("publishIntent and hasUnpublishedChanges round-trip through write/read", () => {
+    writeAugmentDef({
+      name: "pub-test",
+      source: "local",
+      displayName: "Pub Test",
+      description: "testing",
+      transport: "http",
+      serverUrl: "http://localhost:8080",
+      requiresAuth: false,
+      skills: [],
+      baseWeight: 0,
+      loadedWeight: 0,
+      modded: false,
+      publishIntent: true,
+      hasUnpublishedChanges: false,
+      publishedVersion: 3,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    });
+
+    const def = readAugmentDef("pub-test");
+    assert.ok(def);
+    assert.equal(def.publishIntent, true);
+    assert.equal(def.hasUnpublishedChanges, false);
+    assert.equal(def.publishedVersion, 3);
   });
 });

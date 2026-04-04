@@ -135,15 +135,47 @@ export interface AugmentDef {
   /** Categories */
   categories?: string[];
 
-  // ── For wrapped augments ──
+  // ── Authoring lifecycle ──
 
-  /** Which platform this was wrapped from */
-  wrappedFrom?: string;
+  /** User intends to publish this augment to the registry */
+  publishIntent?: boolean;
+
+  /** Version number in the registry (set after first publish, incremented on updates) */
+  publishedVersion?: number;
+
+  /** Whether local changes haven't been pushed to the registry yet */
+  hasUnpublishedChanges?: boolean;
+
+  /** Auth configuration for the MCP server (for registry publish) */
+  authConfig?: Record<string, unknown>;
+
+  /** Post-install actions (for registry publish) */
+  postInstallActions?: Record<string, unknown>[];
+
+  /** Platform-specific configuration hints (for registry publish) */
+  platformHints?: Record<string, string>;
+
+  // ── Wrapping provenance ──
+
+  /** Provenance metadata for auto-wrapped augments */
+  wrappedFrom?: WrappedFromMeta | string; // string is legacy format, migrated on read
 
   // ── Timestamps ──
 
   createdAt: string;
   updatedAt: string;
+}
+
+/** Provenance metadata for auto-wrapped augments */
+export interface WrappedFromMeta {
+  /** What kind of artifact was detected */
+  type: "mcp" | "skill";
+  /** Platform ID where the artifact was detected */
+  platform: string;
+  /** File path — config file for MCP, skill file for skills */
+  path?: string;
+  /** The original key/filename in the platform config */
+  originalName?: string;
 }
 
 /** Options for creating a local augment */
@@ -217,6 +249,22 @@ export function readAugmentDef(name: string): AugmentDef | null {
   if (def.baseWeight === undefined) def.baseWeight = 0;
   if (def.loadedWeight === undefined) def.loadedWeight = 0;
 
+  // Lazy migration: old wrappedFrom string → structured WrappedFromMeta
+  if (typeof def.wrappedFrom === "string") {
+    def.wrappedFrom = { type: "mcp", platform: def.wrappedFrom };
+  }
+
+  return def;
+}
+
+/** Promote a wrapped augment to local. One-way transition. */
+export function promoteWrappedToLocal(name: string): AugmentDef | null {
+  const def = readAugmentDef(name);
+  if (!def || def.source !== "wrapped") return def;
+  def.source = "local";
+  def.updatedAt = new Date().toISOString();
+  // wrappedFrom is preserved — it is provenance, not state
+  writeAugmentDef(def);
   return def;
 }
 

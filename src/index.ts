@@ -16,7 +16,7 @@ import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, typ
 import type { ReadMcpResult } from "./lib/mcp";
 import { fetchToolDef, toolDefToEquipConfig, type ToolDefinition, type PostInstallAction } from "./lib/registry";
 import { resolveAuth, validateCredential, readStoredCredential, writeStoredCredential, deleteStoredCredential, listStoredCredentials, isCredentialExpired, refreshCredential, refreshAllExpired, type AuthConfig, type StoredCredential, type AuthResult, type RefreshResult } from "./lib/auth-engine";
-import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, hasAugmentDef, syncFromRegistry, createLocalAugment, wrapUnmanaged, modAugmentRules, resetAugmentRules, getAugmentsDir, type AugmentDef, type AugmentSource, type AugmentRules, type LocalAugmentConfig, type WrapConfig } from "./lib/augment-defs";
+import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, hasAugmentDef, syncFromRegistry, createLocalAugment, wrapUnmanaged, promoteWrappedToLocal, modAugmentRules, resetAugmentRules, getAugmentsDir, type AugmentDef, type AugmentSource, type AugmentRules, type WrappedFromMeta, type LocalAugmentConfig, type WrapConfig } from "./lib/augment-defs";
 import { readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled, getEnabledPlatformIds, isPlatformEnabled, readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms, getPlatformsDir, type PlatformsMeta, type PlatformMeta, type PlatformScan, type PlatformAugmentEntry } from "./lib/platform-state";
 import { readInstallations, writeInstallations, trackInstallation, trackUninstallation, getAugmentsForPlatform, getManagedAugmentNames, type Installations, type InstallationRecord, type ArtifactRecord } from "./lib/installations";
 import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, updatePreferences, type EquipMeta, type EquipPreferences } from "./lib/equip-meta";
@@ -315,6 +315,7 @@ export {
   // Augment Definitions
   readAugmentDef,
   writeAugmentDef,
+  promoteWrappedToLocal,
   listAugmentDefs,
   deleteAugmentDef,
   hasAugmentDef,
@@ -388,6 +389,7 @@ export type {
   AugmentDef,
   AugmentSource,
   AugmentRules,
+  WrappedFromMeta,
   PlatformsMeta,
   PlatformMeta,
   PlatformScan,
