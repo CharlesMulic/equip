@@ -357,18 +357,59 @@ export function scanAllPlatforms(
 
             if (skillSubDirs.length === 0) continue;
 
-            // Read the first skill's content for the augment description
-            let skillContent = "";
-            try {
-              skillContent = fs.readFileSync(path.join(toolSkillPath, skillSubDirs[0], "SKILL.md"), "utf-8").slice(0, 200);
-            } catch {}
+            // Read all skill files into SkillConfig entries
+            const skills: { name: string; files: { path: string; content: string }[] }[] = [];
+            let description = "";
+
+            for (const skillName of skillSubDirs) {
+              const skillDir = path.join(toolSkillPath, skillName);
+              try {
+                const skillMd = fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf-8");
+                const files: { path: string; content: string }[] = [
+                  { path: "SKILL.md", content: skillMd },
+                ];
+
+                // Read any additional files in the skill directory
+                try {
+                  for (const f of fs.readdirSync(skillDir)) {
+                    if (f === "SKILL.md") continue;
+                    try {
+                      const fp = path.join(skillDir, f);
+                      if (fs.statSync(fp).isFile()) {
+                        files.push({ path: f, content: fs.readFileSync(fp, "utf-8") });
+                      }
+                    } catch {}
+                  }
+                } catch {}
+
+                skills.push({ name: skillName, files });
+
+                // Extract description from first skill's SKILL.md (skip frontmatter)
+                if (!description) {
+                  const lines = skillMd.split("\n");
+                  let inFrontmatter = false;
+                  for (const line of lines) {
+                    if (line.trim() === "---") {
+                      inFrontmatter = !inFrontmatter;
+                      continue;
+                    }
+                    if (inFrontmatter) continue;
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    description = trimmed.replace(/^#\s*/, "");
+                    break;
+                  }
+                }
+              } catch {}
+            }
 
             try {
               wrapUnmanaged({
                 name: toolDir,
                 displayName: toolDir,
-                description: skillContent ? skillContent.split("\n")[0].replace(/^#\s*/, "") : "",
-                transport: "stdio", // skills don't have a transport, but the field is required
+                description,
+                // No transport — skill-only augments don't have an MCP server
+                skills,
                 fromPlatform: p.platform,
                 wrappedFromMeta: {
                   type: "skill",

@@ -22,7 +22,7 @@ const {
 
 // Internal modules (for low-level tests)
 const { buildHttpConfig, buildHttpConfigWithAuth, installMcpJson, installMcpToml, uninstallMcp } = require("../dist/lib/mcp");
-const { installRules } = require("../dist/lib/rules");
+const { installRules, uninstallRules: uninstallRulesFn, wrapRulesContent, stripRulesMarkers } = require("../dist/lib/rules");
 const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("../dist/lib/mcp");
 const { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup, resolvePackageVersion } = require("../dist/lib/fs");
 const { reconcileState } = require("../dist/lib/reconcile");
@@ -404,6 +404,212 @@ describe("installRules (function)", () => {
     const final = fs.readFileSync(p.rulesPath, "utf-8");
     assert.ok(final.includes("v2.0.0"));
     assert.ok(!final.includes("v1.0.0"));
+    cleanup(p.rulesPath);
+  });
+});
+
+describe("rules: multi-augment scenarios", () => {
+  it("multiple augments coexist in same file", () => {
+    const p = mockPlatform();
+    cleanup(p.rulesPath);
+
+    installRules(p, { content: "Rules for alpha", version: "1.0.0", marker: "alpha" });
+    installRules(p, { content: "Rules for beta", version: "1.0.0", marker: "beta" });
+    installRules(p, { content: "Rules for gamma", version: "2.0.0", marker: "gamma" });
+
+    const content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("alpha:v1.0.0"), "alpha present");
+    assert.ok(content.includes("beta:v1.0.0"), "beta present");
+    assert.ok(content.includes("gamma:v2.0.0"), "gamma present");
+    assert.ok(content.includes("Rules for alpha"), "alpha content present");
+    assert.ok(content.includes("Rules for beta"), "beta content present");
+    assert.ok(content.includes("Rules for gamma"), "gamma content present");
+    cleanup(p.rulesPath);
+  });
+
+  it("uninstall one augment preserves others", () => {
+    const p = mockPlatform();
+    cleanup(p.rulesPath);
+
+    installRules(p, { content: "Rules for alpha", version: "1.0.0", marker: "alpha" });
+    installRules(p, { content: "Rules for beta", version: "1.0.0", marker: "beta" });
+    installRules(p, { content: "Rules for gamma", version: "1.0.0", marker: "gamma" });
+
+    // Remove beta (middle one)
+    uninstallRulesFn(p, { marker: "beta" });
+
+    const content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("alpha:v1.0.0"), "alpha preserved");
+    assert.ok(content.includes("Rules for alpha"), "alpha content preserved");
+    assert.ok(!content.includes("beta"), "beta fully removed");
+    assert.ok(content.includes("gamma:v1.0.0"), "gamma preserved");
+    assert.ok(content.includes("Rules for gamma"), "gamma content preserved");
+    cleanup(p.rulesPath);
+  });
+
+  it("uninstall first augment preserves rest", () => {
+    const p = mockPlatform();
+    cleanup(p.rulesPath);
+
+    installRules(p, { content: "Rules for alpha", version: "1.0.0", marker: "alpha" });
+    installRules(p, { content: "Rules for beta", version: "1.0.0", marker: "beta" });
+
+    uninstallRulesFn(p, { marker: "alpha" });
+
+    const content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(!content.includes("alpha"), "alpha removed");
+    assert.ok(content.includes("beta:v1.0.0"), "beta preserved");
+    assert.ok(content.includes("Rules for beta"), "beta content preserved");
+    cleanup(p.rulesPath);
+  });
+
+  it("uninstall last augment removes file", () => {
+    const p = mockPlatform();
+    cleanup(p.rulesPath);
+
+    installRules(p, { content: "Rules for alpha", version: "1.0.0", marker: "alpha" });
+    uninstallRulesFn(p, { marker: "alpha" });
+
+    // File should be deleted when empty
+    assert.ok(!fs.existsSync(p.rulesPath) || fs.readFileSync(p.rulesPath, "utf-8").trim() === "", "file removed or empty");
+    cleanup(p.rulesPath);
+  });
+
+  it("existing user content is preserved through install and uninstall", () => {
+    const p = mockPlatform();
+    const userContent = "# My Custom Rules\n\nAlways write tests.\nNever skip error handling.\n";
+    fs.writeFileSync(p.rulesPath, userContent);
+
+    // Install an augment
+    installRules(p, { content: "Augment rules here", version: "1.0.0", marker: "my-augment" });
+
+    let content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("My Custom Rules"), "user content preserved after install");
+    assert.ok(content.includes("Always write tests"), "user content preserved after install");
+    assert.ok(content.includes("my-augment:v1.0.0"), "augment installed");
+
+    // Uninstall the augment
+    uninstallRulesFn(p, { marker: "my-augment" });
+
+    content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("My Custom Rules"), "user content preserved after uninstall");
+    assert.ok(content.includes("Always write tests"), "user content preserved after uninstall");
+    assert.ok(!content.includes("my-augment"), "augment fully removed");
+    assert.ok(!content.includes("Augment rules here"), "augment content removed");
+    cleanup(p.rulesPath);
+  });
+
+  it("install/uninstall order independence with three augments", () => {
+    const p = mockPlatform();
+    cleanup(p.rulesPath);
+
+    // Install A, B, C
+    installRules(p, { content: "Alpha content", version: "1.0.0", marker: "alpha" });
+    installRules(p, { content: "Beta content", version: "1.0.0", marker: "beta" });
+    installRules(p, { content: "Gamma content", version: "1.0.0", marker: "gamma" });
+
+    // Uninstall B (middle)
+    uninstallRulesFn(p, { marker: "beta" });
+    let content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("Alpha content"), "A intact after removing B");
+    assert.ok(content.includes("Gamma content"), "C intact after removing B");
+
+    // Uninstall A (now first)
+    uninstallRulesFn(p, { marker: "alpha" });
+    content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("Gamma content"), "C intact after removing A");
+    assert.ok(!content.includes("Alpha"), "A removed");
+
+    // Uninstall C (last remaining)
+    uninstallRulesFn(p, { marker: "gamma" });
+    assert.ok(!fs.existsSync(p.rulesPath) || fs.readFileSync(p.rulesPath, "utf-8").trim() === "", "file cleaned up");
+    cleanup(p.rulesPath);
+  });
+
+  it("no excessive blank lines after uninstall", () => {
+    const p = mockPlatform();
+    cleanup(p.rulesPath);
+
+    installRules(p, { content: "Alpha content", version: "1.0.0", marker: "alpha" });
+    installRules(p, { content: "Beta content", version: "1.0.0", marker: "beta" });
+
+    uninstallRulesFn(p, { marker: "alpha" });
+
+    const content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(!content.includes("\n\n\n"), "no triple newlines after uninstall");
+    cleanup(p.rulesPath);
+  });
+});
+
+describe("wrapRulesContent and stripRulesMarkers", () => {
+  it("wraps raw content in markers", () => {
+    const raw = "Always write tests.";
+    const wrapped = wrapRulesContent(raw, "my-tool", "1.0.0");
+    assert.ok(wrapped.startsWith("<!-- my-tool:v1.0.0 -->"));
+    assert.ok(wrapped.includes("Always write tests."));
+    assert.ok(wrapped.endsWith("<!-- /my-tool -->"));
+  });
+
+  it("does not double-wrap already-wrapped content", () => {
+    const already = "<!-- my-tool:v1.0.0 -->\nContent\n<!-- /my-tool -->";
+    const result = wrapRulesContent(already, "my-tool", "1.0.0");
+    assert.equal(result, already, "should return unchanged");
+  });
+
+  it("stripRulesMarkers extracts raw content", () => {
+    const wrapped = "<!-- test:v1.0.0 -->\nTalk like a pirate\n<!-- /test -->";
+    const stripped = stripRulesMarkers(wrapped);
+    assert.equal(stripped, "Talk like a pirate");
+  });
+
+  it("stripRulesMarkers handles multiline content", () => {
+    const wrapped = "<!-- test:v2.0.0 -->\n# Rules\n\nDo this.\nDo that.\n<!-- /test -->";
+    const stripped = stripRulesMarkers(wrapped);
+    assert.equal(stripped, "# Rules\n\nDo this.\nDo that.");
+  });
+
+  it("stripRulesMarkers returns raw content unchanged if no markers", () => {
+    const raw = "Just some content";
+    assert.equal(stripRulesMarkers(raw), raw);
+  });
+
+  it("installRules auto-wraps raw content", () => {
+    const p = mockPlatform();
+    cleanup(p.rulesPath);
+
+    // Pass raw content WITHOUT markers
+    installRules(p, { content: "Be helpful and concise", version: "1.0.0", marker: "my-aug" });
+
+    const content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("<!-- my-aug:v1.0.0 -->"), "auto-wrapped with opening marker");
+    assert.ok(content.includes("Be helpful and concise"), "content present");
+    assert.ok(content.includes("<!-- /my-aug -->"), "auto-wrapped with closing marker");
+
+    // And it should be uninstallable
+    uninstallRulesFn(p, { marker: "my-aug" });
+    assert.ok(!fs.existsSync(p.rulesPath) || !fs.readFileSync(p.rulesPath, "utf-8").includes("my-aug"), "cleanly uninstalled");
+    cleanup(p.rulesPath);
+  });
+
+  it("auto-wrap + manual wrap roundtrip with existing content", () => {
+    const p = mockPlatform();
+    const userContent = "# My Rules\n\nBe excellent.\n";
+    fs.writeFileSync(p.rulesPath, userContent);
+
+    // Install with raw (unwrapped) content
+    installRules(p, { content: "Talk like a pirate", version: "1.0.0", marker: "pirate" });
+
+    let content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("My Rules"), "user content preserved");
+    assert.ok(content.includes("pirate:v1.0.0"), "markers added");
+
+    // Uninstall
+    uninstallRulesFn(p, { marker: "pirate" });
+    content = fs.readFileSync(p.rulesPath, "utf-8");
+    assert.ok(content.includes("My Rules"), "user content still preserved");
+    assert.ok(content.includes("Be excellent"), "user content intact");
+    assert.ok(!content.includes("pirate"), "augment fully removed");
+    assert.ok(!content.includes("Talk like"), "augment content removed");
     cleanup(p.rulesPath);
   });
 });

@@ -13,6 +13,7 @@ import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { readEquipMeta } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
+import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
 import { readAugmentDef, writeAugmentDef } from "../augment-defs";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
@@ -293,11 +294,24 @@ async function executePostInstallAction(
 
     let targetUrl = action.targetUrl;
 
+    // Validate target URL scheme
+    try { validateUrlScheme(targetUrl, "post-install action URL"); } catch {
+      if (ctx.logger) ctx.logger.warn("Refusing to open unsafe URL scheme", { url: targetUrl });
+      return;
+    }
+
     // Fetch one-time code
     if (action.url && action.codePath) {
       try {
+        validateUrlScheme(action.url, "post-install action fetch URL");
         const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (action.auth && ctx.apiKey) headers.Authorization = `Bearer ${ctx.apiKey}`;
+        if (action.auth && ctx.apiKey) {
+          if (isTrustedCredentialHost(action.url)) {
+            headers.Authorization = `Bearer ${ctx.apiKey}`;
+          } else if (ctx.logger) {
+            ctx.logger.warn("Refusing to send credentials to untrusted host", { url: action.url });
+          }
+        }
 
         const res = await fetch(action.url, {
           method: "POST",

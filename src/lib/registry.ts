@@ -8,6 +8,7 @@ import * as os from "os";
 import type { AugmentConfig } from "../index";
 import type { HookDefinition } from "./hooks";
 import type { SkillConfig, SkillFile } from "./skills";
+import { validateToolName, validateHookDir, validateUrlScheme } from "./validation";
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
 import type { AuthConfig } from "./auth-engine";
@@ -117,6 +118,7 @@ export async function fetchToolDef(
   name: string,
   options: { logger?: EquipLogger } = {},
 ): Promise<ToolDefinition | null> {
+  validateToolName(name);
   const logger = options.logger || NOOP_LOGGER;
 
   // 1. Try the registry API
@@ -216,7 +218,7 @@ export function toolDefToEquipConfig(def: ToolDefinition, options?: { logger?: E
   }
 
   if (def.hookDir) {
-    config.hookDir = def.hookDir.replace(/^~/, os.homedir());
+    config.hookDir = validateHookDir(def.hookDir);
   }
 
   // Skills: pass all skills through

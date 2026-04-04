@@ -4,6 +4,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import type { DetectedPlatform } from "./platforms";
 import { copyToClipboard } from "./cli";
 import { atomicWriteFileSync } from "./fs";
@@ -17,8 +18,8 @@ import { makeResult, NOOP_LOGGER } from "./types";
  */
 export function markerPatterns(marker: string): { MARKER_RE: RegExp; BLOCK_RE: RegExp } {
   return {
-    MARKER_RE: new RegExp(`<!-- ${marker}:v[\\d.]+ -->`),
-    BLOCK_RE: new RegExp(`<!-- ${marker}:v[\\d.]+ -->[\\s\\S]*?<!-- \\/${marker} -->\\n?`),
+    MARKER_RE: new RegExp(`<!-- ${marker}:v[\\w.]+ -->`),
+    BLOCK_RE: new RegExp(`<!-- ${marker}:v[\\w.]+ -->[\\s\\S]*?<!-- \\/${marker} -->\\n?`),
   };
 }
 
@@ -26,8 +27,46 @@ export function markerPatterns(marker: string): { MARKER_RE: RegExp; BLOCK_RE: R
  * Parse version from marker in content.
  */
 export function parseRulesVersion(content: string, marker: string): string | null {
-  const m = content.match(new RegExp(`<!-- ${marker}:v([\\d.]+) -->`));
+  const m = content.match(new RegExp(`<!-- ${marker}:v([\\w.]+) -->`));
   return m ? m[1] : null;
+}
+
+/**
+ * Wrap raw rules text in marker comments for safe install/uninstall.
+ * If already wrapped with this marker, returns as-is.
+ * Rejects content containing other augments' marker patterns (cross-augment injection).
+ */
+export function wrapRulesContent(rawContent: string, marker: string, version: string): string {
+  if (rawContent.includes(`<!-- ${marker}:`)) return rawContent;
+
+  // Reject content that contains ANY other augment's marker pattern
+  const foreignMarkerRe = /<!-- [\w-]+:v[\w.]+ -->/;
+  const closingMarkerRe = /<!-- \/[\w-]+ -->/;
+  if (foreignMarkerRe.test(rawContent) || closingMarkerRe.test(rawContent)) {
+    throw new Error("Rules content contains marker comments from another augment — potential injection attack");
+  }
+
+  return `<!-- ${marker}:v${version} -->\n${rawContent}\n<!-- /${marker} -->`;
+}
+
+/**
+ * Strip marker comments from rules content (for editing/display).
+ */
+export function stripRulesMarkers(content: string): string {
+  return content
+    .replace(/^<!-- [\w-]+:v[\w.]+ -->\n?/, '')
+    .replace(/\n?<!-- \/[\w-]+ -->$/, '')
+    .trim();
+}
+
+/**
+ * Compute a content hash for rules version tracking.
+ * Returns first 8 hex chars of SHA-256 of the stripped (markerless) content.
+ * Deterministic: same content always produces the same hash.
+ */
+export function rulesContentHash(content: string): string {
+  const stripped = stripRulesMarkers(content);
+  return crypto.createHash("sha256").update(stripped).digest("hex").slice(0, 8);
 }
 
 // ─── Install ─────────────────────────────────────────────────
@@ -56,10 +95,13 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
     logger = NOOP_LOGGER,
   } = options;
 
+  // Ensure content is wrapped in markers before any write
+  const wrappedContent = wrapRulesContent(content, marker, version);
+
   if (clipboardPlatforms.includes(platform.platform)) {
     const result = makeResult("rules", { attempted: true, success: true, action: "clipboard" });
     if (!dryRun) {
-      const copied = copyToClipboard(content);
+      const copied = copyToClipboard(wrappedContent);
       if (!copied) {
         logger.warn("Clipboard copy failed", { platform: platform.platform });
         result.warnings.push({ code: "WARN_CLIPBOARD_FAILED", message: "Clipboard copy failed — user may need to copy rules manually" });
@@ -88,14 +130,14 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
 
   if (!dryRun) {
     if (existingVersion) {
-      const updated = existing.replace(BLOCK_RE, content + "\n");
+      const updated = existing.replace(BLOCK_RE, wrappedContent + "\n");
       atomicWriteFileSync(rulesPath, updated);
       logger.info("Rules updated", { platform: platform.platform, from: existingVersion, to: version });
       return makeResult("rules", { attempted: true, success: true, action: "updated" });
     }
 
     const sep = existing && !existing.endsWith("\n\n") ? (existing.endsWith("\n") ? "\n" : "\n\n") : "";
-    atomicWriteFileSync(rulesPath, existing + sep + content + "\n");
+    atomicWriteFileSync(rulesPath, existing + sep + wrappedContent + "\n");
     logger.info("Rules created", { platform: platform.platform, version });
     return makeResult("rules", { attempted: true, success: true, action: "created" });
   }

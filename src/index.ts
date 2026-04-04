@@ -6,7 +6,8 @@ import * as os from "os";
 
 import { detectPlatforms } from "./lib/detect";
 import { readMcpEntry, readMcpEntryDetailed, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
-import { parseRulesVersion, installRules, uninstallRules, markerPatterns } from "./lib/rules";
+import { parseRulesVersion, installRules, uninstallRules, markerPatterns, wrapRulesContent, stripRulesMarkers, rulesContentHash } from "./lib/rules";
+import { validateToolName, validateRelativePath, validatePathWithinDir, validateHookDir, validateUrlScheme, isTrustedCredentialHost } from "./lib/validation";
 import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
@@ -290,9 +291,19 @@ export {
   uninstallRules,
   installSkill,
   uninstallSkill,
-  // Rules utilities (used by consumers for version checking)
+  // Rules utilities (used by consumers for version checking and marker wrapping)
   parseRulesVersion,
   markerPatterns,
+  wrapRulesContent,
+  stripRulesMarkers,
+  rulesContentHash,
+  // Validation
+  validateToolName,
+  validateRelativePath,
+  validatePathWithinDir,
+  validateHookDir,
+  validateUrlScheme,
+  isTrustedCredentialHost,
   // CLI helpers (for consumer setup scripts)
   cli,
   // Observability

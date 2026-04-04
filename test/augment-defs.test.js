@@ -250,6 +250,36 @@ describe("syncFromRegistry", () => {
     assert.equal(v2.rulesUpstream.content, "v2 official"); // new upstream
     assert.notEqual(v2.registryVersion, v2.rules.version); // diverged
   });
+
+  it("does not overwrite local augment with same name", () => {
+    // Create a local augment first
+    createLocalAugment({
+      name: "test-tool",
+      displayName: "My Local Tool",
+      description: "User's local augment",
+    });
+
+    // Registry sync with same name should NOT overwrite
+    const result = syncFromRegistry(makeRegistryToolDef());
+
+    assert.equal(result.source, "local", "Source should remain 'local'");
+    assert.equal(result.description, "User's local augment", "Local description should be preserved");
+    assert.equal(result.displayName, "My Local Tool", "Local displayName should be preserved");
+  });
+
+  it("does not overwrite wrapped augment with same name", () => {
+    wrapUnmanaged({
+      name: "test-tool",
+      displayName: "Wrapped Tool",
+      description: "Auto-detected",
+      fromPlatform: "claude-code",
+    });
+
+    const result = syncFromRegistry(makeRegistryToolDef());
+
+    assert.equal(result.source, "wrapped", "Source should remain 'wrapped'");
+    assert.equal(result.description, "Auto-detected", "Wrapped description should be preserved");
+  });
 });
 
 describe("createLocalAugment", () => {

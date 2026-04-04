@@ -6,6 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { type DetectedPlatform, getPlatform } from "./platforms";
 import { atomicWriteFileSync } from "./fs";
+import { validateRelativePath, validatePathWithinDir, validateToolName } from "./validation";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
 
@@ -66,8 +67,16 @@ export function installSkill(
   }
 
   if (!options.dryRun) {
+    // Validate tool name and skill name before filesystem use
+    validateToolName(toolName);
+    validateRelativePath(skill.name, "skill name");
+
     for (const file of skill.files) {
+      // Validate each file path to prevent directory traversal
+      validateRelativePath(file.path, "skill file path");
       const filePath = path.join(skillDir, file.path);
+      validatePathWithinDir(filePath, skillDir, "skill file path");
+
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       atomicWriteFileSync(filePath, file.content);

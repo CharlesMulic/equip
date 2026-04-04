@@ -569,10 +569,47 @@ describe("Auto-wrapping MCP servers during scan", () => {
     assert.equal(def.wrappedFrom.platform, "claude-code");
     assert.equal(def.wrappedFrom.originalName, "my-custom-skill");
 
+    // Verify skill content is captured in augment def
+    assert.equal(def.skills.length, 1, "Should have 1 skill");
+    assert.equal(def.skills[0].name, "do-thing");
+    assert.equal(def.skills[0].files.length, 1, "Should have SKILL.md file");
+    assert.equal(def.skills[0].files[0].path, "SKILL.md");
+    assert.equal(def.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
+
+    // Verify description extracted from SKILL.md heading
+    assert.equal(def.description, "Do Thing");
+
     // Verify installation record
     const inst = readInstallations();
     assert.ok(inst.augments["my-custom-skill"]);
     assert.deepEqual(inst.augments["my-custom-skill"].artifacts["claude-code"].skills, ["do-thing"]);
+  });
+
+  it("extracts description from SKILL.md skipping YAML frontmatter", () => {
+    const claudeDir = path.join(tempHome, ".claude");
+    fs.mkdirSync(claudeDir, { recursive: true });
+    const configPath = path.join(claudeDir, "config.json");
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+
+    // Create a skill with YAML frontmatter
+    const skillsDir = path.join(claudeDir, "skills", "fancy-skill", "greet");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, "SKILL.md"), "---\ntitle: Greet\n---\n# Friendly Greeter\nSays hello nicely.");
+
+    const detected = [{
+      platform: "claude-code",
+      configPath,
+      rootKey: "mcpServers",
+      configFormat: "json",
+    }];
+
+    scanAllPlatforms(detected, new Set());
+
+    const def = readAugmentDef("fancy-skill");
+    assert.ok(def, "Skill augment should be created");
+    assert.equal(def.description, "Friendly Greeter", "Should skip frontmatter and extract heading");
+    assert.equal(def.skills.length, 1);
+    assert.equal(def.skills[0].name, "greet");
   });
 
   it("does not wrap skills owned by managed augments", () => {

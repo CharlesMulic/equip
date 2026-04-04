@@ -11,6 +11,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
+import { validateToolName } from "./validation";
 import type { SkillConfig } from "./skills";
 import type { HookDefinition } from "./hooks";
 import type { ToolDefinition } from "./registry";
@@ -56,8 +57,8 @@ export interface AugmentDef {
 
   // ── Infrastructure (publisher-owned, not user-editable) ──
 
-  /** Transport type */
-  transport: "http" | "stdio";
+  /** Transport type (undefined for skill-only or rules-only augments) */
+  transport?: "http" | "stdio";
 
   /** MCP server URL (for HTTP transport) */
   serverUrl?: string;
@@ -183,7 +184,7 @@ export interface LocalAugmentConfig {
   name: string;
   displayName?: string;
   description?: string;
-  transport: "http" | "stdio";
+  transport?: "http" | "stdio";
   serverUrl?: string;
   stdio?: { command: string; args: string[]; envKey?: string };
   requiresAuth?: boolean;
@@ -199,13 +200,15 @@ export interface WrapConfig {
   name: string;
   displayName?: string;
   description?: string;
-  transport: "http" | "stdio";
+  transport?: "http" | "stdio";
   url?: string;
   command?: string;
   args?: string[];
   fromPlatform: string;
   /** Structured provenance metadata. If not provided, defaults to { type: "mcp", platform: fromPlatform }. */
   wrappedFromMeta?: WrappedFromMeta;
+  /** Skill definitions to include in the wrapped augment */
+  skills?: SkillConfig[];
   baseWeight?: number;
   loadedWeight?: number;
 }
@@ -217,6 +220,7 @@ function getEquipDir(): string { return path.join(os.homedir(), ".equip"); }
 export function getAugmentsDir(): string { return path.join(getEquipDir(), "augments"); }
 
 function augmentPath(name: string): string {
+  validateToolName(name);
   return path.join(getAugmentsDir(), `${name}.json`);
 }
 
@@ -255,6 +259,12 @@ export function readAugmentDef(name: string): AugmentDef | null {
   // Lazy migration: old wrappedFrom string → structured WrappedFromMeta
   if (typeof def.wrappedFrom === "string") {
     def.wrappedFrom = { type: "mcp", platform: def.wrappedFrom };
+  }
+
+  // Lazy migration: clear phantom transport on skill-only augments
+  // (Before transport was made optional, skill-only augments got transport: "stdio" as a placeholder)
+  if (def.transport && !def.serverUrl && !def.stdio) {
+    def.transport = undefined;
   }
 
   return def;
@@ -324,12 +334,19 @@ export function hasAugmentDef(name: string): boolean {
  * Returns the resulting definition.
  */
 export function syncFromRegistry(registryDef: ToolDefinition): AugmentDef {
+  validateToolName(registryDef.name);
   const now = new Date().toISOString();
   const existing = readAugmentDef(registryDef.name);
 
   if (existing && existing.source === "registry") {
     // Update existing registry definition
     return updateFromRegistry(existing, registryDef, now);
+  }
+
+  if (existing) {
+    // Local or wrapped augment with this name already exists — don't overwrite.
+    // User's local content is sovereign over registry definitions.
+    return existing;
   }
 
   // Create new definition from registry
@@ -477,7 +494,7 @@ export function wrapUnmanaged(config: WrapConfig): AugmentDef {
       ? { command: config.command, args: config.args || [] }
       : undefined,
     requiresAuth: false,
-    skills: [],
+    skills: config.skills || [],
     baseWeight: config.baseWeight || 0,
     loadedWeight: config.loadedWeight || 0,
     modded: false,
