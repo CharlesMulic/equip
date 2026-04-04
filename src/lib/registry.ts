@@ -103,6 +103,11 @@ export interface ToolDefinition {
 
   // Publisher
   publisher?: { name: string; slug: string; verified: boolean; avatarUrl?: string };
+
+  // Versioning and content integrity
+  version?: number;
+  contentHash?: string;
+  hashAlgorithm?: string;
 }
 
 // ─── Fetch ─────────────────────────────────────────────────
@@ -135,6 +140,20 @@ export async function fetchToolDef(
     if (res.ok) {
       const def = await res.json() as ToolDefinition;
       logger.info("Augment definition fetched from API", { name, installMode: def.installMode });
+
+      // Verify content hash integrity if present
+      if (def.contentHash) {
+        const { computeContentHash, extractManifest } = await import("./content-hash.js");
+        const computed = computeContentHash(extractManifest(def));
+        if (computed !== def.contentHash) {
+          logger.warn("INTEGRITY FAILURE: content hash mismatch — rejecting definition", {
+            name, expected: def.contentHash, computed, version: def.version,
+          });
+          // Fall back to cache (which has a previously-verified version)
+          return readCachedToolDef(name, logger);
+        }
+      }
+
       cacheToolDef(name, def, logger);
       return def;
     }
