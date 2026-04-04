@@ -1,6 +1,6 @@
 {
   "name": "@cg3/equip",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "Augment your AI agents — MCP servers, behavioral rules, and skills across every platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,7 +9,11 @@
     "unequip": "bin/unequip.js"
   },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
