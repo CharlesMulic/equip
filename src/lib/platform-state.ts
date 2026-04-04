@@ -331,6 +331,65 @@ export function scanAllPlatforms(
         scan.managedCount = (scan.managedCount || 0) + 1;
       } catch { /* best effort — don't break scan for wrapping failures */ }
     }
+
+    // Auto-wrap orphan skill files
+    const platformDef = PLATFORM_REGISTRY.get(p.platform);
+    if (platformDef?.skillsPath) {
+      try {
+        const skillsBase = platformDef.skillsPath();
+        if (fs.existsSync(skillsBase)) {
+          const topDirs = fs.readdirSync(skillsBase).filter((d: string) => {
+            try { return fs.statSync(path.join(skillsBase, d)).isDirectory(); }
+            catch { return false; }
+          });
+
+          for (const toolDir of topDirs) {
+            // Skip if this tool dir is owned by a managed augment
+            if (managedNames.has(toolDir)) continue;
+            if (hasAugmentDef(toolDir)) continue;
+
+            // Check for SKILL.md files inside subdirectories
+            const toolSkillPath = path.join(skillsBase, toolDir);
+            const skillSubDirs = fs.readdirSync(toolSkillPath).filter((s: string) => {
+              try { return fs.statSync(path.join(toolSkillPath, s, "SKILL.md")).isFile(); }
+              catch { return false; }
+            });
+
+            if (skillSubDirs.length === 0) continue;
+
+            // Read the first skill's content for the augment description
+            let skillContent = "";
+            try {
+              skillContent = fs.readFileSync(path.join(toolSkillPath, skillSubDirs[0], "SKILL.md"), "utf-8").slice(0, 200);
+            } catch {}
+
+            try {
+              wrapUnmanaged({
+                name: toolDir,
+                displayName: toolDir,
+                description: skillContent ? skillContent.split("\n")[0].replace(/^#\s*/, "") : "",
+                transport: "stdio", // skills don't have a transport, but the field is required
+                fromPlatform: p.platform,
+                wrappedFromMeta: {
+                  type: "skill",
+                  platform: p.platform,
+                  path: toolSkillPath,
+                  originalName: toolDir,
+                },
+              });
+
+              trackInstallation(toolDir, {
+                source: "wrapped",
+                displayName: toolDir,
+                transport: "stdio",
+                platforms: [p.platform],
+                artifacts: { [p.platform]: { mcp: false, skills: skillSubDirs } },
+              });
+            } catch { /* best effort */ }
+          }
+        }
+      } catch { /* skills directory may not exist */ }
+    }
   }
 
   return { meta, scans };

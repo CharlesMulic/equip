@@ -540,6 +540,66 @@ describe("Auto-wrapping MCP servers during scan", () => {
     assert.ok(!hasAugmentDef("managed-server"));
   });
 
+  it("wraps orphan skill files during scanAllPlatforms", () => {
+    // Create Claude Code config with no MCP servers
+    const claudeDir = path.join(tempHome, ".claude");
+    fs.mkdirSync(claudeDir, { recursive: true });
+    const configPath = path.join(claudeDir, "config.json");
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+
+    // Create an orphan skill directory
+    const skillsDir = path.join(claudeDir, "skills", "my-custom-skill", "do-thing");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, "SKILL.md"), "# Do Thing\nDoes a thing.");
+
+    const detected = [{
+      platform: "claude-code",
+      configPath,
+      rootKey: "mcpServers",
+      configFormat: "json",
+    }];
+
+    scanAllPlatforms(detected, new Set());
+
+    // Verify the skill was auto-wrapped
+    assert.ok(hasAugmentDef("my-custom-skill"), "Skill augment should be created");
+    const def = readAugmentDef("my-custom-skill");
+    assert.equal(def.source, "wrapped");
+    assert.equal(def.wrappedFrom.type, "skill");
+    assert.equal(def.wrappedFrom.platform, "claude-code");
+    assert.equal(def.wrappedFrom.originalName, "my-custom-skill");
+
+    // Verify installation record
+    const inst = readInstallations();
+    assert.ok(inst.augments["my-custom-skill"]);
+    assert.deepEqual(inst.augments["my-custom-skill"].artifacts["claude-code"].skills, ["do-thing"]);
+  });
+
+  it("does not wrap skills owned by managed augments", () => {
+    const claudeDir = path.join(tempHome, ".claude");
+    fs.mkdirSync(claudeDir, { recursive: true });
+    const configPath = path.join(claudeDir, "config.json");
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+
+    // Create a skill owned by "prior" (managed)
+    const skillsDir = path.join(claudeDir, "skills", "prior", "search");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, "SKILL.md"), "# Search Prior");
+
+    const detected = [{
+      platform: "claude-code",
+      configPath,
+      rootKey: "mcpServers",
+      configFormat: "json",
+    }];
+
+    // "prior" is managed
+    scanAllPlatforms(detected, new Set(["prior"]));
+
+    // Should NOT be wrapped
+    assert.ok(!hasAugmentDef("prior") || readAugmentDef("prior")?.source !== "wrapped");
+  });
+
   it("auto-wrap is idempotent — second scan does not duplicate", () => {
     const configDir = path.join(tempHome, ".test-platform");
     fs.mkdirSync(configDir, { recursive: true });
