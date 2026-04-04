@@ -89,6 +89,19 @@ export interface ToolDefinition {
 
   // Per-platform messages shown after install
   platformHints?: Record<string, string>;
+
+  // Display metadata (from registry, authoritative)
+  rarity?: "common" | "uncommon" | "rare" | "epic" | "legendary";
+  title?: string;
+  subtitle?: string;
+  flavorText?: string;
+  baseWeight?: number;
+  loadedWeight?: number;
+  verifiedInstallCount?: number;
+  activeInstallCount?: number;
+
+  // Publisher
+  publisher?: { name: string; slug: string; verified: boolean; avatarUrl?: string };
 }
 
 // ─── Fetch ─────────────────────────────────────────────────
