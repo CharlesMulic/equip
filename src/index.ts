@@ -8,6 +8,7 @@ import { detectPlatforms } from "./lib/detect";
 import { readMcpEntry, readMcpEntryDetailed, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
 import { parseRulesVersion, installRules, uninstallRules, markerPatterns, wrapRulesContent, stripRulesMarkers, rulesContentHash } from "./lib/rules";
 import { validateToolName, validateRelativePath, validatePathWithinDir, validateHookDir, validateUrlScheme, isTrustedCredentialHost } from "./lib/validation";
+import { computeContentHash, extractManifest, type ContentManifest } from "./lib/content-hash";
 import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
@@ -304,6 +305,10 @@ export {
   validateHookDir,
   validateUrlScheme,
   isTrustedCredentialHost,
+  // Content integrity
+  computeContentHash,
+  extractManifest,
+  type ContentManifest,
   // CLI helpers (for consumer setup scripts)
   cli,
   // Observability
