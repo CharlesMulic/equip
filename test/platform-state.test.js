@@ -422,3 +422,148 @@ describe("equip.json", () => {
     assert.equal(meta.preferences.telemetry, false); // previous change preserved
   });
 });
+
+// ─── Auto-wrapping MCP servers ──────────────────────────────
+
+const { readAugmentDef, hasAugmentDef, writeAugmentDef } = require("../dist/lib/augment-defs");
+
+describe("Auto-wrapping MCP servers during scan", () => {
+  beforeEach(setupTempHome);
+  afterEach(teardownTempHome);
+
+  it("wraps unmanaged MCP server into an augment during scanAllPlatforms", () => {
+    // Create a platform config with an unmanaged MCP server
+    const configDir = path.join(tempHome, ".test-platform");
+    fs.mkdirSync(configDir, { recursive: true });
+    const configPath = path.join(configDir, "mcp.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        "my-server": {
+          command: "npx",
+          args: ["-y", "my-mcp-server"]
+        }
+      }
+    }));
+
+    const detected = [{
+      platform: "test-platform",
+      configPath,
+      rootKey: "mcpServers",
+      configFormat: "json",
+    }];
+
+    const { scans } = scanAllPlatforms(detected, new Set());
+
+    // Verify the augment was auto-wrapped
+    assert.ok(hasAugmentDef("my-server"), "Augment should be created");
+    const def = readAugmentDef("my-server");
+    assert.equal(def.source, "wrapped");
+    assert.equal(def.transport, "stdio");
+    assert.equal(def.stdio.command, "npx");
+    assert.deepEqual(def.stdio.args, ["-y", "my-mcp-server"]);
+    assert.equal(def.wrappedFrom.type, "mcp");
+    assert.equal(def.wrappedFrom.platform, "test-platform");
+    assert.equal(def.wrappedFrom.originalName, "my-server");
+
+    // Verify installation record was created
+    const inst = readInstallations();
+    assert.ok(inst.augments["my-server"]);
+    assert.equal(inst.augments["my-server"].source, "wrapped");
+    assert.deepEqual(inst.augments["my-server"].platforms, ["test-platform"]);
+
+    // Verify scan marks it as managed
+    assert.equal(scans["test-platform"].augments["my-server"].managed, true);
+  });
+
+  it("does not re-wrap an already existing augment", () => {
+    // Pre-create the augment
+    const augDir = path.join(tempHome, ".equip", "augments");
+    fs.mkdirSync(augDir, { recursive: true });
+    writeAugmentDef({
+      name: "existing-server",
+      source: "local",
+      displayName: "Existing",
+      description: "",
+      transport: "http",
+      serverUrl: "http://original.com",
+      requiresAuth: false,
+      skills: [],
+      baseWeight: 0,
+      loadedWeight: 0,
+      modded: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    });
+
+    // Platform config has a server with the same name
+    const configDir = path.join(tempHome, ".test-platform");
+    fs.mkdirSync(configDir, { recursive: true });
+    const configPath = path.join(configDir, "mcp.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        "existing-server": { url: "http://different.com" }
+      }
+    }));
+
+    scanAllPlatforms([{
+      platform: "test-platform",
+      configPath,
+      rootKey: "mcpServers",
+      configFormat: "json",
+    }], new Set());
+
+    // The original augment should be untouched
+    const def = readAugmentDef("existing-server");
+    assert.equal(def.source, "local");
+    assert.equal(def.serverUrl, "http://original.com");
+  });
+
+  it("does not wrap already-managed servers", () => {
+    const configDir = path.join(tempHome, ".test-platform");
+    fs.mkdirSync(configDir, { recursive: true });
+    const configPath = path.join(configDir, "mcp.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        "managed-server": { command: "npx", args: ["managed-tool"] }
+      }
+    }));
+
+    // Pass as managed
+    scanAllPlatforms([{
+      platform: "test-platform",
+      configPath,
+      rootKey: "mcpServers",
+      configFormat: "json",
+    }], new Set(["managed-server"]));
+
+    // Should NOT be wrapped
+    assert.ok(!hasAugmentDef("managed-server"));
+  });
+
+  it("auto-wrap is idempotent — second scan does not duplicate", () => {
+    const configDir = path.join(tempHome, ".test-platform");
+    fs.mkdirSync(configDir, { recursive: true });
+    const configPath = path.join(configDir, "mcp.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        "idempotent-server": { url: "http://localhost:3000" }
+      }
+    }));
+
+    const detected = [{
+      platform: "test-platform",
+      configPath,
+      rootKey: "mcpServers",
+      configFormat: "json",
+    }];
+
+    // First scan
+    scanAllPlatforms(detected, new Set());
+    assert.ok(hasAugmentDef("idempotent-server"));
+
+    // Second scan — should not error or duplicate
+    scanAllPlatforms(detected, new Set());
+    const def = readAugmentDef("idempotent-server");
+    assert.equal(def.source, "wrapped");
+  });
+});

@@ -13,6 +13,8 @@ import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
 import type { DetectedPlatform } from "./platforms";
 import { PLATFORM_REGISTRY, platformName } from "./platforms";
 import { readMcpEntry } from "./mcp";
+import { wrapUnmanaged, hasAugmentDef } from "./augment-defs";
+import { trackInstallation } from "./installations";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -36,6 +38,7 @@ export interface PlatformAugmentEntry {
   transport: "http" | "stdio" | "unknown";
   url?: string;
   command?: string;
+  args?: string[];
   managed: boolean;
   artifacts?: {
     mcp: boolean;
@@ -212,6 +215,7 @@ export function scanPlatform(
       transport: server.transport,
       url: server.url,
       command: server.command,
+      args: server.args,
       managed: managedNames.has(server.name),
     };
   }
@@ -289,6 +293,44 @@ export function scanAllPlatforms(
     const scan = scanPlatform(p, managedNames);
     writePlatformScan(p.platform, scan);
     scans[p.platform] = scan;
+
+    // Auto-wrap unmanaged MCP servers as local augments
+    for (const [name, entry] of Object.entries(scan.augments)) {
+      if (entry.managed) continue;
+      if (hasAugmentDef(name)) continue; // already exists (registry, local, or previously wrapped)
+
+      try {
+        const transport = entry.transport === "http" || entry.transport === "stdio" ? entry.transport : "stdio";
+        wrapUnmanaged({
+          name,
+          displayName: name,
+          transport,
+          url: entry.url,
+          command: entry.command,
+          args: entry.args,
+          fromPlatform: p.platform,
+          wrappedFromMeta: {
+            type: "mcp",
+            platform: p.platform,
+            path: p.configPath,
+            originalName: name,
+          },
+        });
+
+        // Create InstallationRecord so it's recognized as managed on next scan
+        trackInstallation(name, {
+          source: "wrapped",
+          displayName: name,
+          transport,
+          platforms: [p.platform],
+          artifacts: { [p.platform]: { mcp: true } },
+        });
+
+        // Mark as managed in current scan results
+        entry.managed = true;
+        scan.managedCount = (scan.managedCount || 0) + 1;
+      } catch { /* best effort — don't break scan for wrapping failures */ }
+    }
   }
 
   return { meta, scans };
@@ -301,6 +343,7 @@ interface McpServerEntry {
   transport: "http" | "stdio" | "unknown";
   url?: string;
   command?: string;
+  args?: string[];
 }
 
 function readAllMcpServers(
@@ -327,15 +370,18 @@ function readAllMcpServers(
     let url: string | undefined;
     let command: string | undefined;
 
+    let args: string[] | undefined;
+
     if (e.command) {
       transport = "stdio";
       command = String(e.command);
+      if (Array.isArray(e.args)) args = e.args.map(String);
     } else if (e.url || e.serverUrl || e.httpUrl) {
       transport = "http";
       url = String(e.url || e.serverUrl || e.httpUrl);
     }
 
-    servers.push({ name, transport, url, command });
+    servers.push({ name, transport, url, command, args });
   }
 
   return servers;
