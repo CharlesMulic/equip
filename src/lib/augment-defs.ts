@@ -194,7 +194,7 @@ export interface LocalAugmentConfig {
   loadedWeight?: number;
 }
 
-/** Options for wrapping an unmanaged MCP entry */
+/** Options for wrapping an unmanaged platform config entry */
 export interface WrapConfig {
   name: string;
   displayName?: string;
@@ -202,7 +202,10 @@ export interface WrapConfig {
   transport: "http" | "stdio";
   url?: string;
   command?: string;
+  args?: string[];
   fromPlatform: string;
+  /** Structured provenance metadata. If not provided, defaults to { type: "mcp", platform: fromPlatform }. */
+  wrappedFromMeta?: WrappedFromMeta;
   baseWeight?: number;
   loadedWeight?: number;
 }
@@ -471,14 +474,14 @@ export function wrapUnmanaged(config: WrapConfig): AugmentDef {
     transport: config.transport,
     serverUrl: config.transport === "http" ? config.url : undefined,
     stdio: config.transport === "stdio" && config.command
-      ? { command: config.command, args: [] }
+      ? { command: config.command, args: config.args || [] }
       : undefined,
     requiresAuth: false,
     skills: [],
     baseWeight: config.baseWeight || 0,
     loadedWeight: config.loadedWeight || 0,
     modded: false,
-    wrappedFrom: config.fromPlatform,
+    wrappedFrom: config.wrappedFromMeta || { type: "mcp" as const, platform: config.fromPlatform },
     createdAt: now,
     updatedAt: now,
   };

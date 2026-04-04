@@ -300,22 +300,54 @@ describe("wrapUnmanaged", () => {
     assert.equal(def.source, "wrapped");
     assert.equal(def.name, "unknown-server");
     assert.equal(def.serverUrl, "https://some-service.com/mcp");
-    assert.equal(def.wrappedFrom, "claude-code");
+    assert.equal(def.wrappedFrom.type, "mcp");
+    assert.equal(def.wrappedFrom.platform, "claude-code");
     assert.ok(hasAugmentDef("unknown-server"));
   });
 
-  it("wraps stdio MCP entry as augment definition", () => {
+  it("wraps stdio MCP entry with args as augment definition", () => {
     const def = wrapUnmanaged({
       name: "local-tool",
       transport: "stdio",
-      command: "npx some-tool",
+      command: "npx",
+      args: ["-y", "some-tool", "/path"],
       fromPlatform: "cursor",
     });
 
     assert.equal(def.source, "wrapped");
     assert.equal(def.transport, "stdio");
-    assert.equal(def.stdio.command, "npx some-tool");
-    assert.equal(def.wrappedFrom, "cursor");
+    assert.equal(def.stdio.command, "npx");
+    assert.deepEqual(def.stdio.args, ["-y", "some-tool", "/path"]);
+    assert.equal(def.wrappedFrom.type, "mcp");
+    assert.equal(def.wrappedFrom.platform, "cursor");
+  });
+
+  it("wraps with structured wrappedFromMeta when provided", () => {
+    const def = wrapUnmanaged({
+      name: "skill-wrap",
+      transport: "http",
+      fromPlatform: "claude-code",
+      wrappedFromMeta: { type: "skill", platform: "claude-code", path: "/skills/test/SKILL.md", originalName: "test" },
+    });
+
+    assert.equal(def.wrappedFrom.type, "skill");
+    assert.equal(def.wrappedFrom.path, "/skills/test/SKILL.md");
+    assert.equal(def.wrappedFrom.originalName, "test");
+  });
+
+  it("wrapUnmanaged round-trip: write then read produces structured wrappedFrom", () => {
+    wrapUnmanaged({
+      name: "roundtrip-test",
+      transport: "http",
+      url: "http://localhost:8080",
+      fromPlatform: "vscode",
+    });
+
+    const def = readAugmentDef("roundtrip-test");
+    assert.ok(def);
+    assert.equal(typeof def.wrappedFrom, "object");
+    assert.equal(def.wrappedFrom.type, "mcp");
+    assert.equal(def.wrappedFrom.platform, "vscode");
   });
 });
 
@@ -502,6 +534,11 @@ describe("Authoring lifecycle fields", () => {
     const result = promoteWrappedToLocal("local-test");
     assert.ok(result);
     assert.equal(result.source, "local"); // unchanged
+  });
+
+  it("promoteWrappedToLocal returns null for nonexistent augment", () => {
+    const result = promoteWrappedToLocal("does-not-exist");
+    assert.equal(result, null);
   });
 
   it("publishIntent and hasUnpublishedChanges round-trip through write/read", () => {
