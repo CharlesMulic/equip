@@ -136,6 +136,9 @@ export interface AugmentDef {
   /** Categories */
   categories?: string[];
 
+  /** Publisher identity (synced from registry) */
+  publisher?: { name: string; slug: string; verified: boolean; avatarUrl?: string | null };
+
   // ── Authoring lifecycle ──
 
   /** User intends to publish this augment to the registry */
@@ -380,6 +383,7 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
     repository: registryDef.repository,
     license: registryDef.license,
     categories: registryDef.categories,
+    publisher: registryDef.publisher,
     createdAt: now,
     updatedAt: now,
   };
@@ -410,6 +414,7 @@ function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now:
     repository: registryDef.repository || existing.repository,
     license: registryDef.license || existing.license,
     categories: registryDef.categories || existing.categories,
+    publisher: registryDef.publisher || existing.publisher,
     // Display metadata — always sync from registry (authoritative source)
     rarity: registryDef.rarity || existing.rarity,
     title: registryDef.title || existing.title,
