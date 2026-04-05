@@ -1,6 +1,7 @@
 // CLI output helpers, prompts, and clipboard.
 // Zero dependencies.
 
+import * as fs from "fs";
 import * as os from "os";
 import * as readline from "readline";
 
@@ -128,4 +129,31 @@ export interface ParsedArgs {
   apiKey: string | null;
   nonInteractive: boolean;
   platform: string | null;
+}
+
+/** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
+export function parseArgs(argv: string[]): ParsedArgs {
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--verbose") { args.verbose = true; }
+    else if (a === "--dry-run") { args.dryRun = true; }
+    else if (a === "--non-interactive") { args.nonInteractive = true; }
+    else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
+    else if (a === "--api-key-file" && i + 1 < argv.length) {
+      try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }
+      catch (e) { process.stderr.write(`Error reading API key file: ${(e as Error).message}\n`); process.exit(1); }
+    }
+    else if (a === "--platform" && i + 1 < argv.length) { args.platform = argv[++i]; }
+    else { args._.push(a); }
+  }
+  return args;
+}
+
+/** Check if argument looks like a local file/directory path rather than a registry name. */
+export function isLocalPath(arg: string): boolean {
+  return arg.startsWith("./") || arg.startsWith("../") || arg.startsWith("/")
+    || arg.startsWith(".\\") || arg.startsWith("..\\")
+    || arg === "."
+    || arg.endsWith(".js");
 }
