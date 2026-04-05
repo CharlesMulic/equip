@@ -38,8 +38,8 @@ export function validateRelativePath(filePath: string, context: string = "file p
     throw new Error(`Empty ${context}`);
   }
 
-  // Reject absolute paths
-  if (path.isAbsolute(filePath)) {
+  // Reject absolute paths (check both Unix and Windows patterns for cross-platform safety)
+  if (path.isAbsolute(filePath) || /^[A-Za-z]:[/\\]/.test(filePath)) {
     throw new Error(`${context} must be relative, got absolute: "${filePath}"`);
   }
 
