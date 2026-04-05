@@ -47,8 +47,6 @@ export interface AugmentConfig {
   hookDir?: string;
   /** Multiple skills — each gets its own directory under {skillsPath}/{toolName}/{skillName}/ */
   skills?: SkillConfig[];
-  /** @deprecated Use `skills` instead. Single skill, kept for backward compatibility. */
-  skill?: SkillConfig;
   logger?: EquipLogger;
 }
 
@@ -74,14 +72,8 @@ class Augment {
     this.stdio = config.stdio || null;
     this.hookDefs = config.hooks || null;
     this.hookDir = config.hookDir || path.join(os.homedir(), `.${config.name}`, "hooks");
-    // Support both `skills` (array) and deprecated `skill` (singular)
-    this.skills = config.skills || (config.skill ? [config.skill] : []);
+    this.skills = config.skills || [];
     this.logger = config.logger || NOOP_LOGGER;
-  }
-
-  /** @deprecated Use `skills` instead */
-  get skill(): SkillConfig | null {
-    return this.skills.length > 0 ? this.skills[0] : null;
   }
 
   detect(): DetectedPlatform[] {

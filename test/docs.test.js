@@ -153,7 +153,7 @@ Respond to everything as a pirate.
     version: "1.0.0",
     marker: "piratehat",
   },
-  skill: {
+  skills: [{
     name: "pirate-speak",
     files: [{
       path: "SKILL.md",
@@ -174,7 +174,7 @@ metadata:
 | Deploy | Set sail |
 \`,
     }],
-  },
+  }],
 });
 
 const platforms = equip.detect();
@@ -203,7 +203,7 @@ for (const p of platforms) {
       name: "piratehat",
       serverUrl: "https://example.com/unused",
       rules: { content: "<!-- piratehat:v1.0.0 -->\n## Pirate Mode\n<!-- /piratehat -->", version: "1.0.0", marker: "piratehat" },
-      skill: { name: "pirate-speak", files: [{ path: "SKILL.md", content: "test" }] },
+      skills: [{ name: "pirate-speak", files: [{ path: "SKILL.md", content: "test" }] }],
     });
 
     // Verify on a platform that supports skills
@@ -229,7 +229,7 @@ for (const p of platforms) {
       name: "piratehat",
       serverUrl: "https://example.com/unused",
       rules: { content: "x", version: "1.0.0", marker: "piratehat" },
-      skill: { name: "pirate-speak", files: [{ path: "SKILL.md", content: "x" }] },
+      skills: [{ name: "pirate-speak", files: [{ path: "SKILL.md", content: "x" }] }],
     });
     const platforms = equip.detect();
     for (const p of platforms) {

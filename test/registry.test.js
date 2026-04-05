@@ -47,7 +47,7 @@ describe("toolDefToEquipConfig", () => {
     assert.equal(config.serverUrl, "https://example.com/mcp");
     assert.equal(config.rules, undefined);
     assert.equal(config.hooks, undefined);
-    assert.equal(config.skill, undefined);
+    assert.deepEqual(config.skills, undefined);
   });
 
   it("converts tool with rules", () => {
@@ -106,10 +106,9 @@ describe("toolDefToEquipConfig", () => {
     assert.equal(config.skills.length, 2);
     assert.equal(config.skills[0].name, "search");
     assert.equal(config.skills[1].name, "other");
-    // Backward compat: singular skill getter still works
     const augment = new Augment(config);
-    assert.ok(augment.skill);
-    assert.equal(augment.skill.name, "search");
+    assert.equal(augment.skills.length, 2);
+    assert.equal(augment.skills[0].name, "search");
   });
 
   it("converts tool with stdio config", () => {

@@ -85,6 +85,10 @@ function cmdHelp() {
   console.log("  --help, -h       Show this help");
   console.log("  --version, -v    Show version");
   console.log("");
+  console.log("Telemetry:");
+  console.log("  Anonymous install telemetry is enabled by default.");
+  console.log("  Disable: edit ~/.equip/equip.json and set telemetry: false");
+  console.log("");
 }
 
 function cmdDemo(extraArgs) {

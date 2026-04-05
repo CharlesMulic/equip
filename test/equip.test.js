@@ -1602,7 +1602,7 @@ describe("Augment class (skills)", () => {
     const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
-      skill: SKILL_CONFIG,
+      skills: [SKILL_CONFIG],
     });
     const p = mockPlatform({ skillsPath: skillsDir });
 
@@ -1626,7 +1626,7 @@ describe("Augment class (skills)", () => {
     const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
-      skill: SKILL_CONFIG,
+      skills: [SKILL_CONFIG],
     });
     const p = mockPlatform({ skillsPath: skillsDir });
     cleanup(p.configPath);
@@ -1650,7 +1650,7 @@ describe("Augment class (skills)", () => {
     const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
-      skill: SKILL_CONFIG,
+      skills: [SKILL_CONFIG],
     });
     const p = mockPlatform({ skillsPath: tmpPath("empty-skills") });
     cleanup(p.configPath);
@@ -1812,17 +1812,17 @@ describe("multi-skill support", () => {
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
 
-  it("backward compat: singular skill config still works", () => {
-    const skillsDir = tmpPath("single-skill-compat");
+  it("single skill in array works", () => {
+    const skillsDir = tmpPath("single-skill-array");
     const e = new Augment({
       name: "test",
       serverUrl: "https://example.com/mcp",
-      skill: SKILL_A,  // singular (deprecated)
+      skills: [SKILL_A],
     });
     const p = mockPlatform({ skillsPath: skillsDir });
 
-    assert.equal(e.skills.length, 1, "should convert singular to array");
-    assert.equal(e.skill.name, "search", "deprecated getter should still work");
+    assert.equal(e.skills.length, 1);
+    assert.equal(e.skills[0].name, "search");
 
     const result = e.installSkill(p);
     assert.equal(result.action, "created");
@@ -1837,7 +1837,6 @@ describe("multi-skill support", () => {
       serverUrl: "https://example.com/mcp",
     });
     assert.equal(e.skills.length, 0);
-    assert.equal(e.skill, null, "deprecated getter returns null for empty");
   });
 });
 

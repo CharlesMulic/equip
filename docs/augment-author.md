@@ -60,13 +60,18 @@ equip doctor    # Validates config integrity
 
 ### 4. Publish
 
-Soon you'll be able to publish your augment to Equip's registry service, making it discoverable and installable by anyone with a single command:
+Publish your augment to Equip's registry to make it discoverable and installable by anyone:
+
+```bash
+# Via the desktop app: use the Publish button on the edit form
+# Via API: POST to https://api.cg3.io/equip/tools (requires publisher profile + auth)
+```
+
+Once published, anyone can install it with:
 
 ```bash
 equip piratehat
 ```
-
-The registry is currently in development. In the meantime, you can distribute your augment as a local setup script (see below).
 
 ## Adding an MCP Server
 
@@ -125,9 +130,9 @@ for (const p of platforms) {
 
 The skill's `description` in the YAML frontmatter is always loaded (agents see it at startup). The full body loads on demand when the description matches the task.
 
-## The Registry (Coming Soon)
+## The Registry
 
-The local setup script workflow above is the current path for development and distribution. A registry service is in development that will let you publish augment definitions for one-command installation by anyone.
+The registry at `api.cg3.io/equip` hosts published augment definitions. When a user runs `equip <name>`, equip fetches the definition from the registry and installs everything automatically.
 
 A registry definition includes everything equip needs to install the augment:
 

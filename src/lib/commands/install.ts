@@ -108,7 +108,7 @@ export async function runInstall(toolDef: ToolDefinition, parsedArgs: ParsedArgs
   const report = new InstallReportBuilder();
   const stepList = ["MCP Server"];
   if (config.rules) stepList.push("Behavioral Rules");
-  const hasSkills = (config.skills && config.skills.length > 0) || (config as AugmentConfig & { skill?: unknown }).skill;
+  const hasSkills = config.skills && config.skills.length > 0;
   if (hasSkills) stepList.push("Skills");
   stepList.push("Verification");
   const totalSteps = stepList.length;
