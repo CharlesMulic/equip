@@ -105,7 +105,6 @@ for (const platformId of record.platforms) {
   if (artifacts.rules) {
     const rulesRemoved = uninstallRules(platform, {
       marker: toolName,
-      fileName: (platformId === "cline" || platformId === "roo-code") ? `${toolName}.md` : undefined,
       dryRun,
     });
     if (rulesRemoved) results.push("rules");
