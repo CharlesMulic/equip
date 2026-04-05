@@ -256,14 +256,10 @@ interface AugmentConfig {
     args: string[];                // Arguments (e.g., ["server.js"])
     envKey: string;                // Environment variable for API key
   };
-  skill?: {
-    name: string;                  // Skill directory name
-    files: Array<{
-      path: string;                // Relative path (e.g., "SKILL.md")
-      content: string;             // File content
-    }>;
-  };
-  logger?: EquipLogger;           // Optional structured logging
+  hooks?: HookDefinition[];        // Lifecycle hooks (Claude Code only)
+  hookDir?: string;                // Hook script directory (default: ~/.{name}/hooks)
+  skills?: SkillConfig[];          // Skills — SKILL.md files for agent discovery
+  logger?: EquipLogger;            // Optional structured logging
 }
 ```
 
@@ -276,21 +272,31 @@ interface ArtifactResult {
   artifact: "mcp" | "rules" | "skills" | "hooks";
   attempted: boolean;
   success: boolean;
-  action: "created" | "updated" | "skipped" | "clipboard" | "failed";
+  action: "created" | "updated" | "skipped" | "failed";
   errorCode?: string;              // Structured code for telemetry
   error?: string;                  // Human-readable message
   warnings: EquipWarning[];
+  method?: string;                 // "json" | "toml" for mcp
 }
 ```
 
 | Method | What it does |
 |--------|-------------|
 | `detect()` | Returns detected platforms |
+| `buildConfig(platformId, apiKey, transport?)` | Build config entry without writing |
 | `installMcp(platform, apiKey, options?)` | Write MCP config to platform |
 | `installRules(platform, options?)` | Write behavioral rules |
 | `installSkill(platform, options?)` | Write skill files |
-| `uninstallMcp(platform)` | Remove MCP config entry |
-| `uninstallRules(platform)` | Remove rules marker block |
-| `uninstallSkill(platform)` | Remove skill directory |
-| `verify(platform)` | Check all artifacts are correctly installed |
+| `installHooks(platform, options?)` | Install lifecycle hooks (Claude Code) |
+| `uninstallMcp(platform, dryRun?)` | Remove MCP config entry |
+| `uninstallRules(platform, dryRun?)` | Remove rules marker block |
+| `uninstallSkill(platform, dryRun?)` | Remove skill directory |
+| `uninstallHooks(platform, options?)` | Remove hooks and deregister |
 | `readMcp(platform)` | Read existing MCP config entry |
+| `readMcpDetailed(platform)` | Read MCP entry with metadata |
+| `updateMcpKey(platform, apiKey, transport?)` | Update API key in existing config |
+| `hasHooks(platform, options?)` | Check if hooks are installed |
+| `hasSkill(platform)` | Check if all skills are installed |
+| `installedSkills(platform)` | List names of installed skills |
+| `supportsHooks(platform)` | Check if platform supports hooks |
+| `verify(platform)` | Check all artifacts are correctly installed |

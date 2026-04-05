@@ -116,7 +116,7 @@ Equip handles authentication for augments that require it:
 
 - **API key** — prompt or `--api-key` flag
 - **OAuth** — browser PKCE flow with automatic token refresh
-- **OAuth + key exchange** — browser flow → API key (for tools like Prior)
+- **OAuth + key exchange** — browser flow → API key (for augments like Prior)
 
 Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-refreshed on every equip command.
 
@@ -158,18 +158,7 @@ State is reconciled from disk after every install/uninstall — equip scans actu
 
 Equip sends anonymous install metrics (augment name, platform, OS, equip version) to help improve equip. **No credentials, file paths, or personal data are included.**
 
-Telemetry is on by default and can be disabled:
-
-```bash
-# Disable via equip preferences
-# (set telemetry: false in ~/.equip/equip.json preferences)
-```
-
-Or programmatically:
-```typescript
-import { updatePreferences } from "@cg3/equip";
-updatePreferences({ telemetry: false });
-```
+Telemetry is on by default. To disable, edit `~/.equip/equip.json` and set `preferences.telemetry` to `false`.
 
 ## License
 

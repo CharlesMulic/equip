@@ -2,7 +2,7 @@
 
 Behavioral rules are markdown instructions injected into platform-specific rules files. They tell AI agents when and how to use your augment. Without rules, agents may have your augment available but never use it — or use it incorrectly.
 
-**Note:** In direct-mode (`equip <augment>`), rules are installed only on platforms with writable rules paths. Platforms like Cursor and VS Code that lack global rules files are skipped. The library API (`augment.installRules()`) still supports clipboard fallback for these platforms when called directly.
+**Note:** Rules are installed only on platforms with writable rules paths. Platforms like Cursor and VS Code that lack global rules files are skipped (rules installation returns `{ action: "skipped" }`).
 
 ## Why Rules Matter
 
@@ -11,7 +11,7 @@ An MCP server entry makes an augment _available_. Rules make the agent _use_ it.
 - Agents don't reliably discover new tools on their own
 - Even when they discover an augment, they may not know the right context to use it
 - Rules ensure consistent behavior across sessions and platforms
-- Rules are the single most effective way to improve tool adoption
+- Rules are the single most effective way to improve augment adoption
 
 Example: an MCP tool called `acme-docs` that provides API documentation. Without rules, the agent might never call it. With rules:
 
@@ -24,7 +24,7 @@ When working with Acme APIs or libraries:
 
 ## The Marker System
 
-Augment uses HTML comment markers to manage versioned blocks within shared rules files. This allows multiple tools to coexist in the same file without interfering with each other.
+Equip uses HTML comment markers to manage versioned blocks within shared rules files. This allows multiple augments to coexist in the same file without interfering with each other.
 
 ### Format
 
@@ -50,17 +50,9 @@ The marker name is typically your augment name. It must be unique within the fil
 
 ### Version Tracking
 
-Augment compares the version in the marker against your configured version:
+Equip compares the version in the marker against your configured version. It's a simple string comparison -- equip doesn't parse semver. Bump the version string whenever your rules content changes to trigger an update on the next run.
 
-```typescript
-import { parseRulesVersion } from "@cg3/equip";
-
-const content = fs.readFileSync(rulesPath, "utf-8");
-const installed = parseRulesVersion(content, "my-tool");
-// "1.0.0" or null if not found
-```
-
-The version is a simple string comparison -- equip doesn't parse semver. Bump the version string whenever your rules content changes to trigger an update on the next run.
+Internally, `parseRulesVersion(content, marker)` extracts the installed version from a rules file. This is used by `augment.verify()` to check installed rules versions.
 
 ## Append vs Standalone File
 
@@ -68,11 +60,11 @@ Platforms handle rules in two ways:
 
 ### Single-file platforms (append mode)
 
-Claude Code (`CLAUDE.md`), Windsurf (`global_rules.md`), Codex (`AGENTS.md`), and Gemini CLI (`GEMINI.md`) use a single rules file. Augment appends your marker block to the existing file content, preserving anything else in the file.
+Claude Code (`CLAUDE.md`), Windsurf (`global_rules.md`), Codex (`AGENTS.md`), and Gemini CLI (`GEMINI.md`) use a single rules file. Equip appends your marker block to the existing file content, preserving anything else in the file.
 
 ### Directory-based platforms (standalone file)
 
-Cline (`~/Documents/Cline/Rules/`) and Roo Code (`~/.roo/rules/`) use a rules directory where each file is loaded independently. Augment writes a standalone file using the `fileName` option:
+Cline (`~/Documents/Cline/Rules/`) and Roo Code (`~/.roo/rules/`) use a rules directory where each file is loaded independently. Equip writes a standalone file using the `fileName` option:
 
 ```typescript
 const equip = new Augment({
@@ -91,29 +83,9 @@ When `fileName` is set and the platform's `rulesPath` is a directory, equip writ
 
 This auto-detection means you can set `fileName` for all platforms and equip does the right thing.
 
-## Clipboard Fallback
+## Platforms Without Rules Support
 
-Cursor and VS Code don't have a writable global rules file that equip can target. For these platforms, equip copies the rules content to the system clipboard and returns `{ action: "clipboard" }`.
-
-```typescript
-const result = equip.installRules(platform, { dryRun });
-if (result.action === "clipboard") {
-  console.log("Rules copied to clipboard -- paste into your settings");
-}
-```
-
-You can control which platforms get the clipboard treatment:
-
-```typescript
-rules: {
-  content: "...",
-  version: "1.0.0",
-  marker: "my-tool",
-  clipboardPlatforms: ["cursor", "vscode"],  // default
-}
-```
-
-The clipboard implementation uses `pbcopy` on macOS, `clip` on Windows, and `xclip`/`xsel`/`wl-copy` on Linux.
+Cursor and VS Code don't have a writable global rules file. On these platforms, `installRules` returns `{ action: "skipped" }`. These are MCP-only platforms -- use skills for knowledge delivery on these platforms.
 
 ## API Reference
 
@@ -125,11 +97,10 @@ Install behavioral rules to a platform.
 const result = equip.installRules(platform, { dryRun: false });
 ```
 
-**Returns:** `{ action: string }` where `action` is one of:
+**Returns:** `ArtifactResult` where `action` is one of:
 - `"created"` -- rules block was appended (first install)
 - `"updated"` -- existing block was replaced (version bump)
 - `"skipped"` -- already at this version, or platform has no rules path
-- `"clipboard"` -- content copied to clipboard (Cursor/VS Code)
 
 ### `equip.uninstallRules(platform, dryRun?)`
 
@@ -142,28 +113,9 @@ const removed = equip.uninstallRules(platform);
 
 If removing the block leaves the file empty, the file is deleted. If other content remains, equip preserves it and cleans up any excess blank lines.
 
-### `parseRulesVersion(content, marker)`
+### Version Checking
 
-Extract the installed version from a rules file's content.
-
-```typescript
-import { parseRulesVersion } from "@cg3/equip";
-
-const version = parseRulesVersion(fileContent, "my-tool");
-// "1.0.0" or null
-```
-
-### `markerPatterns(marker)`
-
-Get the regex patterns used for marker detection and block extraction.
-
-```typescript
-import { markerPatterns } from "@cg3/equip";
-
-const { MARKER_RE, BLOCK_RE } = markerPatterns("my-tool");
-// MARKER_RE matches: <!-- my-tool:v1.0.0 -->
-// BLOCK_RE matches the entire block from opening to closing marker
-```
+Use `augment.verify(platform)` to check the installed rules version. The verify method returns a structured result with per-artifact status, including whether the rules version matches what's expected.
 
 ## Writing Effective Rules Content
 

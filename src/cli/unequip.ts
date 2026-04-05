@@ -39,7 +39,7 @@ if (!toolName || toolName === "--help" || toolName === "-h") {
       console.log(`  ${name}  →  ${plats}`);
     }
   } else {
-    console.log("No augments tracked. Run 'equip <tool>' to install one first.");
+    console.log("No augments tracked. Run 'equip <augment>' to install one first.");
   }
   console.log("");
   process.exit(0);

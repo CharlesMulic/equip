@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────
-// @cg3/equip Demo — Minimal setup script for a fictional MCP tool.
+// @cg3/equip Demo — Minimal setup script for a fictional augment.
 //
 // This file is a working reference for building your own setup
 // script on top of @cg3/equip. Run it with:
@@ -17,10 +17,10 @@
 //   4. Skills installation (SKILL.md files for agent discovery)
 //   5. Lifecycle hooks (optional, platform-dependent)
 //   6. Uninstallation (clean removal of everything it installed)
-//   7. CLI output helpers (colors, prompts, clipboard)
+//   7. CLI output helpers (colors, prompts)
 //
 // Everything is inline-documented. Copy this file as a starting
-// point for your own tool's setup script.
+// point for your own augment's setup script.
 // ─────────────────────────────────────────────────────────────
 
 "use strict";
@@ -28,9 +28,8 @@
 // ─── 1. Import equip ────────────────────────────────────────
 //
 // The Augment class is the high-level API. It wraps detection,
-// config building, installation, and uninstallation into a
-// single object. You can also import individual primitives
-// (detectPlatforms, installMcp, etc.) for lower-level control.
+// config building, installation, and uninstallation into a single
+// object.
 
 const { Augment, createManualPlatform, platformName, cli } = require("@cg3/equip");
 
@@ -47,12 +46,12 @@ const platformOverride = args.includes("--platform")
   ? args[args.indexOf("--platform") + 1]
   : null;
 
-// ─── 3. Define your tool ────────────────────────────────────
+// ─── 3. Define your augment ──────────────────────────────────
 //
 // This is the core configuration. Replace these values with
-// your actual MCP server details.
+// your actual augment details.
 
-const TOOL_NAME = "acme-docs";       // Name in MCP config files
+const AUGMENT_NAME = "acme-docs";    // Name in MCP config files
 const SERVER_URL = "https://api.example.com/mcp";  // Your MCP endpoint
 const RULES_VERSION = "0.1.0";      // Bump when rules content changes
 
@@ -65,7 +64,7 @@ const RULES_VERSION = "0.1.0";      // Bump when rules content changes
 //   ... your rules content ...
 //   <!-- /marker -->
 
-const RULES_CONTENT = `<!-- ${TOOL_NAME}:v${RULES_VERSION} -->
+const RULES_CONTENT = `<!-- ${AUGMENT_NAME}:v${RULES_VERSION} -->
 ## Acme Docs — Agent Instructions
 
 When working with Acme APIs or libraries:
@@ -74,7 +73,7 @@ When working with Acme APIs or libraries:
 3. Prefer the code examples from acme-docs over generic web search results
 
 The tool returns versioned docs matching your project's dependency version.
-<!-- /${TOOL_NAME} -->`;
+<!-- /${AUGMENT_NAME} -->`;
 
 // ─── 4. Create the Augment instance ─────────────────────────
 //
@@ -82,17 +81,16 @@ The tool returns versioned docs matching your project's dependency version.
 // effects — detection and installation happen in separate calls.
 
 const equip = new Augment({
-  name: TOOL_NAME,
+  name: AUGMENT_NAME,
   serverUrl: SERVER_URL,
 
-  // Rules are optional. Omit this block if your tool doesn't
+  // Rules are optional. Omit this block if your augment doesn't
   // need behavioral instructions injected into agent configs.
   rules: {
     content: RULES_CONTENT,
     version: RULES_VERSION,
-    marker: TOOL_NAME,
-    // fileName: "my-tool.md",       // Use for platforms with rules directories
-    // clipboardPlatforms: ["cursor", "vscode"],  // These get clipboard instead
+    marker: AUGMENT_NAME,
+    // fileName: "my-augment.md",    // Use for platforms with rules directories
   },
 
   // Stdio transport (alternative to HTTP). Uncomment to use:
@@ -122,10 +120,11 @@ const equip = new Augment({
   //   },
   // ],
 
-  // Skills are optional. A skill is a SKILL.md file (Agent Skills
+  // Skills are optional. Each skill is a SKILL.md file (Agent Skills
   // spec) that agents auto-discover. Unlike MCP config and rules,
   // the skill format is universal — same file works on all platforms.
-  skill: {
+  // Note: `skills` is an array — augments can have multiple skills.
+  skills: [{
     name: "lookup",
     files: [
       {
@@ -154,7 +153,7 @@ Use this skill when working with Acme APIs or libraries.
 `,
       },
     ],
-  },
+  }],
 });
 
 // ─── 5. Detect platforms (shared by install and uninstall) ───
@@ -168,7 +167,7 @@ function detectTargetPlatforms() {
 
   const platforms = equip.detect();
   if (platforms.length === 0) {
-    cli.fail("No AI coding tools detected. Install one of:");
+    cli.fail("No AI coding platforms detected. Install one of:");
     cli.log("  Claude Code, Cursor, VS Code, Windsurf, Codex, Gemini CLI");
     cli.log("  Or use --platform <id> to specify manually.\n");
     process.exit(1);
@@ -234,7 +233,7 @@ async function runUninstall() {
   }
 
   cli.log(`\n${cli.GREEN}${cli.BOLD}✓ Uninstall complete${cli.RESET}`);
-  cli.log(`  Demo config for "${TOOL_NAME}" has been cleaned up.\n`);
+  cli.log(`  Demo config for "${AUGMENT_NAME}" has been cleaned up.\n`);
 }
 
 // ─── 7. Install flow ────────────────────────────────────────
@@ -250,7 +249,7 @@ async function runInstall() {
   // ── Step 1: Detect platforms ──────────────────────────────
   //
   // detectPlatforms() scans the system for installed AI coding
-  // tools: Claude Code, Cursor, VS Code, Windsurf, Codex, etc.
+  // platforms: Claude Code, Cursor, VS Code, Windsurf, Codex, etc.
   //
   // Each result includes:
   //   - platform: id string ("claude-code", "cursor", etc.)
@@ -316,8 +315,8 @@ async function runInstall() {
   //   - Same version: skips (idempotent)
   //   - Uninstall: removes the block cleanly
   //
-  // Platforms without a rules file (Cursor, VS Code) get the
-  // content copied to clipboard instead.
+  // Platforms without a rules file (Cursor, VS Code) are
+  // skipped — they are MCP-only platforms.
 
   cli.step(4, 5, "Installing behavioral rules");
 
@@ -340,9 +339,6 @@ async function runInstall() {
         } else {
           cli.info(`${platformName(p.platform)} → no rules path (MCP-only platform)`);
         }
-        break;
-      case "clipboard":
-        cli.info(`${platformName(p.platform)} → copied to clipboard (paste into settings)`);
         break;
     }
   }
@@ -380,7 +376,7 @@ async function runInstall() {
     cli.warn("(dry run — nothing was actually written)\n");
   } else {
     // When files were actually written, remind user how to clean up
-    cli.log(`  MCP server "${TOOL_NAME}" is now configured on ${platforms.length} platform(s).`);
+    cli.log(`  MCP server "${AUGMENT_NAME}" is now configured on ${platforms.length} platform(s).`);
     cli.log("");
     cli.warn(`This was a demo — run ${cli.BOLD}npx @cg3/equip demo --uninstall${cli.RESET} to remove demo files\n`);
   }

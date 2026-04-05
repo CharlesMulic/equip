@@ -27,9 +27,9 @@ Not every platform supports every feature. This table shows what equip can insta
 | Platform | MCP Config | Rules | Skills | Hooks |
 |---|---|---|---|---|
 | Claude Code | Yes | Yes (`~/.claude/CLAUDE.md`) | Yes (`~/.claude/skills/`) | Yes (12 events) |
-| Cursor | Yes | Clipboard only | Yes (`~/.cursor/skills/`) | No |
+| Cursor | Yes | No | Yes (`~/.cursor/skills/`) | No |
 | Windsurf | Yes | Yes (`~/.codeium/windsurf/memories/global_rules.md`) | Yes (`~/.agents/skills/`) | No |
-| VS Code | Yes | Clipboard only | Yes (`~/.agents/skills/`) | No |
+| VS Code | Yes | No | Yes (`~/.agents/skills/`) | No |
 | Cline | Yes | Yes (`~/Documents/Cline/Rules/`) | Yes (`~/.cline/skills/`) | No |
 | Roo Code | Yes | Yes (`~/.roo/rules/`) | Yes (`~/.roo/skills/`) | No |
 | Codex | Yes | Yes (`~/.codex/AGENTS.md`) | Yes (`~/.agents/skills/`) | No |
@@ -40,7 +40,7 @@ Not every platform supports every feature. This table shows what equip can insta
 | Amazon Q | Yes | No | No | No |
 | Tabnine | Yes | Yes (`~/.tabnine/guidelines/`) | No | No |
 
-"Clipboard only" means equip copies rules content to the system clipboard for the user to paste manually, since the platform has no writable rules file.
+Platforms marked "No" for rules have no writable global rules file. Rules installation is skipped on these platforms.
 
 ## Config Paths
 
@@ -55,7 +55,7 @@ All paths are resolved at runtime relative to the user's home directory. On Wind
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | VS Code | `<VS Code User Dir>/mcp.json` |
 | Cline | `<VS Code User Dir>/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
-| Roo Code | `<VS Code User Dir>/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json` |
+| Roo Code | `<VS Code User Dir>/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json` |
 | Codex | `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`) |
 | Gemini CLI | `~/.gemini/settings.json` |
 | Junie | `~/.junie/mcp/mcp.json` |
@@ -83,10 +83,11 @@ The **github-copilot dir** is:
 | Roo Code | `~/.roo/rules/` | Directory (standalone file) |
 | Codex | `~/.codex/AGENTS.md` | Single file (append) |
 | Gemini CLI | `~/.gemini/GEMINI.md` | Single file (append) |
-| Cursor | -- | Clipboard fallback |
-| VS Code | -- | Clipboard fallback |
+| Tabnine | `~/.tabnine/guidelines/` | Directory (standalone file) |
+| Cursor | -- | Not supported |
+| VS Code | -- | Not supported |
 
-For platforms with a directory-based rules path (Cline, Roo Code), equip writes a standalone file named via the `fileName` option in your rules config. See [rules.md](./rules.md) for details.
+For platforms with a directory-based rules path (Cline, Roo Code, Tabnine), equip writes a standalone file named via the `fileName` option in your rules config. See [rules.md](./rules.md) for details.
 
 ### Skills Paths
 

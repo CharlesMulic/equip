@@ -2,6 +2,27 @@
 
 All notable changes to Equip are documented here.
 
+## [0.17.3] — 2026-04-05
+
+### Fixed
+- Demo `setup.js` used singular `skill:` instead of plural `skills:[]` (ignored silently)
+- Demo and docs referenced removed `"clipboard"` action and `clipboardPlatforms` option
+- `unequip --help` said "Run 'equip \<tool\>'" instead of "augment"
+- `mcp-servers.md` incorrectly listed Cursor as `"streamable-http"` type (Cursor has no type field)
+- `platforms.md` showed old `cline_mcp_settings.json` path for Roo Code (migrated to `mcp_settings.json`)
+- `rules.md` and `mcp-servers.md` documented `parseRulesVersion`, `markerPatterns`, and low-level MCP functions as public imports (they are internal)
+- `README.md` showed `updatePreferences` as a public import (it is internal)
+- `augment-author.md` `AugmentConfig` reference was stale (singular `skill?` instead of `skills?: SkillConfig[]`, missing `hooks` and `hookDir`)
+- `CONTRIBUTING.md` referenced non-existent `src/lib/augment.ts`
+
+### Changed
+- Demo variable `TOOL_NAME` renamed to `AUGMENT_NAME`
+- Remaining "tool" → "augment" terminology fixes across all docs (skills.md, hooks.md, rules.md, mcp-servers.md, demo/)
+- Remaining "Augment" → "Equip" where used as product name in prose (mcp-servers.md, skills.md, hooks.md, rules.md)
+- Added `"augment"` keyword to package.json
+- `augment-author.md` instance methods table expanded with 10 missing methods
+- `CONTRIBUTING.md` project structure updated to match current layout
+
 ## [0.17.0] — 2026-04-02
 
 ### Added

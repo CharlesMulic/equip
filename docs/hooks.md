@@ -36,7 +36,7 @@ Claude Code supports 12 lifecycle events:
 
 ## How Hooks Are Installed
 
-Augment installs hooks in two steps:
+Equip installs hooks in two steps:
 
 ### 1. Script Files
 
@@ -48,11 +48,11 @@ Hook scripts are written to a configurable directory (default: `~/.{toolName}/ho
   remind-search.js
 ```
 
-Each file is a self-contained Node.js script. Augment writes the `script` field from your `HookDefinition` to `{hookDir}/{name}.js`.
+Each file is a self-contained Node.js script. Equip writes the `script` field from your `HookDefinition` to `{hookDir}/{name}.js`.
 
 ### 2. Settings Registration
 
-Augment registers the hooks in Claude Code's `~/.claude/settings.json`:
+Equip registers the hooks in Claude Code's `~/.claude/settings.json`:
 
 ```json
 {
@@ -72,7 +72,7 @@ Augment registers the hooks in Claude Code's `~/.claude/settings.json`:
 }
 ```
 
-The registration is additive -- equip merges into existing hook settings without removing hooks from other tools. When the same tool's hooks already exist (identified by the `hookDir` path), they are replaced.
+The registration is additive -- equip merges into existing hook settings without removing hooks from other augments. When the same augment's hooks already exist (identified by the `hookDir` path), they are replaced.
 
 ## Hook Definition Format
 
@@ -154,7 +154,7 @@ const removed = equip.uninstallHooks(platform);
 // true if any hooks were removed, false otherwise
 ```
 
-Removes the script files, attempts to clean up the hook directory, and removes the matching entries from `settings.json`. Other tools' hooks are preserved.
+Removes the script files, attempts to clean up the hook directory, and removes the matching entries from `settings.json`. Other augments' hooks are preserved.
 
 ### `equip.hasHooks(platform, options?)`
 
@@ -178,11 +178,11 @@ const supported = equip.supportsHooks(platform);
 
 ## The Three-Layer Enforcement Model
 
-Hooks are one layer of a three-part approach to ensuring agents use your tool:
+Hooks are one layer of a three-part approach to ensuring agents use your augment:
 
 | Layer | What It Does | Coverage |
 |---|---|---|
-| **Rules** | Tell the agent when and how to use the tool | All platforms with rules support |
+| **Rules** | Tell the agent when and how to use the augment | All platforms with rules support |
 | **Skills** | Provide structured knowledge for on-demand loading | All platforms with skills support |
 | **Hooks** | Structurally remind the agent at lifecycle moments | Claude Code only |
 
@@ -190,6 +190,6 @@ Each layer reinforces the others:
 
 1. **Rules** are loaded at session start and provide persistent instructions
 2. **Skills** are loaded on-demand when the agent encounters a matching task
-3. **Hooks** fire at specific moments (after edits, on errors, etc.) to remind the agent about the tool
+3. **Hooks** fire at specific moments (after edits, on errors, etc.) to remind the agent about the augment
 
-For platforms that support all three (currently Claude Code), the combination provides the strongest guarantee that the agent will use your tool at the right times. For other platforms, rules + skills cover most cases. See [rules.md](./rules.md) and [skills.md](./skills.md) for details on those layers.
+For platforms that support all three (currently Claude Code), the combination provides the strongest guarantee that the agent will use your augment at the right times. For other platforms, rules + skills cover most cases. See [rules.md](./rules.md) and [skills.md](./skills.md) for details on those layers.

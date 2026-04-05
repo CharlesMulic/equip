@@ -244,6 +244,6 @@ Equip uses several strategies to prevent data loss and recover from bad state:
 
 ## Cache
 
-Tool definitions fetched from the API are cached at `~/.equip/cache/<augment>.json`. The cache is used as a fallback when the API is unreachable.
+Augment definitions fetched from the API are cached at `~/.equip/cache/<augment>.json`. The cache is used as a fallback when the API is unreachable.
 
 `equip update <augment>` clears the cache before re-fetching to ensure the latest definition.

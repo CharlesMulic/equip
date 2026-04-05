@@ -17,11 +17,15 @@ npm run build    # TypeScript → dist/
 
 ```
 bin/             CLI entry points (JS — delegates to dist/)
+src/index.ts     Public API surface + Augment class
+src/cli/         CLI entry points (TypeScript)
+  equip.ts       Main CLI dispatcher
+  unequip.ts     Uninstall CLI
 src/lib/         Library source (TypeScript)
   commands/      CLI command implementations
   platforms.ts   Platform registry (13 platforms)
   reconcile.ts   Post-install state reconciliation
-  augment.ts     Core Augment class
+  cli.ts         CLI helpers (parseArgs, isLocalPath, prompts)
   auth-engine.ts Authentication flows (API key, OAuth, PKCE)
   mcp.ts         MCP config read/write across formats (JSON, JSON5, TOML)
   fs.ts          Atomic writes, lockfile, safe JSON reads
@@ -49,11 +53,15 @@ Tests use Node.js built-in test runner (`node --test`). Key test files:
 |---|---|
 | `test/equip.test.js` | Core Augment class, MCP install/uninstall, rules, skills |
 | `test/observability.test.js` | InstallReportBuilder, structured results |
-| `test/registry.test.js` | Registry fetch, tool definition parsing |
+| `test/registry.test.js` | Registry fetch, augment definition parsing |
 | `test/auth.test.js` | Credential storage, OAuth flows, validation |
 | `test/docs.test.js` | Documentation examples actually work |
 | `test/augment-defs.test.js` | Augment definition CRUD, sync, modding |
 | `test/platform-state.test.js` | Platform metadata, scan results |
+| `test/snapshots.test.js` | Config snapshots, initial capture, restore |
+| `test/security.test.js` | Input validation, path traversal, URL scheme checks |
+| `test/content-hash.test.js` | Cross-language content hash parity |
+| `test/cli.test.js` | CLI arg parsing, local path detection, integration |
 
 Tests that write to `~/.equip/` use temp directory isolation (`setupTempHome`/`teardownTempHome`) to avoid polluting real state.
 
@@ -67,11 +75,10 @@ Tests that write to `~/.equip/` use temp directory isolation (`setupTempHome`/`t
 
 ## Adding a New Platform
 
-1. Add platform definition to `src/lib/platforms.ts` — detection dirs/files, config path, root key, format, capabilities
-2. Add config builder to `src/lib/augment.ts` — `buildConfig` switch case
-3. Add MCP format handling to `src/lib/mcp.ts` if the platform uses a non-standard format
-4. Update platform tests in `test/equip.test.js`
-5. Update `docs/platforms.md` and the platform table in `README.md`
+1. Add platform definition to `src/lib/platforms.ts` — detection dirs/files, config path, root key, format, `httpShape`, capabilities
+2. Add MCP format handling to `src/lib/mcp.ts` if the platform uses a non-standard config format
+3. Update platform tests in `test/equip.test.js`
+4. Update `docs/platforms.md` and the platform table in `README.md`
 
 ## Pull Request Guidelines
 

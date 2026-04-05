@@ -1,6 +1,6 @@
 # Agent Skills
 
-Skills are structured knowledge files that AI agents auto-discover and load on demand. They follow the [Agent Skills specification](https://agentskills.io/specification) and use the SKILL.md format. Augment installs skill files to each platform's native skills directory.
+Skills are structured knowledge files that AI agents auto-discover and load on demand. They follow the [Agent Skills specification](https://agentskills.io/specification) and use the SKILL.md format. Equip installs skill files to each platform's native skills directory.
 
 ## What Skills Are
 
@@ -34,15 +34,15 @@ Detailed instructions the agent follows when the skill is active.
 
 The `name` and `description` fields are required. Everything else is optional.
 
-## How Augment Installs Skills
+## How Equip Installs Skills
 
-Augment copies skill files to each platform's skills directory using a scoped layout:
+Equip copies skill files to each platform's skills directory using a scoped layout:
 
 ```
 {skillsPath}/{toolName}/{skillName}/SKILL.md
 ```
 
-For example, a tool named `prior` with a skill named `search` installed on Claude Code:
+For example, an augment named `prior` with a skill named `search` installed on Claude Code:
 
 ```
 ~/.claude/skills/prior/search/SKILL.md
@@ -52,7 +52,7 @@ The `toolName` scope prevents naming collisions between different tools that mig
 
 ### Installation is idempotent. If the SKILL.md file already exists with identical content, equip skips the write and returns `{ action: "skipped" }`.
 
-### Uninstallation removes the skill directory and cleans up the parent tool directory if it's empty afterward.
+### Uninstallation removes the skill directory and cleans up the parent augment directory if it's empty afterward.
 
 ## Platform Skills Paths
 
@@ -69,7 +69,7 @@ The `toolName` scope prevents naming collisions between different tools that mig
 
 Platforms without a confirmed skills path (Junie, Copilot JetBrains, Copilot CLI) have `skillsPath: null` and skill installation is silently skipped.
 
-The `~/.agents/skills/` path is a cross-platform convention -- all 8 skill-supporting platforms scan this directory. Augment uses each platform's native path when one exists, falling back to `~/.agents/skills/` for platforms like Windsurf, VS Code, and Codex that don't have a tool-specific global skills directory.
+The `~/.agents/skills/` path is a cross-platform convention -- all 8 skill-supporting platforms scan this directory. Equip uses each platform's native path when one exists, falling back to `~/.agents/skills/` for platforms like Windsurf, VS Code, and Codex that don't have a platform-specific global skills directory.
 
 ## How Skills Get Loaded by Agents
 
@@ -104,7 +104,7 @@ Not all platforms handle automatic skill invocation equally:
 Skills and rules serve different purposes and are most effective together:
 
 - **Skills** make knowledge _available_ for discovery
-- **Rules** tell the agent _when_ to use the tool (critical for Cursor/Windsurf)
+- **Rules** tell the agent _when_ to use the augment (critical for Cursor/Windsurf)
 - **Hooks** structurally remind the agent at key lifecycle moments (Claude Code only)
 
 For Cursor and Windsurf, behavioral rules that reference the skill by name bridge the reliability gap:
@@ -117,7 +117,7 @@ When you encounter errors, use @my-tool-skill to search for known solutions.
 <!-- /my-tool -->
 ```
 
-Tool authors should install BOTH a skill AND behavioral rules that reference it. The rules act as a reliability bridge on platforms where automatic skill invocation is weak. See [rules.md](./rules.md) for details on behavioral rules.
+Augment authors should install BOTH a skill AND behavioral rules that reference it. The rules act as a reliability bridge on platforms where automatic skill invocation is weak. See [rules.md](./rules.md) for details on behavioral rules.
 
 ## Writing Effective SKILL.md Content
 
@@ -146,7 +146,7 @@ Required fields:
 - `description` -- 1-1024 characters, the trigger for auto-discovery
 
 Optional but recommended:
-- `metadata.author` -- your tool or organization name
+- `metadata.author` -- your augment or organization name
 - `metadata.version` -- version string for tracking updates
 - `license` -- SPDX identifier
 - `allowed-tools` -- pre-approved tool patterns (e.g., `Bash(git:*) Read`)
@@ -215,7 +215,7 @@ const removed = equip.uninstallSkill(platform);
 // true if the directory was found and removed, false otherwise
 ```
 
-Removes the entire skill directory (e.g., `~/.claude/skills/my-tool/docs-lookup/`). If the parent tool directory is empty afterward, it is also removed.
+Removes the entire skill directory (e.g., `~/.claude/skills/my-tool/docs-lookup/`). If the parent augment directory is empty afterward, it is also removed.
 
 ### `equip.hasSkill(platform)`
 
