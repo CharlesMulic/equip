@@ -36,7 +36,6 @@ export interface AugmentConfig {
     version: string;
     marker: string;
     fileName?: string;
-    clipboardPlatforms?: string[];
   };
   stdio?: {
     command: string;

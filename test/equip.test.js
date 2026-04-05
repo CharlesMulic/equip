@@ -377,12 +377,6 @@ describe("installRules (function)", () => {
     try { fs.rmdirSync(dir); } catch {}
   });
 
-  it("returns clipboard for clipboard platforms", () => {
-    const p = mockPlatform({ platform: "cursor" });
-    const r = installRules(p, { content: RULES_CONTENT, version: "1.0.0", marker: "test", clipboardPlatforms: ["cursor"] });
-    assert.equal(r.action, "clipboard");
-  });
-
   it("idempotent — skips if same version", () => {
     const p = mockPlatform();
     cleanup(p.rulesPath);

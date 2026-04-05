@@ -12,7 +12,6 @@ export type ArtifactAction =
   | "created"
   | "updated"
   | "skipped"
-  | "clipboard"
   | "failed";
 
 // ─── Error Codes ────────────────────────────────────────────
@@ -26,7 +25,6 @@ export type EquipErrorCode =
   | "SETTINGS_WRITE_FAILED"
   | "TOML_READ_FAILED"
   | "STATE_CORRUPT"
-  | "CLIPBOARD_FAILED"
   | "MCP_ENTRY_UNREADABLE"
   | "SKILL_WRITE_FAILED"
   | "HOOK_SCRIPT_FAILED"
@@ -35,7 +33,6 @@ export type EquipErrorCode =
 // ─── Warning Codes ──────────────────────────────────────────
 
 export type EquipWarningCode =
-  | "WARN_CLIPBOARD_FAILED"
   | "WARN_STATE_RESET"
   | "WARN_BACKUP_SKIPPED"
   | "WARN_SETTINGS_CREATED"

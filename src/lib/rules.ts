@@ -6,7 +6,6 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import type { DetectedPlatform } from "./platforms";
-import { copyToClipboard } from "./cli";
 import { atomicWriteFileSync } from "./fs";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
@@ -76,7 +75,6 @@ export interface InstallRulesOptions {
   version: string;
   marker: string;
   fileName?: string;
-  clipboardPlatforms?: string[];
   dryRun?: boolean;
   logger?: EquipLogger;
 }
@@ -90,25 +88,12 @@ export function installRules(platform: DetectedPlatform, options: InstallRulesOp
     version,
     marker,
     fileName,
-    clipboardPlatforms = ["cursor", "vscode"],
     dryRun = false,
     logger = NOOP_LOGGER,
   } = options;
 
   // Ensure content is wrapped in markers before any write
   const wrappedContent = wrapRulesContent(content, marker, version);
-
-  if (clipboardPlatforms.includes(platform.platform)) {
-    const result = makeResult("rules", { attempted: true, success: true, action: "clipboard" });
-    if (!dryRun) {
-      const copied = copyToClipboard(wrappedContent);
-      if (!copied) {
-        logger.warn("Clipboard copy failed", { platform: platform.platform });
-        result.warnings.push({ code: "WARN_CLIPBOARD_FAILED", message: "Clipboard copy failed — user may need to copy rules manually" });
-      }
-    }
-    return result;
-  }
 
   if (!platform.rulesPath) {
     return makeResult("rules", { attempted: false, success: true, action: "skipped" });

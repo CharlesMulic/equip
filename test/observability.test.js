@@ -135,28 +135,6 @@ describe("ArtifactResult shape", () => {
   });
 });
 
-// ─── Blind Spot #1: Clipboard ──────────────────────────────
-
-describe("Blind spot #1: clipboard failure", () => {
-  it("captures warning when clipboard copy would fail on unsupported platform", () => {
-    // On a platform where clipboard is used, the WARN_CLIPBOARD_FAILED warning
-    // should appear if copyToClipboard returns false.
-    // We test the rules function directly for clipboard platforms.
-    const p = mockPlatform({ platform: "cursor" });
-    const result = installRules(p, {
-      content: "<!-- test:v1.0.0 -->\nRules\n<!-- /test -->",
-      version: "1.0.0",
-      marker: "test",
-      clipboardPlatforms: ["cursor"],
-    });
-    assert.equal(result.action, "clipboard");
-    assert.equal(result.success, true);
-    // On Windows/Mac, clipboard may succeed; on CI/Linux without xclip, it will have a warning.
-    // We verify the shape is correct regardless.
-    assert.ok(Array.isArray(result.warnings));
-  });
-});
-
 // ─── Blind Spot #2: readMcpEntry detailed ──────────────────
 
 describe("Blind spot #2: readMcpEntryDetailed", () => {

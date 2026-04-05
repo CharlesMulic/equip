@@ -96,24 +96,6 @@ export function promptEnterOrEsc(question: string): Promise<boolean> {
   });
 }
 
-// ─── Clipboard ───────────────────────────────────────────────
-
-export function copyToClipboard(text: string): boolean {
-  try {
-    const cp = require("child_process");
-    if (process.platform === "darwin") {
-      cp.execSync("pbcopy", { input: text, timeout: 3000 });
-    } else if (process.platform === "win32") {
-      cp.execSync("clip", { input: text, timeout: 3000 });
-    } else {
-      try { cp.execSync("xclip -selection clipboard", { input: text, timeout: 3000 }); }
-      catch { try { cp.execSync("xsel --clipboard --input", { input: text, timeout: 3000 }); }
-      catch { cp.execSync("wl-copy", { input: text, timeout: 3000 }); } }
-    }
-    return true;
-  } catch { return false; }
-}
-
 // ─── Logger ─────────────────────────────────────────────────
 
 import type { EquipLogger } from "./types";

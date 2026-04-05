@@ -72,9 +72,6 @@ const platforms = equip.detect();
 for (const p of platforms) {
   const result = equip.installRules(p);
   if (result.action === "created") cli.ok(\`\${platformName(p.platform)}: pirate rules installed\`);
-  else if (result.action === "clipboard") {
-    cli.info(\`\${platformName(p.platform)}: rules copied to clipboard (paste into project rules)\`);
-  }
   else if (result.action === "skipped" && p.rulesPath) cli.info(\`\${platformName(p.platform)}: already a pirate\`);
   // Platforms without rules support are silently skipped
 }
