@@ -16,7 +16,7 @@ import * as cli from "./lib/cli";
 import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile } from "./lib/skills";
 import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, type EquipWarning, type EquipLogger, type EquipErrorCode, type EquipWarningCode, type ArtifactType, type ArtifactAction } from "./lib/types";
 import type { ReadMcpResult } from "./lib/mcp";
-import { fetchRegistryDef, fetchToolDef, registryDefToConfig, toolDefToEquipConfig, type RegistryDef, type ToolDefinition, type PostInstallAction } from "./lib/registry";
+import { fetchRegistryDef, registryDefToConfig, type RegistryDef, type PostInstallAction } from "./lib/registry";
 import { resolveAuth, validateCredential, readStoredCredential, writeStoredCredential, deleteStoredCredential, listStoredCredentials, isCredentialExpired, refreshCredential, refreshAllExpired, type AuthConfig, type StoredCredential, type AuthResult, type RefreshResult } from "./lib/auth-engine";
 import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, hasAugmentDef, syncFromRegistry, createLocalAugment, wrapUnmanaged, promoteWrappedToLocal, modAugmentRules, resetAugmentRules, getAugmentsDir, type AugmentDef, type AugmentSource, type AugmentRules, type WrappedFromMeta, type LocalAugmentConfig, type WrapConfig } from "./lib/augment-defs";
 import { readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled, getEnabledPlatformIds, isPlatformEnabled, readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms, getPlatformsDir, type PlatformsMeta, type PlatformMeta, type PlatformScan, type PlatformAugmentEntry } from "./lib/platform-state";
@@ -309,9 +309,7 @@ export {
   makeResult,
   // Registry
   fetchRegistryDef,
-  fetchToolDef, // deprecated alias
   registryDefToConfig,
-  toolDefToEquipConfig, // deprecated alias
   // Auth
   resolveAuth,
   readStoredCredential,
@@ -391,7 +389,6 @@ export type {
   ArtifactAction,
   ReadMcpResult,
   RegistryDef,
-  ToolDefinition, // deprecated alias
   PostInstallAction,
   AuthConfig,
   StoredCredential,

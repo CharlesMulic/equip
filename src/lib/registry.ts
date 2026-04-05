@@ -44,9 +44,6 @@ export interface PostInstallAction {
 // ─── RegistryDef ──────────────────────────────────────────
 // Matches the shape returned by GET /equip/tools/:name from the registry API.
 
-/** @deprecated Use RegistryDef instead */
-export type ToolDefinition = RegistryDef;
-
 export interface RegistryDef {
   name: string;
   displayName: string;
@@ -122,9 +119,6 @@ export interface RegistryDef {
  *
  * Returns null if the augment is not found.
  */
-/** @deprecated Use fetchRegistryDef instead */
-export const fetchToolDef = fetchRegistryDef;
-
 export async function fetchRegistryDef(
   name: string,
   options: { logger?: EquipLogger } = {},
@@ -211,9 +205,6 @@ function readCachedToolDef(name: string, logger: EquipLogger): RegistryDef | nul
  * Convert a RegistryDef (from API/cache) to an AugmentConfig (for the Augment class).
  * Only meaningful for direct-mode augments. Package-mode augments are dispatched via npx.
  */
-/** @deprecated Use registryDefToConfig instead */
-export const toolDefToEquipConfig = registryDefToConfig;
-
 export function registryDefToConfig(def: RegistryDef, options?: { logger?: EquipLogger }): AugmentConfig {
   const config: AugmentConfig = {
     name: def.name,

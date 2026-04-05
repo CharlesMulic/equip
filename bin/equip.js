@@ -125,7 +125,7 @@ async function cmdUpdate(parsedArgs) {
   const toolName = parsedArgs._[0];
 
   if (toolName) {
-    const { fetchToolDef, validateCredential, readStoredCredential, cli } = require("../dist/index");
+    const { fetchRegistryDef, validateCredential, readStoredCredential, cli } = require("../dist/index");
     const { createConsoleLogger } = require("../dist/lib/cli");
     const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
     const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
@@ -135,7 +135,7 @@ async function cmdUpdate(parsedArgs) {
     // Clear cache to get fresh definition
     try { fs.unlinkSync(path.join(os.homedir(), ".equip", "cache", `${toolName}.json`)); } catch {}
 
-    const toolDef = await fetchToolDef(toolName, { logger });
+    const toolDef = await fetchRegistryDef(toolName, { logger });
     if (!toolDef) {
       fail(`Augment "${toolName}" not found in registry`);
       process.exit(1);
@@ -309,10 +309,10 @@ async function dispatchAugment(alias, parsedArgs) {
   }
 
   // Fetch augment definition from registry API (with cache fallback)
-  const { fetchToolDef } = require("../dist/lib/registry");
+  const { fetchRegistryDef } = require("../dist/lib/registry");
   const { createConsoleLogger } = require("../dist/lib/cli");
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
-  const toolDef = await fetchToolDef(alias, { logger });
+  const toolDef = await fetchRegistryDef(alias, { logger });
 
   if (toolDef && toolDef.installMode === "direct") {
     const { runInstall } = require("../dist/lib/commands/install");

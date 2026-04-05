@@ -1,4 +1,4 @@
-// Tests for registry module: ToolDefinition conversion, fetchToolDef resolution, caching.
+// Tests for registry module: RegistryDef conversion, fetchRegistryDef resolution, caching.
 
 "use strict";
 
@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const { toolDefToEquipConfig, fetchToolDef } = require("../dist/lib/registry");
+const { registryDefToConfig, fetchRegistryDef } = require("../dist/lib/registry");
 const { Augment } = require("../dist/index");
 
 // ─── Test Helpers ───────────────────────────────────────────
@@ -28,9 +28,9 @@ function recordingLogger() {
   };
 }
 
-// ─── toolDefToEquipConfig ──────────────────────────────────
+// ─── registryDefToConfig ──────────────────────────────────
 
-describe("toolDefToEquipConfig", () => {
+describe("registryDefToConfig", () => {
   it("converts minimal direct-mode tool", () => {
     const def = {
       name: "test-tool",
@@ -42,7 +42,7 @@ describe("toolDefToEquipConfig", () => {
       requiresAuth: false,
       categories: [],
     };
-    const config = toolDefToEquipConfig(def);
+    const config = registryDefToConfig(def);
     assert.equal(config.name, "test-tool");
     assert.equal(config.serverUrl, "https://example.com/mcp");
     assert.equal(config.rules, undefined);
@@ -63,7 +63,7 @@ describe("toolDefToEquipConfig", () => {
         marker: "test",
       },
     };
-    const config = toolDefToEquipConfig(def);
+    const config = registryDefToConfig(def);
     assert.ok(config.rules);
     assert.equal(config.rules.content, def.rules.content);
     assert.equal(config.rules.version, "1.0.0");
@@ -84,7 +84,7 @@ describe("toolDefToEquipConfig", () => {
         fileName: "test.md",
       },
     };
-    const config = toolDefToEquipConfig(def);
+    const config = registryDefToConfig(def);
     assert.ok(config.rules);
     assert.equal(config.rules.fileName, "test.md");
   });
@@ -101,7 +101,7 @@ describe("toolDefToEquipConfig", () => {
         { name: "other", files: [{ path: "SKILL.md", content: "other" }] },
       ],
     };
-    const config = toolDefToEquipConfig(def);
+    const config = registryDefToConfig(def);
     assert.ok(config.skills);
     assert.equal(config.skills.length, 2);
     assert.equal(config.skills[0].name, "search");
@@ -121,7 +121,7 @@ describe("toolDefToEquipConfig", () => {
       stdioArgs: ["server.js"],
       envKey: "MY_API_KEY",
     };
-    const config = toolDefToEquipConfig(def);
+    const config = registryDefToConfig(def);
     assert.ok(config.stdio);
     assert.equal(config.stdio.command, "node");
     assert.deepEqual(config.stdio.args, ["server.js"]);
@@ -138,7 +138,7 @@ describe("toolDefToEquipConfig", () => {
       hooks: [{ event: "PostToolUse", script: "console.log('hi')", name: "test-hook" }],
       hookDir: "~/.test/hooks",
     };
-    const config = toolDefToEquipConfig(def);
+    const config = registryDefToConfig(def);
     assert.ok(config.hooks);
     assert.equal(config.hooks.length, 1);
     assert.equal(config.hooks[0].event, "PostToolUse");
@@ -151,17 +151,17 @@ describe("toolDefToEquipConfig", () => {
   it("passes logger through", () => {
     const logger = recordingLogger();
     const def = { name: "test", displayName: "Test", description: "", installMode: "direct" };
-    const config = toolDefToEquipConfig(def, { logger });
+    const config = registryDefToConfig(def, { logger });
     assert.equal(config.logger, logger);
   });
 });
 
-// ─── fetchToolDef ──────────────────────────────────────────
+// ─── fetchRegistryDef ──────────────────────────────────────────
 
-describe("fetchToolDef", { skip: !!process.env.CI && "requires network access" }, () => {
+describe("fetchRegistryDef", { skip: !!process.env.CI && "requires network access" }, () => {
   it("fetches demo-fetch from live API", async () => {
     const logger = recordingLogger();
-    const def = await fetchToolDef("demo-fetch", { logger });
+    const def = await fetchRegistryDef("demo-fetch", { logger });
 
     assert.ok(def, "Should fetch demo-fetch from API");
     assert.equal(def.name, "demo-fetch");
@@ -178,7 +178,7 @@ describe("fetchToolDef", { skip: !!process.env.CI && "requires network access" }
   });
 
   it("fetches prior from live API as direct-mode", async () => {
-    const def = await fetchToolDef("prior");
+    const def = await fetchRegistryDef("prior");
     assert.ok(def);
     assert.equal(def.name, "prior");
     assert.equal(def.installMode, "direct");
@@ -190,13 +190,13 @@ describe("fetchToolDef", { skip: !!process.env.CI && "requires network access" }
   });
 
   it("returns null for nonexistent tool", async () => {
-    const def = await fetchToolDef("nonexistent-tool-xyz-12345");
+    const def = await fetchRegistryDef("nonexistent-tool-xyz-12345");
     assert.equal(def, null);
   });
 
   it("caches fetched definitions", async () => {
     // First fetch — hits API
-    await fetchToolDef("demo-fetch");
+    await fetchRegistryDef("demo-fetch");
 
     // Verify cache file exists
     const cachePath = path.join(os.homedir(), ".equip", "cache", "demo-fetch.json");
@@ -282,7 +282,7 @@ describe("direct-mode CLI", { skip: !!process.env.CI && "requires detected platf
   });
 
   it("prior definition includes new data fields", async () => {
-    const def = await fetchToolDef("prior");
+    const def = await fetchRegistryDef("prior");
     assert.ok(def);
     // Auth validation URL
     assert.ok(def.auth.validationUrl, "Should have validationUrl");

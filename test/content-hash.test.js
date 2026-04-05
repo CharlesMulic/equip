@@ -138,7 +138,7 @@ describe("computeContentHash", () => {
 });
 
 describe("extractManifest", () => {
-  it("extracts from a ToolDefinition-like object", () => {
+  it("extracts from a RegistryDef-like object", () => {
     const def = {
       rules: { content: "Be helpful.", marker: "test" },
       skills: [{ name: "search", files: [{ path: "SKILL.md", content: "# Search" }] }],
