@@ -15,14 +15,12 @@ const {
   createManualPlatform,
   platformName,
   KNOWN_PLATFORMS,
-  parseRulesVersion,
-  markerPatterns,
   cli,
 } = require("..");
 
 // Internal modules (for low-level tests)
 const { buildHttpConfig, buildHttpConfigWithAuth, installMcpJson, installMcpToml, uninstallMcp } = require("../dist/lib/mcp");
-const { installRules, uninstallRules: uninstallRulesFn, wrapRulesContent, stripRulesMarkers } = require("../dist/lib/rules");
+const { installRules, uninstallRules: uninstallRulesFn, wrapRulesContent, stripRulesMarkers, parseRulesVersion, markerPatterns } = require("../dist/lib/rules");
 const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntry } = require("../dist/lib/mcp");
 const { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup, resolvePackageVersion } = require("../dist/lib/fs");
 const { reconcileState } = require("../dist/lib/reconcile");

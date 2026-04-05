@@ -125,7 +125,9 @@ async function cmdUpdate(parsedArgs) {
   const toolName = parsedArgs._[0];
 
   if (toolName) {
-    const { fetchRegistryDef, validateCredential, readStoredCredential, cli } = require("../dist/index");
+    const { cli } = require("../dist/index");
+    const { fetchRegistryDef } = require("../dist/lib/registry");
+    const { validateCredential, readStoredCredential } = require("../dist/lib/auth-engine");
     const { createConsoleLogger } = require("../dist/lib/cli");
     const { log, ok, fail, warn, DIM, RESET, BOLD } = cli;
     const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;

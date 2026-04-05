@@ -266,10 +266,15 @@ export interface VerifyResult {
 }
 
 // ─── Public API ─────────────────────────────────────────────
+// Lean surface for augment authors and setup scripts.
+// Internal modules (state management, installations, platform scans,
+// snapshots, credentials, etc.) are NOT exported here — the sidecar
+// and CLI import internal modules directly from src/lib/*.
 
 export {
+  // Core
   Augment,
-  // Platform utilities
+  // Platform
   detectPlatforms,
   createManualPlatform,
   platformName,
@@ -277,140 +282,22 @@ export {
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
-  // Artifact install/uninstall
-  installMcp,
-  uninstallMcp,
-  installRules,
-  uninstallRules,
-  installSkill,
-  uninstallSkill,
-  // Rules utilities (used by consumers for version checking and marker wrapping)
-  parseRulesVersion,
-  markerPatterns,
-  wrapRulesContent,
-  stripRulesMarkers,
-  rulesContentHash,
-  // Validation
-  validateToolName,
-  validateRelativePath,
-  validatePathWithinDir,
-  validateHookDir,
-  validateUrlScheme,
-  isTrustedCredentialHost,
-  // Content integrity
-  computeContentHash,
-  extractManifest,
-  type ContentManifest,
-  // CLI helpers (for consumer setup scripts)
+  // CLI helpers (for setup scripts)
   cli,
   // Observability
   NOOP_LOGGER,
   InstallReportBuilder,
   makeResult,
-  // Registry
-  fetchRegistryDef,
-  registryDefToConfig,
-  // Auth
-  resolveAuth,
-  readStoredCredential,
-  writeStoredCredential,
-  deleteStoredCredential,
-  listStoredCredentials,
-  isCredentialExpired,
-  refreshCredential,
-  refreshAllExpired,
-  validateCredential,
-  // Augment Definitions
-  readAugmentDef,
-  writeAugmentDef,
-  promoteWrappedToLocal,
-  listAugmentDefs,
-  deleteAugmentDef,
-  hasAugmentDef,
-  syncFromRegistry,
-  createLocalAugment,
-  wrapUnmanaged,
-  modAugmentRules,
-  resetAugmentRules,
-  getAugmentsDir,
-  // Platform State
-  readPlatformsMeta,
-  writePlatformsMeta,
-  updatePlatformsMeta,
-  setPlatformEnabled,
-  getEnabledPlatformIds,
-  isPlatformEnabled,
-  readPlatformScan,
-  writePlatformScan,
-  scanPlatform,
-  scanAllPlatforms,
-  getPlatformsDir,
-  // Installations
-  readInstallations,
-  writeInstallations,
-  trackInstallation,
-  trackUninstallation,
-  getAugmentsForPlatform,
-  getManagedAugmentNames,
-  // Equip Meta
-  readEquipMeta,
-  writeEquipMeta,
-  markEquipUpdated,
-  markScanCompleted,
-  updatePreferences,
-  // Snapshots
-  createSnapshot,
-  listSnapshots,
-  readSnapshot,
-  restoreSnapshot,
-  deleteSnapshot,
-  hasInitialSnapshot,
-  ensureInitialSnapshots,
-  pruneSnapshots,
-  // Reconciliation
+  // Reconciliation (for setup scripts that need post-install state sync)
   reconcileState,
 };
 
-// Types
 export type {
   DetectedPlatform,
   PlatformDefinition,
-  PlatformHttpShape,
-  PlatformHookCapabilities,
   HookDefinition,
   SkillConfig,
   SkillFile,
   ArtifactResult,
-  EquipWarning,
   EquipLogger,
-  EquipErrorCode,
-  EquipWarningCode,
-  ArtifactType,
-  ArtifactAction,
-  ReadMcpResult,
-  RegistryDef,
-  PostInstallAction,
-  AuthConfig,
-  StoredCredential,
-  AuthResult,
-  RefreshResult,
-  AugmentDef,
-  AugmentSource,
-  AugmentRules,
-  WrappedFromMeta,
-  PlatformsMeta,
-  PlatformMeta,
-  PlatformScan,
-  PlatformAugmentEntry,
-  Installations,
-  InstallationRecord,
-  ArtifactRecord,
-  EquipMeta,
-  EquipPreferences,
-  LocalAugmentConfig,
-  WrapConfig,
-  Snapshot,
-  SnapshotSummary,
-  RestoreResult,
-  BrowserOpener,
 };
