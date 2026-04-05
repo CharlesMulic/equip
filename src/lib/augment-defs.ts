@@ -14,7 +14,7 @@ import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
 import { validateToolName } from "./validation";
 import type { SkillConfig } from "./skills";
 import type { HookDefinition } from "./hooks";
-import type { ToolDefinition } from "./registry";
+import type { RegistryDef } from "./registry";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -327,13 +327,13 @@ export function hasAugmentDef(name: string): boolean {
 // ─── Sync from Registry ─────────────────────────────────────
 
 /**
- * Create or update an augment definition from a registry ToolDefinition.
+ * Create or update an augment definition from a registry RegistryDef.
  * If the definition already exists and is modded, preserves the user's modifications
  * and updates rulesUpstream to the new registry version.
  *
  * Returns the resulting definition.
  */
-export function syncFromRegistry(registryDef: ToolDefinition): AugmentDef {
+export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
   validateToolName(registryDef.name);
   const now = new Date().toISOString();
   const existing = readAugmentDef(registryDef.name);
@@ -389,7 +389,7 @@ export function syncFromRegistry(registryDef: ToolDefinition): AugmentDef {
 }
 
 /** Update an existing registry definition, preserving mods. */
-function updateFromRegistry(existing: AugmentDef, registryDef: ToolDefinition, now: string): AugmentDef {
+function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now: string): AugmentDef {
   const newVersion = registryDef.rules?.version || "1.0.0";
   const oldVersion = existing.registryVersion || "";
   const versionChanged = newVersion !== oldVersion;

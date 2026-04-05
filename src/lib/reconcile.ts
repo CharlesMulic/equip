@@ -17,7 +17,7 @@ import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
 import { syncFromRegistry } from "./augment-defs";
 import { markEquipUpdated } from "./equip-meta";
 import { createSnapshot, hasInitialSnapshot } from "./snapshots";
-import type { ToolDefinition } from "./registry";
+import type { RegistryDef } from "./registry";
 import type { DetectedPlatform } from "./platforms";
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
@@ -25,7 +25,7 @@ import { NOOP_LOGGER } from "./types";
 // ─── Types ──────────────────────────────────────────────────
 
 export interface ReconcileOptions {
-  /** Tool name (used as key in state and to find MCP entries) */
+  /** Augment name (used as key in state and to find MCP entries) */
   toolName: string;
   /** npm package name (e.g. "@cg3/prior-node") */
   package: string;
@@ -33,8 +33,8 @@ export interface ReconcileOptions {
   marker?: string;
   /** Hook directory path. Defaults to ~/.{toolName}/hooks if not provided. */
   hookDir?: string;
-  /** Tool definition from registry (if available, used to sync augment definition) */
-  toolDef?: ToolDefinition;
+  /** Registry definition (if available, used to sync augment definition) */
+  toolDef?: RegistryDef;
   /** Logger for debug/warning output (silent by default) */
   logger?: EquipLogger;
 }
@@ -43,7 +43,7 @@ export interface ReconcileOptions {
 
 /**
  * Scan all platform configs and update state based on what's on disk.
- * Returns the number of platforms where the tool was found.
+ * Returns the number of platforms where the augment was found.
  */
 export function reconcileState(options: ReconcileOptions): number {
   const { toolName, package: pkg, marker = toolName, hookDir: customHookDir, toolDef, logger = NOOP_LOGGER } = options;
@@ -63,7 +63,7 @@ function reconcileStateInner(
   pkg: string,
   marker: string,
   hookDir: string,
-  toolDef: ToolDefinition | undefined,
+  toolDef: RegistryDef | undefined,
   logger: EquipLogger,
 ): number {
   // Sync augment definition from registry if available

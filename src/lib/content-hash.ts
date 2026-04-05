@@ -34,7 +34,7 @@ export function computeContentHash(manifest: ContentManifest): string {
 }
 
 /**
- * Extract a ContentManifest from a ToolDefinition-like object.
+ * Extract a ContentManifest from a RegistryDef-like object.
  * Works with both the registry API response and the local AugmentDef.
  */
 export function extractManifest(def: {

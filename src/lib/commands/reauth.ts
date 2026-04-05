@@ -1,7 +1,7 @@
 // equip reauth <augment> — re-authenticate and rotate credentials.
 
 import { Augment } from "../../index";
-import { fetchToolDef, toolDefToEquipConfig } from "../registry";
+import { fetchRegistryDef, registryDefToConfig } from "../registry";
 import { platformName } from "../platforms";
 import { resolveAuth, deleteStoredCredential } from "../auth-engine";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
@@ -18,7 +18,7 @@ export async function runReauth(parsedArgs: ParsedArgs): Promise<void> {
 
   cli.log(`\n${cli.BOLD}equip reauth${cli.RESET} ${toolName}\n`);
 
-  const toolDef = await fetchToolDef(toolName, { logger });
+  const toolDef = await fetchRegistryDef(toolName, { logger });
   if (!toolDef) {
     cli.fail(`Augment "${toolName}" not found in registry`);
     process.exit(1);
@@ -51,7 +51,7 @@ export async function runReauth(parsedArgs: ParsedArgs): Promise<void> {
 
   // Update all platform configs with the new credential
   if (toolDef.installMode === "direct" && toolDef.serverUrl) {
-    const config = toolDefToEquipConfig(toolDef, { logger });
+    const config = registryDefToConfig(toolDef, { logger });
     const equip = new Augment(config);
     const platforms = equip.detect();
     const transport = toolDef.transport || "http";

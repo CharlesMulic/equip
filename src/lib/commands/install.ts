@@ -5,7 +5,7 @@
 import * as os from "os";
 import { spawn } from "child_process";
 import { Augment, type AugmentConfig } from "../../index";
-import { toolDefToEquipConfig, REGISTRY_API, type ToolDefinition } from "../registry";
+import { registryDefToConfig, REGISTRY_API, type RegistryDef } from "../registry";
 import { platformName, resolvePlatformId } from "../platforms";
 import { InstallReportBuilder } from "../types";
 import { resolveAuth, validateCredential } from "../auth-engine";
@@ -21,7 +21,7 @@ import * as cli from "../cli";
 /**
  * Run a direct-mode install for an augment fetched from the registry.
  */
-export async function runInstall(toolDef: ToolDefinition, parsedArgs: ParsedArgs, equipVersion: string): Promise<void> {
+export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, equipVersion: string): Promise<void> {
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
   const dryRun = parsedArgs.dryRun;
 
@@ -68,7 +68,7 @@ export async function runInstall(toolDef: ToolDefinition, parsedArgs: ParsedArgs
   }
 
   // ── Platform Detection ──
-  const config = toolDefToEquipConfig(toolDef, { logger });
+  const config = registryDefToConfig(toolDef, { logger });
   const equip = new Augment(config);
   let platforms = equip.detect();
 
@@ -284,7 +284,7 @@ interface PostInstallContext {
 }
 
 async function executePostInstallAction(
-  action: NonNullable<ToolDefinition["postInstall"]>[number],
+  action: NonNullable<RegistryDef["postInstall"]>[number],
   ctx: PostInstallContext,
 ): Promise<void> {
   if (action.type === "open_with_code") {

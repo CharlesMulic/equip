@@ -41,10 +41,13 @@ export interface PostInstallAction {
   targetUrl: string;
 }
 
-// ─── ToolDefinition ────────────────────────────────────────
-// Matches the shape returned by GET /tools/:name from equip-backend.
+// ─── RegistryDef ──────────────────────────────────────────
+// Matches the shape returned by GET /equip/tools/:name from the registry API.
 
-export interface ToolDefinition {
+/** @deprecated Use RegistryDef instead */
+export type ToolDefinition = RegistryDef;
+
+export interface RegistryDef {
   name: string;
   displayName: string;
   description: string;
@@ -119,10 +122,13 @@ export interface ToolDefinition {
  *
  * Returns null if the augment is not found.
  */
-export async function fetchToolDef(
+/** @deprecated Use fetchRegistryDef instead */
+export const fetchToolDef = fetchRegistryDef;
+
+export async function fetchRegistryDef(
   name: string,
   options: { logger?: EquipLogger } = {},
-): Promise<ToolDefinition | null> {
+): Promise<RegistryDef | null> {
   validateToolName(name);
   const logger = options.logger || NOOP_LOGGER;
 
@@ -138,7 +144,7 @@ export async function fetchToolDef(
     clearTimeout(timeout);
 
     if (res.ok) {
-      const def = await res.json() as ToolDefinition;
+      const def = await res.json() as RegistryDef;
       logger.info("Augment definition fetched from API", { name, installMode: def.installMode });
 
       // Verify content hash integrity if present
@@ -175,7 +181,7 @@ export async function fetchToolDef(
 
 // ─── Cache ─────────────────────────────────────────────────
 
-function cacheToolDef(name: string, def: ToolDefinition, logger: EquipLogger): void {
+function cacheToolDef(name: string, def: RegistryDef, logger: EquipLogger): void {
   try {
     const dir = cacheDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -187,11 +193,11 @@ function cacheToolDef(name: string, def: ToolDefinition, logger: EquipLogger): v
   }
 }
 
-function readCachedToolDef(name: string, logger: EquipLogger): ToolDefinition | null {
+function readCachedToolDef(name: string, logger: EquipLogger): RegistryDef | null {
   try {
     const cachePath = path.join(cacheDir(), `${name}.json`);
     const raw = fs.readFileSync(cachePath, "utf-8");
-    const def = JSON.parse(raw) as ToolDefinition;
+    const def = JSON.parse(raw) as RegistryDef;
     logger.info("Augment definition loaded from cache", { name });
     return def;
   } catch {
@@ -202,10 +208,13 @@ function readCachedToolDef(name: string, logger: EquipLogger): ToolDefinition | 
 // ─── Conversion ────────────────────────────────────────────
 
 /**
- * Convert a ToolDefinition (from API/cache) to an AugmentConfig (for the Augment class).
+ * Convert a RegistryDef (from API/cache) to an AugmentConfig (for the Augment class).
  * Only meaningful for direct-mode augments. Package-mode augments are dispatched via npx.
  */
-export function toolDefToEquipConfig(def: ToolDefinition, options?: { logger?: EquipLogger }): AugmentConfig {
+/** @deprecated Use registryDefToConfig instead */
+export const toolDefToEquipConfig = registryDefToConfig;
+
+export function registryDefToConfig(def: RegistryDef, options?: { logger?: EquipLogger }): AugmentConfig {
   const config: AugmentConfig = {
     name: def.name,
     logger: options?.logger,
