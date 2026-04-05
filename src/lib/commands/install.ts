@@ -25,7 +25,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
   const dryRun = parsedArgs.dryRun;
 
-  cli.log(`\n${cli.BOLD}equip${cli.RESET} v${equipVersion} — installing ${toolDef.displayName || toolDef.name}`);
+  cli.log(`\n${cli.BOLD}equip${cli.RESET} v${equipVersion} — installing ${toolDef.title || toolDef.name}`);
   if (dryRun) cli.warn("DRY RUN — no changes will be made");
 
   // ── Auth Resolution ──

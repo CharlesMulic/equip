@@ -2092,7 +2092,7 @@ describe("config migration", () => {
 
     fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
     trackInstallation(toolName, {
-      source: "registry", displayName: toolName, transport: "http",
+      source: "registry", title: toolName, transport: "http",
       platforms: [platformId],
       artifacts: { [platformId]: { mcp: true } },
     });
@@ -2205,7 +2205,7 @@ describe("config migration", () => {
     fs.writeFileSync(configPath, JSON.stringify(testContent, null, 2));
 
     trackInstallation("test-migrate", {
-      source: "registry", displayName: "test-migrate", transport: "http",
+      source: "registry", title: "test-migrate", transport: "http",
       platforms: ["claude-code"], artifacts: { "claude-code": { mcp: true } },
     });
     const results = migrateConfigs();
@@ -2282,11 +2282,11 @@ describe("config migration", () => {
     }));
 
     trackInstallation("tool-a", {
-      source: "registry", displayName: "tool-a", transport: "http",
+      source: "registry", title: "tool-a", transport: "http",
       platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
     });
     trackInstallation("tool-b", {
-      source: "registry", displayName: "tool-b", transport: "http",
+      source: "registry", title: "tool-b", transport: "http",
       platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
     });
 

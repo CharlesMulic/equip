@@ -375,7 +375,7 @@ describe("augment-defs: name validation at filesystem boundary", () => {
     assert.throws(() => writeAugmentDef({
       name: "../../../tmp/evil",
       source: "local",
-      displayName: "Evil",
+      title: "Evil",
       description: "",
       requiresAuth: false,
       skills: [],

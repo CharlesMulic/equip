@@ -150,7 +150,7 @@ function reconcileStateInner(
       trackInstallation(toolName, {
         source: "registry",
         package: pkg,
-        displayName: toolDef?.displayName || toolName,
+        title: toolDef?.title || toolName,
         transport: (transport as "http" | "stdio"),
         serverUrl: toolDef?.serverUrl,
         platforms: installedPlatforms,

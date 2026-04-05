@@ -46,7 +46,9 @@ export interface PostInstallAction {
 
 export interface RegistryDef {
   name: string;
-  displayName: string;
+  /** @deprecated Use title. Kept for backward compat during backend migration. */
+  displayName?: string;
+  title: string;
   description: string;
   homepage?: string;
   repository?: string;
@@ -93,7 +95,6 @@ export interface RegistryDef {
 
   // Display metadata (from registry, authoritative)
   rarity?: "common" | "uncommon" | "rare" | "epic" | "legendary";
-  title?: string;
   subtitle?: string;
   flavorText?: string;
   baseWeight?: number;
@@ -138,7 +139,9 @@ export async function fetchRegistryDef(
     clearTimeout(timeout);
 
     if (res.ok) {
-      const def = await res.json() as RegistryDef;
+      const raw = await res.json() as RegistryDef & { displayName?: string };
+      // Normalize: title is the canonical field, displayName is deprecated
+      const def: RegistryDef = { ...raw, title: raw.title || raw.displayName || raw.name };
       logger.info("Augment definition fetched from API", { name, installMode: def.installMode });
 
       // Verify content hash integrity if present

@@ -38,7 +38,7 @@ export function runDoctor(): void {
 
   for (const augmentName of augmentNames) {
     const record = installations.augments[augmentName];
-    cli.log(`\n  ${cli.BOLD}${augmentName}${cli.RESET} ${cli.DIM}(${record.displayName})${cli.RESET}`);
+    cli.log(`\n  ${cli.BOLD}${augmentName}${cli.RESET} ${cli.DIM}(${record.title})${cli.RESET}`);
 
     for (const platformId of record.platforms) {
       checks++;

@@ -258,7 +258,7 @@ describe("installations.json", () => {
     trackInstallation("prior", {
       source: "registry",
       package: "prior",
-      displayName: "Prior",
+      title: "Prior",
       transport: "http",
       serverUrl: "https://api.cg3.io/mcp",
       platforms: ["claude-code", "cursor"],
@@ -277,12 +277,12 @@ describe("installations.json", () => {
 
   it("trackInstallation adds platform to existing record", () => {
     trackInstallation("prior", {
-      source: "registry", displayName: "Prior", transport: "http",
+      source: "registry", title: "Prior", transport: "http",
       platforms: ["claude-code"],
       artifacts: { "claude-code": { mcp: true } },
     });
     trackInstallation("prior", {
-      source: "registry", displayName: "Prior", transport: "http",
+      source: "registry", title: "Prior", transport: "http",
       platforms: ["cursor"],
       artifacts: { "cursor": { mcp: true } },
     });
@@ -295,7 +295,7 @@ describe("installations.json", () => {
 
   it("trackUninstallation removes platform from record", () => {
     trackInstallation("prior", {
-      source: "registry", displayName: "Prior", transport: "http",
+      source: "registry", title: "Prior", transport: "http",
       platforms: ["claude-code", "cursor"],
       artifacts: { "claude-code": { mcp: true }, "cursor": { mcp: true } },
     });
@@ -311,7 +311,7 @@ describe("installations.json", () => {
 
   it("trackUninstallation removes augment when no platforms remain", () => {
     trackInstallation("prior", {
-      source: "registry", displayName: "Prior", transport: "http",
+      source: "registry", title: "Prior", transport: "http",
       platforms: ["claude-code"],
       artifacts: { "claude-code": { mcp: true } },
     });
@@ -324,7 +324,7 @@ describe("installations.json", () => {
 
   it("trackUninstallation without platforms removes entire record", () => {
     trackInstallation("prior", {
-      source: "registry", displayName: "Prior", transport: "http",
+      source: "registry", title: "Prior", transport: "http",
       platforms: ["claude-code"],
       artifacts: { "claude-code": { mcp: true } },
     });
@@ -337,12 +337,12 @@ describe("installations.json", () => {
 
   it("getAugmentsForPlatform returns correct reverse lookup", () => {
     trackInstallation("prior", {
-      source: "registry", displayName: "Prior", transport: "http",
+      source: "registry", title: "Prior", transport: "http",
       platforms: ["claude-code", "cursor"],
       artifacts: { "claude-code": { mcp: true }, "cursor": { mcp: true } },
     });
     trackInstallation("docs", {
-      source: "registry", displayName: "Docs", transport: "http",
+      source: "registry", title: "Docs", transport: "http",
       platforms: ["claude-code"],
       artifacts: { "claude-code": { mcp: true } },
     });
@@ -359,11 +359,11 @@ describe("installations.json", () => {
 
   it("getManagedAugmentNames returns all managed names", () => {
     trackInstallation("prior", {
-      source: "registry", displayName: "Prior", transport: "http",
+      source: "registry", title: "Prior", transport: "http",
       platforms: ["claude-code"], artifacts: { "claude-code": { mcp: true } },
     });
     trackInstallation("docs", {
-      source: "local", displayName: "Docs", transport: "http",
+      source: "local", title: "Docs", transport: "http",
       platforms: ["claude-code"], artifacts: { "claude-code": { mcp: true } },
     });
 
@@ -482,7 +482,7 @@ describe("Auto-wrapping MCP servers during scan", () => {
     writeAugmentDef({
       name: "existing-server",
       source: "local",
-      displayName: "Existing",
+      title: "Existing",
       description: "",
       transport: "http",
       serverUrl: "http://original.com",

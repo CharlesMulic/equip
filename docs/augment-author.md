@@ -139,7 +139,7 @@ A registry definition includes everything equip needs to install the augment:
 ```json
 {
   "name": "my-augment",
-  "displayName": "My Augment",
+  "title": "My Augment",
   "description": "Does X for AI agents",
   "installMode": "direct",
   "transport": "http",

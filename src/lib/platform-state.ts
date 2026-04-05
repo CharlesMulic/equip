@@ -303,7 +303,7 @@ export function scanAllPlatforms(
         const transport = entry.transport === "http" || entry.transport === "stdio" ? entry.transport : "stdio";
         wrapUnmanaged({
           name,
-          displayName: name,
+          title: name,
           transport,
           url: entry.url,
           command: entry.command,
@@ -320,7 +320,7 @@ export function scanAllPlatforms(
         // Create InstallationRecord so it's recognized as managed on next scan
         trackInstallation(name, {
           source: "wrapped",
-          displayName: name,
+          title: name,
           transport,
           platforms: [p.platform],
           artifacts: { [p.platform]: { mcp: true } },
@@ -406,7 +406,7 @@ export function scanAllPlatforms(
             try {
               wrapUnmanaged({
                 name: toolDir,
-                displayName: toolDir,
+                title: toolDir,
                 description,
                 // No transport — skill-only augments don't have an MCP server
                 skills,
@@ -421,7 +421,7 @@ export function scanAllPlatforms(
 
               trackInstallation(toolDir, {
                 source: "wrapped",
-                displayName: toolDir,
+                title: toolDir,
                 transport: "stdio",
                 platforms: [p.platform],
                 artifacts: { [p.platform]: { mcp: false, skills: skillSubDirs } },

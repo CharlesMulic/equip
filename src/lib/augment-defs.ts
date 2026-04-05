@@ -34,20 +34,17 @@ export interface AugmentDef {
   /** Where this definition came from */
   source: AugmentSource;
 
-  /** Human-readable name */
-  displayName: string;
+  /** Human-readable title (e.g., "Prior"). Falls back to name. */
+  title: string;
+
+  /** Subtitle shown below title (e.g., "Agent Knowledge Base") */
+  subtitle?: string;
 
   /** One-line description */
   description: string;
 
   /** Rarity tier */
   rarity?: "common" | "uncommon" | "rare" | "epic" | "legendary";
-
-  /** Short title for compact display (e.g., "Prior") */
-  title?: string;
-
-  /** Subtitle shown below title (e.g., "Agent Knowledge Base") */
-  subtitle?: string;
 
   /** Flavor text for epic/legendary tooltips */
   flavorText?: string;
@@ -185,7 +182,7 @@ export interface WrappedFromMeta {
 /** Options for creating a local augment */
 export interface LocalAugmentConfig {
   name: string;
-  displayName?: string;
+  title?: string;
   description?: string;
   transport?: "http" | "stdio";
   serverUrl?: string;
@@ -201,7 +198,7 @@ export interface LocalAugmentConfig {
 /** Options for wrapping an unmanaged platform config entry */
 export interface WrapConfig {
   name: string;
-  displayName?: string;
+  title?: string;
   description?: string;
   transport?: "http" | "stdio";
   url?: string;
@@ -356,7 +353,7 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
   const def: AugmentDef = {
     name: registryDef.name,
     source: "registry",
-    displayName: registryDef.displayName || registryDef.name,
+    title: registryDef.title || registryDef.name,
     description: registryDef.description || "",
     transport: (registryDef.transport as "http" | "stdio") || "http",
     serverUrl: registryDef.serverUrl,
@@ -370,7 +367,6 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
     hooks: registryDef.hooks,
     hookDir: registryDef.hookDir,
     rarity: registryDef.rarity || "common",
-    title: registryDef.title,
     subtitle: registryDef.subtitle,
     flavorText: registryDef.flavorText,
     baseWeight: registryDef.baseWeight || 0,
@@ -401,7 +397,7 @@ function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now:
   const updated: AugmentDef = {
     ...existing,
     // Always update infrastructure fields from registry
-    displayName: registryDef.displayName || existing.displayName,
+    title: registryDef.title || existing.title,
     description: registryDef.description || existing.description,
     transport: (registryDef.transport as "http" | "stdio") || existing.transport,
     serverUrl: registryDef.serverUrl || existing.serverUrl,
@@ -417,7 +413,6 @@ function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now:
     publisher: registryDef.publisher || existing.publisher,
     // Display metadata — always sync from registry (authoritative source)
     rarity: registryDef.rarity || existing.rarity,
-    title: registryDef.title || existing.title,
     subtitle: registryDef.subtitle || existing.subtitle,
     flavorText: registryDef.flavorText || existing.flavorText,
     installCount: registryDef.installCount ?? existing.installCount,
@@ -462,7 +457,7 @@ export function createLocalAugment(config: LocalAugmentConfig): AugmentDef {
   const def: AugmentDef = {
     name: config.name,
     source: "local",
-    displayName: config.displayName || config.name,
+    title: config.title || config.name,
     description: config.description || "",
     transport: config.transport,
     serverUrl: config.serverUrl,
@@ -491,7 +486,7 @@ export function wrapUnmanaged(config: WrapConfig): AugmentDef {
   const def: AugmentDef = {
     name: config.name,
     source: "wrapped",
-    displayName: config.displayName || config.name,
+    title: config.title || config.name,
     description: config.description || "",
     transport: config.transport,
     serverUrl: config.transport === "http" ? config.url : undefined,

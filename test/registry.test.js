@@ -34,7 +34,7 @@ describe("registryDefToConfig", () => {
   it("converts minimal direct-mode tool", () => {
     const def = {
       name: "test-tool",
-      displayName: "Test Tool",
+      title: "Test Tool",
       description: "A test",
       installMode: "direct",
       transport: "http",
@@ -53,7 +53,7 @@ describe("registryDefToConfig", () => {
   it("converts tool with rules", () => {
     const def = {
       name: "test",
-      displayName: "Test",
+      title: "Test",
       description: "",
       installMode: "direct",
       serverUrl: "https://example.com/mcp",
@@ -73,7 +73,7 @@ describe("registryDefToConfig", () => {
   it("converts tool with rules.fileName", () => {
     const def = {
       name: "test",
-      displayName: "Test",
+      title: "Test",
       description: "",
       installMode: "direct",
       serverUrl: "https://example.com/mcp",
@@ -92,7 +92,7 @@ describe("registryDefToConfig", () => {
   it("converts tool with skills (preserves all skills from array)", () => {
     const def = {
       name: "test",
-      displayName: "Test",
+      title: "Test",
       description: "",
       installMode: "direct",
       serverUrl: "https://example.com/mcp",
@@ -114,7 +114,7 @@ describe("registryDefToConfig", () => {
   it("converts tool with stdio config", () => {
     const def = {
       name: "test",
-      displayName: "Test",
+      title: "Test",
       description: "",
       installMode: "direct",
       stdioCommand: "node",
@@ -131,7 +131,7 @@ describe("registryDefToConfig", () => {
   it("converts tool with hooks", () => {
     const def = {
       name: "test",
-      displayName: "Test",
+      title: "Test",
       description: "",
       installMode: "direct",
       serverUrl: "https://example.com/mcp",
@@ -150,7 +150,7 @@ describe("registryDefToConfig", () => {
 
   it("passes logger through", () => {
     const logger = recordingLogger();
-    const def = { name: "test", displayName: "Test", description: "", installMode: "direct" };
+    const def = { name: "test", title: "Test", description: "", installMode: "direct" };
     const config = registryDefToConfig(def, { logger });
     assert.equal(config.logger, logger);
   });

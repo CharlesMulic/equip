@@ -23,8 +23,8 @@ export interface InstallationRecord {
   source: "registry" | "local" | "wrapped";
   /** npm package name (for registry augments) */
   package?: string;
-  /** Human-readable name */
-  displayName: string;
+  /** Human-readable title */
+  title: string;
   /** Transport type */
   transport: "http" | "stdio";
   /** Server URL (for HTTP) */

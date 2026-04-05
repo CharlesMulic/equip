@@ -44,7 +44,7 @@ function makeMinimalDef(overrides = {}) {
   return {
     name: "test-augment",
     source: "local",
-    displayName: "Test Augment",
+    title: "Test Augment",
     description: "A test augment",
     transport: "http",
     serverUrl: "https://example.com/mcp",
@@ -61,7 +61,7 @@ function makeMinimalDef(overrides = {}) {
 function makeRegistryToolDef(overrides = {}) {
   return {
     name: "test-tool",
-    displayName: "Test Tool",
+    title: "Test Tool",
     description: "A test tool from the registry",
     installMode: "direct",
     transport: "http",
@@ -171,7 +171,7 @@ describe("syncFromRegistry", () => {
 
     assert.equal(result.name, "test-tool");
     assert.equal(result.source, "registry");
-    assert.equal(result.displayName, "Test Tool");
+    assert.equal(result.title, "Test Tool");
     assert.equal(result.serverUrl, "https://example.com/mcp");
     assert.ok(result.requiresAuth);
     assert.equal(result.rules.version, "1.0.0");
@@ -255,7 +255,7 @@ describe("syncFromRegistry", () => {
     // Create a local augment first
     createLocalAugment({
       name: "test-tool",
-      displayName: "My Local Tool",
+      title: "My Local Tool",
       description: "User's local augment",
     });
 
@@ -264,13 +264,13 @@ describe("syncFromRegistry", () => {
 
     assert.equal(result.source, "local", "Source should remain 'local'");
     assert.equal(result.description, "User's local augment", "Local description should be preserved");
-    assert.equal(result.displayName, "My Local Tool", "Local displayName should be preserved");
+    assert.equal(result.title, "My Local Tool", "Local title should be preserved");
   });
 
   it("does not overwrite wrapped augment with same name", () => {
     wrapUnmanaged({
       name: "test-tool",
-      displayName: "Wrapped Tool",
+      title: "Wrapped Tool",
       description: "Auto-detected",
       fromPlatform: "claude-code",
     });
@@ -289,7 +289,7 @@ describe("createLocalAugment", () => {
   it("creates definition with source: local", () => {
     const def = createLocalAugment({
       name: "my-tool",
-      displayName: "My Tool",
+      title: "My Tool",
       transport: "stdio",
       stdio: { command: "node", args: ["server.js"] },
     });
@@ -305,13 +305,13 @@ describe("createLocalAugment", () => {
     assert.ok(hasAugmentDef("my-tool"));
   });
 
-  it("defaults displayName to name", () => {
+  it("defaults title to name", () => {
     const def = createLocalAugment({
       name: "my-tool",
       transport: "http",
       serverUrl: "http://localhost:3000",
     });
-    assert.equal(def.displayName, "my-tool");
+    assert.equal(def.title, "my-tool");
   });
 });
 
@@ -465,7 +465,7 @@ describe("Authoring lifecycle fields", () => {
     fs.writeFileSync(path.join(dir, "old-wrap.json"), JSON.stringify({
       name: "old-wrap",
       source: "wrapped",
-      displayName: "Old Wrap",
+      title: "Old Wrap",
       description: "",
       transport: "stdio",
       requiresAuth: false,
@@ -491,7 +491,7 @@ describe("Authoring lifecycle fields", () => {
     fs.writeFileSync(path.join(dir, "new-wrap.json"), JSON.stringify({
       name: "new-wrap",
       source: "wrapped",
-      displayName: "New Wrap",
+      title: "New Wrap",
       description: "",
       transport: "http",
       serverUrl: "http://localhost:3000",
@@ -518,7 +518,7 @@ describe("Authoring lifecycle fields", () => {
     fs.writeFileSync(path.join(dir, "wrapped-test.json"), JSON.stringify({
       name: "wrapped-test",
       source: "wrapped",
-      displayName: "Wrapped Test",
+      title: "Wrapped Test",
       description: "",
       transport: "stdio",
       requiresAuth: false,
@@ -549,7 +549,7 @@ describe("Authoring lifecycle fields", () => {
     fs.writeFileSync(path.join(dir, "local-test.json"), JSON.stringify({
       name: "local-test",
       source: "local",
-      displayName: "Local Test",
+      title: "Local Test",
       description: "",
       transport: "http",
       requiresAuth: false,
@@ -575,7 +575,7 @@ describe("Authoring lifecycle fields", () => {
     writeAugmentDef({
       name: "pub-test",
       source: "local",
-      displayName: "Pub Test",
+      title: "Pub Test",
       description: "testing",
       transport: "http",
       serverUrl: "http://localhost:8080",
