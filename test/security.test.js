@@ -310,7 +310,7 @@ describe("validateHookDir", () => {
 describe("validateUrlScheme", () => {
   it("accepts https URLs", () => {
     assert.doesNotThrow(() => validateUrlScheme("https://example.com/callback"));
-    assert.doesNotThrow(() => validateUrlScheme("https://api.cg3.io/equip/tools"));
+    assert.doesNotThrow(() => validateUrlScheme("https://api.cg3.io/equip/augments"));
   });
 
   it("accepts http URLs", () => {
@@ -344,7 +344,7 @@ describe("validateUrlScheme", () => {
 
 describe("isTrustedCredentialHost", () => {
   it("trusts api.cg3.io", () => {
-    assert.equal(isTrustedCredentialHost("https://api.cg3.io/equip/tools"), true);
+    assert.equal(isTrustedCredentialHost("https://api.cg3.io/equip/augments"), true);
   });
 
   it("rejects arbitrary hosts", () => {

@@ -42,7 +42,7 @@ export interface PostInstallAction {
 }
 
 // ─── RegistryDef ──────────────────────────────────────────
-// Matches the shape returned by GET /equip/tools/:name from the registry API.
+// Matches the shape returned by GET /equip/augments/:name from the registry API.
 
 export interface RegistryDef {
   name: string;
@@ -128,7 +128,7 @@ export async function fetchRegistryDef(
 
   // 1. Try the registry API
   try {
-    const url = `${REGISTRY_API}/tools/${encodeURIComponent(name)}`;
+    const url = `${REGISTRY_API}/augments/${encodeURIComponent(name)}`;
     logger.debug("Fetching augment definition from API", { url });
 
     const controller = new AbortController();

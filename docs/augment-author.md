@@ -64,7 +64,7 @@ Publish your augment to Equip's registry to make it discoverable and installable
 
 ```bash
 # Via the desktop app: use the Publish button on the edit form
-# Via API: POST to https://api.cg3.io/equip/tools (requires publisher profile + auth)
+# Via API: POST to https://api.cg3.io/equip/augments (requires publisher profile + auth)
 ```
 
 Once published, anyone can install it with:
