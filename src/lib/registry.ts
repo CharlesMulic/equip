@@ -153,11 +153,11 @@ export async function fetchRegistryDef(
             name, expected: def.contentHash, computed, version: def.version,
           });
           // Fall back to cache (which has a previously-verified version)
-          return readCachedToolDef(name, logger);
+          return readCachedAugmentDef(name, logger);
         }
       }
 
-      cacheToolDef(name, def, logger);
+      cacheAugmentDef(name, def, logger);
       return def;
     }
 
@@ -173,12 +173,12 @@ export async function fetchRegistryDef(
   }
 
   // 2. Try local cache
-  return readCachedToolDef(name, logger);
+  return readCachedAugmentDef(name, logger);
 }
 
 // ─── Cache ─────────────────────────────────────────────────
 
-function cacheToolDef(name: string, def: RegistryDef, logger: EquipLogger): void {
+function cacheAugmentDef(name: string, def: RegistryDef, logger: EquipLogger): void {
   try {
     const dir = cacheDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -190,7 +190,7 @@ function cacheToolDef(name: string, def: RegistryDef, logger: EquipLogger): void
   }
 }
 
-function readCachedToolDef(name: string, logger: EquipLogger): RegistryDef | null {
+function readCachedAugmentDef(name: string, logger: EquipLogger): RegistryDef | null {
   try {
     const cachePath = path.join(cacheDir(), `${name}.json`);
     const raw = fs.readFileSync(cachePath, "utf-8");
