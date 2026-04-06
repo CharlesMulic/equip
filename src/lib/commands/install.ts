@@ -334,13 +334,21 @@ async function executePostInstallAction(
 
     try {
       cli.log(`  ${cli.DIM}Opening ${targetUrl}${cli.RESET}`);
-      if (process.platform === "win32") {
-        spawn("cmd", ["/c", "start", "", targetUrl], { stdio: "ignore", shell: false }).unref();
-      } else if (process.platform === "darwin") {
-        spawn("open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
-      } else {
-        spawn("xdg-open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
-      }
+      // Must wait for the child process to hand off the URL before the parent exits.
+      // The security fix in 288313f switched from execSync to spawn().unref(), which
+      // allowed the Node process to exit before cmd/start finished launching the browser.
+      await new Promise<void>((resolve) => {
+        let child: ReturnType<typeof spawn>;
+        if (process.platform === "win32") {
+          child = spawn("cmd", ["/c", "start", "", targetUrl], { stdio: "ignore", shell: false });
+        } else if (process.platform === "darwin") {
+          child = spawn("open", [targetUrl], { stdio: "ignore" });
+        } else {
+          child = spawn("xdg-open", [targetUrl], { stdio: "ignore" });
+        }
+        child.on("error", () => resolve());
+        child.on("close", () => resolve());
+      });
     } catch (e: unknown) {
       cli.warn(`Could not open browser: ${(e as Error).message}`);
       cli.log(`  ${cli.DIM}Open manually: ${targetUrl}${cli.RESET}`);
