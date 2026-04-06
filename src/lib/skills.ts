@@ -99,6 +99,8 @@ export function uninstallSkill(
   dryRun: boolean = false,
 ): boolean {
   if (!platform.skillsPath) return false;
+  validateToolName(toolName);
+  validateRelativePath(skillName, "skill name");
 
   const skillDir = path.join(platform.skillsPath, toolName, skillName);
   try {
@@ -129,6 +131,8 @@ export function hasSkill(
   skillName: string,
 ): boolean {
   if (!platform.skillsPath) return false;
+  validateToolName(toolName);
+  validateRelativePath(skillName, "skill name");
   const skillMd = path.join(platform.skillsPath, toolName, skillName, "SKILL.md");
   try { return fs.statSync(skillMd).isFile(); } catch { return false; }
 }

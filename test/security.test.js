@@ -16,7 +16,7 @@ const {
   isTrustedCredentialHost,
 } = require("../dist/lib/validation");
 
-const { installSkill, uninstallSkill } = require("../dist/lib/skills");
+const { installSkill, uninstallSkill, hasSkill } = require("../dist/lib/skills");
 const { installRules, uninstallRules: uninstallRulesFn, rulesContentHash, wrapRulesContent, stripRulesMarkers, parseRulesVersion } = require("../dist/lib/rules");
 
 // ─── Test Helpers ───────────────────────────────────────────
@@ -256,6 +256,26 @@ describe("skill installation: path traversal attacks", () => {
         files: [{ path: "SKILL.md", content: "pwned" }],
       });
     }, /escapes parent/);
+  });
+
+  it("blocks path traversal via tool name in hasSkill", () => {
+    const p = mockPlatform();
+    assert.throws(() => hasSkill(p, "../../../etc", "helper"), /Invalid augment name/);
+  });
+
+  it("blocks path traversal via skill name in hasSkill", () => {
+    const p = mockPlatform();
+    assert.throws(() => hasSkill(p, "legit-tool", "../../../etc"), /escapes parent/);
+  });
+
+  it("blocks path traversal via tool name in uninstallSkill", () => {
+    const p = mockPlatform();
+    assert.throws(() => uninstallSkill(p, "../../../tmp/evil", "helper"), /Invalid augment name/);
+  });
+
+  it("blocks path traversal via skill name in uninstallSkill", () => {
+    const p = mockPlatform();
+    assert.throws(() => uninstallSkill(p, "legit-tool", "../../../tmp"), /escapes parent/);
   });
 
   it("allows legitimate skill installation", () => {
