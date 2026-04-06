@@ -120,7 +120,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   cli.log(`  Transport  ${transport}`);
 
   for (const p of platforms) {
-    const result = equip.installMcp(p, apiKey as string, { transport, dryRun });
+    const result = equip.installMcp(p, apiKey, { transport, dryRun });
     report.addResult(p.platform, result);
     if (result.success) {
       cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);

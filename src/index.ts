@@ -5,7 +5,7 @@ import * as path from "path";
 import * as os from "os";
 
 import { detectPlatforms } from "./lib/detect";
-import { readMcpEntry, readMcpEntryDetailed, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
+import { readMcpEntry, readMcpEntryDetailed, buildHttpConfig, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
 import { parseRulesVersion, installRules, uninstallRules, markerPatterns, wrapRulesContent, stripRulesMarkers, rulesContentHash } from "./lib/rules";
 import { validateToolName, validateRelativePath, validatePathWithinDir, validateHookDir, validateUrlScheme, isTrustedCredentialHost } from "./lib/validation";
 import { computeContentHash, extractManifest, type ContentManifest } from "./lib/content-hash";
@@ -79,16 +79,20 @@ class Augment {
     return detectPlatforms(this.name);
   }
 
-  buildConfig(platformId: string, apiKey: string, transport: string = "http"): Record<string, unknown> {
+  buildConfig(platformId: string, apiKey: string | null, transport: string = "http"): Record<string, unknown> {
     if (transport === "stdio" && this.stdio) {
-      const env = { [this.stdio.envKey]: apiKey };
+      const env: Record<string, string> = {};
+      if (this.stdio.envKey && apiKey) env[this.stdio.envKey] = apiKey;
       return buildStdioConfig(this.stdio.command, this.stdio.args, env);
     }
     if (!this.serverUrl) throw new Error("Equip: serverUrl is required for MCP installation");
-    return buildHttpConfigWithAuth(this.serverUrl, apiKey, platformId);
+    if (apiKey) {
+      return buildHttpConfigWithAuth(this.serverUrl, apiKey, platformId);
+    }
+    return buildHttpConfig(this.serverUrl, platformId);
   }
 
-  installMcp(platform: DetectedPlatform, apiKey: string, options: { transport?: string; dryRun?: boolean } = {}): ArtifactResult {
+  installMcp(platform: DetectedPlatform, apiKey: string | null, options: { transport?: string; dryRun?: boolean } = {}): ArtifactResult {
     const { transport = "http", dryRun = false } = options;
     const config = this.buildConfig(platform.platform, apiKey, transport);
     return installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl, logger: this.logger });
@@ -98,7 +102,7 @@ class Augment {
     return uninstallMcp(platform, this.name, dryRun);
   }
 
-  updateMcpKey(platform: DetectedPlatform, apiKey: string, transport: string = "http"): ArtifactResult {
+  updateMcpKey(platform: DetectedPlatform, apiKey: string | null, transport: string = "http"): ArtifactResult {
     const config = this.buildConfig(platform.platform, apiKey, transport);
     return updateMcpKey(platform, this.name, config, { logger: this.logger });
   }
