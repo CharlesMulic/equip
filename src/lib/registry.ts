@@ -16,7 +16,7 @@ import type { AuthConfig } from "./auth-engine";
 // ─── API Configuration ─────────────────────────────────────
 
 export const REGISTRY_API = "https://api.cg3.io/equip";
-const FETCH_TIMEOUT_MS = 3000;
+const FETCH_TIMEOUT_MS = 8000;
 
 // ─── Paths ─────────────────────────────────────────────────
 

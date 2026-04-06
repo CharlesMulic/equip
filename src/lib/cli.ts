@@ -80,16 +80,17 @@ export function promptEnterOrEsc(question: string): Promise<boolean> {
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.setEncoding("utf-8");
+    const cleanup = (): void => {
+      process.stdin.setRawMode(false); process.stdin.pause(); process.stdin.removeListener("data", onData);
+    };
     const onData = (key: string): void => {
-      if (key === "\x1b") {
-        process.stdin.setRawMode(false); process.stdin.pause(); process.stdin.removeListener("data", onData);
-        process.stderr.write("\n"); resolve(false);
-      } else if (key === "\r" || key === "\n") {
-        process.stdin.setRawMode(false); process.stdin.pause(); process.stdin.removeListener("data", onData);
-        process.stderr.write("\n"); resolve(true);
-      } else if (key === "\x03") {
-        process.stdin.setRawMode(false); process.stdin.pause(); process.stdin.removeListener("data", onData);
-        process.stderr.write("\n"); process.exit(0);
+      // On Windows, Enter may arrive as "\r\n" in a single chunk — use includes() not ===
+      if (key.includes("\x1b")) {
+        cleanup(); process.stderr.write("\n"); resolve(false);
+      } else if (key.includes("\r") || key.includes("\n")) {
+        cleanup(); process.stderr.write("\n"); resolve(true);
+      } else if (key.includes("\x03")) {
+        cleanup(); process.stderr.write("\n"); process.exit(0);
       }
       // else: ignore unrecognized keys, keep listening
     };

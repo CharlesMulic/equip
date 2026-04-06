@@ -264,13 +264,12 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
     return;
   }
 
-  // Unknown augment — treat as npm package name
+  // Registry returned nothing — could be "not found" or "unreachable"
   if (!toolDef) {
-    const pkg = alias;
-    const command = extraArgs.length > 0 ? extraArgs.shift()! : "setup";
-    const inferredName = pkg.includes("/") ? pkg.split("/").pop()! : pkg;
-    spawnPackage(pkg, command, extraArgs, inferredName);
-    return;
+    cli.fail(`Augment "${alias}" not found`);
+    cli.log(`  ${DIM}Check your network connection and try again, or verify the augment name.${RESET}`);
+    cli.log(`  ${DIM}For local scripts, use: equip ./path/to/script.js${RESET}`);
+    process.exit(1);
   }
 
   console.error(`equip: unknown install mode "${toolDef.installMode}" for "${alias}"`);

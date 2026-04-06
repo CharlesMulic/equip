@@ -333,6 +333,7 @@ async function executePostInstallAction(
     }
 
     try {
+      cli.log(`  ${cli.DIM}Opening ${targetUrl}${cli.RESET}`);
       if (process.platform === "win32") {
         spawn("cmd", ["/c", "start", "", targetUrl], { stdio: "ignore", shell: false }).unref();
       } else if (process.platform === "darwin") {
@@ -340,6 +341,9 @@ async function executePostInstallAction(
       } else {
         spawn("xdg-open", [targetUrl], { detached: true, stdio: "ignore" }).unref();
       }
-    } catch { /* best effort */ }
+    } catch (e: unknown) {
+      cli.warn(`Could not open browser: ${(e as Error).message}`);
+      cli.log(`  ${cli.DIM}Open manually: ${targetUrl}${cli.RESET}`);
+    }
   }
 }
