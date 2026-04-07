@@ -15,7 +15,7 @@ import type { AuthConfig } from "./auth-engine";
 
 // ─── API Configuration ─────────────────────────────────────
 
-export const REGISTRY_API = "https://api.cg3.io/equip";
+export const REGISTRY_API = process.env.EQUIP_REGISTRY_URL || "https://api.cg3.io/equip";
 const FETCH_TIMEOUT_MS = 8000;
 
 // ─── Paths ─────────────────────────────────────────────────
