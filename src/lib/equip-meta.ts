@@ -8,12 +8,15 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as crypto from "crypto";
 import { atomicWriteFileSync, safeReadJsonSync, resolvePackageVersion } from "./fs";
 
 // ─── Types ──────────────────────────────────────────────────
 
 export interface EquipMeta {
   version: string;
+  /** Random UUID generated on first use — anonymous install dedup identifier. */
+  installId: string;
   lastUpdated: string;
   lastScan: string;
   preferences: EquipPreferences;
@@ -41,9 +44,14 @@ const DEFAULT_PREFERENCES: EquipPreferences = {
   contextBudget: 30000,
 };
 
+function generateInstallId(): string {
+  return crypto.randomUUID();
+}
+
 function defaultMeta(): EquipMeta {
   return {
     version: "",
+    installId: generateInstallId(),
     lastUpdated: "",
     lastScan: "",
     preferences: { ...DEFAULT_PREFERENCES },
@@ -57,12 +65,25 @@ export function readEquipMeta(): EquipMeta {
   if (status !== "ok" || !data) return defaultMeta();
 
   const raw = data as unknown as Partial<EquipMeta>;
-  return {
+  const meta: EquipMeta = {
     version: raw.version || "",
+    installId: raw.installId || generateInstallId(),
     lastUpdated: raw.lastUpdated || "",
     lastScan: raw.lastScan || "",
     preferences: { ...DEFAULT_PREFERENCES, ...(raw.preferences || {}) },
   };
+
+  // Backfill installId for existing installs that predate this field
+  if (!raw.installId) {
+    writeEquipMeta(meta);
+  }
+
+  return meta;
+}
+
+/** Get or create the anonymous install identifier. */
+export function getInstallId(): string {
+  return readEquipMeta().installId;
 }
 
 export function writeEquipMeta(meta: EquipMeta): void {

@@ -11,7 +11,7 @@ import { InstallReportBuilder } from "../types";
 import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
-import { readEquipMeta } from "../equip-meta";
+import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
 import { readAugmentDef, writeAugmentDef } from "../augment-defs";
@@ -232,6 +232,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
           arch: process.arch,
           equipVersion,
           nodeVersion: process.version,
+          installId: getInstallId(),
         };
         fetch(`${REGISTRY_API}/telemetry`, {
           method: "POST",
