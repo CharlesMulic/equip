@@ -162,4 +162,4 @@ Telemetry is on by default. To disable, edit `~/.equip/equip.json` and set `pref
 
 ## License
 
-MIT — Charles Mulic / [CG3 LLC](https://cg3.io)
+MIT — Charles Mulic / [CG3, Inc.](https://cg3.io)
