@@ -1,0 +1,28 @@
+{
+  "name": "demo-direct-install",
+  "title": "Demo Direct Install",
+  "description": "Hermetic Docker acceptance fixture for the equip CLI",
+  "installMode": "direct",
+  "transport": "http",
+  "serverUrl": "__SERVER_URL__",
+  "rules": {
+    "content": "Use the registry helper augment when you need deterministic demo fixture data.",
+    "version": "1.0.0",
+    "marker": "demo-direct-install"
+  },
+  "skills": [
+    {
+      "name": "registry-helper",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "# Registry Helper\n\nUse this skill to inspect hermetic registry fixture responses during Docker acceptance tests."
+        },
+        {
+          "path": "examples/usage.md",
+          "content": "Run `equip demo-direct-install --platform claude-code,codex --non-interactive` to exercise this fixture."
+        }
+      ]
+    }
+  ]
+}

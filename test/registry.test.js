@@ -1,17 +1,22 @@
-// Tests for registry module: RegistryDef conversion, fetchRegistryDef resolution, caching.
+// Tests for registry module: RegistryDef conversion, fetchRegistryDef resolution, and CLI dispatch.
 
 "use strict";
 
 const { describe, it, before, after } = require("node:test");
 const assert = require("assert/strict");
 const fs = require("fs");
+const http = require("http");
 const path = require("path");
 const os = require("os");
+const { spawn } = require("child_process");
 
-const { registryDefToConfig, fetchRegistryDef } = require("../dist/lib/registry");
+const { registryDefToConfig } = require("../dist/lib/registry");
 const { Augment } = require("../dist/index");
 
-// ─── Test Helpers ───────────────────────────────────────────
+const FIXTURE_PATH = path.join(__dirname, "docker", "fixtures", "demo-direct-install.json");
+const FIXTURE_TEMPLATE = JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf-8"));
+const HERMETIC_FIXTURE_NAME = "demo-direct-install";
+const AUTH_FIXTURE_NAME = "demo-direct-install-auth";
 
 function tmpPath(prefix = "reg-test") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -28,7 +33,181 @@ function recordingLogger() {
   };
 }
 
-// ─── registryDefToConfig ──────────────────────────────────
+function mergeFixture(base, overrides = {}) {
+  return {
+    ...base,
+    ...overrides,
+    rules: {
+      ...base.rules,
+      ...(overrides.rules || {}),
+    },
+    skills: overrides.skills || base.skills,
+    auth: overrides.auth || base.auth,
+    postInstall: overrides.postInstall || base.postInstall,
+    platformHints: overrides.platformHints || base.platformHints,
+  };
+}
+
+function buildFixture(origin, name, overrides = {}) {
+  return mergeFixture(FIXTURE_TEMPLATE, {
+    name,
+    serverUrl: `${origin}/mcp/${name}`,
+    ...overrides,
+  });
+}
+
+function startFixtureRegistry() {
+  const requests = [];
+  let origin = "";
+
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      requests.push({ method: req.method || "GET", url: req.url || "/" });
+
+      const match = /^\/augments\/([^/]+)$/.exec(req.url || "");
+      if (req.method === "GET" && match) {
+        const name = decodeURIComponent(match[1]);
+        const fixtures = {
+          [HERMETIC_FIXTURE_NAME]: buildFixture(origin, HERMETIC_FIXTURE_NAME),
+          [AUTH_FIXTURE_NAME]: buildFixture(origin, AUTH_FIXTURE_NAME, {
+            title: "Demo Direct Install Auth",
+            auth: {
+              type: "api_key",
+              envKey: "DEMO_DIRECT_INSTALL_KEY",
+            },
+            rules: {
+              marker: AUTH_FIXTURE_NAME,
+              fileName: `${AUTH_FIXTURE_NAME}.md`,
+            },
+          }),
+        };
+
+        if (!fixtures[name]) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "not found" }));
+          return;
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(fixtures[name]));
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/telemetry") {
+        req.resume();
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "not found" }));
+    });
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      origin = `http://127.0.0.1:${address.port}`;
+      resolve({
+        origin,
+        requests,
+        close: () => new Promise((closeResolve, closeReject) => {
+          server.close((err) => {
+            if (err) closeReject(err);
+            else closeResolve();
+          });
+        }),
+      });
+    });
+  });
+}
+
+function setHermeticHome(prefix = "equip-registry-home") {
+  const homeDir = tmpPath(prefix);
+  const codexHome = path.join(homeDir, ".codex");
+  const previous = {
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+    HOMEDRIVE: process.env.HOMEDRIVE,
+    HOMEPATH: process.env.HOMEPATH,
+    CODEX_HOME: process.env.CODEX_HOME,
+  };
+
+  fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+  fs.mkdirSync(codexHome, { recursive: true });
+  fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+
+  process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir;
+  process.env.CODEX_HOME = codexHome;
+  delete process.env.HOMEDRIVE;
+  delete process.env.HOMEPATH;
+
+  return {
+    homeDir,
+    codexHome,
+    restore() {
+      if (previous.HOME === undefined) delete process.env.HOME;
+      else process.env.HOME = previous.HOME;
+      if (previous.USERPROFILE === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previous.USERPROFILE;
+      if (previous.HOMEDRIVE === undefined) delete process.env.HOMEDRIVE;
+      else process.env.HOMEDRIVE = previous.HOMEDRIVE;
+      if (previous.HOMEPATH === undefined) delete process.env.HOMEPATH;
+      else process.env.HOMEPATH = previous.HOMEPATH;
+      if (previous.CODEX_HOME === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous.CODEX_HOME;
+    },
+  };
+}
+
+function loadRegistryModule(registryUrl) {
+  const previous = process.env.EQUIP_REGISTRY_URL;
+  process.env.EQUIP_REGISTRY_URL = registryUrl;
+
+  const modulePath = require.resolve("../dist/lib/registry");
+  delete require.cache[modulePath];
+  const registryModule = require("../dist/lib/registry");
+
+  if (previous === undefined) delete process.env.EQUIP_REGISTRY_URL;
+  else process.env.EQUIP_REGISTRY_URL = previous;
+
+  return registryModule;
+}
+
+function runEquip(args, env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["bin/equip.js", ...args], {
+      cwd: path.join(__dirname, ".."),
+      env: {
+        ...process.env,
+        ...env,
+        NO_COLOR: "1",
+        FORCE_COLOR: "0",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", chunk => {
+      stdout += chunk;
+    });
+
+    child.stderr.on("data", chunk => {
+      stderr += chunk;
+    });
+
+    child.on("error", reject);
+    child.on("close", code => {
+      resolve({
+        code,
+        output: `${stdout}${stderr}`,
+      });
+    });
+  });
+}
 
 describe("registryDefToConfig", () => {
   it("converts minimal direct-mode tool", () => {
@@ -143,7 +322,6 @@ describe("registryDefToConfig", () => {
     assert.equal(config.hooks.length, 1);
     assert.equal(config.hooks[0].event, "PostToolUse");
     assert.ok(config.hookDir);
-    // ~ should be expanded
     assert.ok(!config.hookDir.startsWith("~"));
     assert.ok(config.hookDir.includes(".test"));
   });
@@ -156,37 +334,38 @@ describe("registryDefToConfig", () => {
   });
 });
 
-// ─── fetchRegistryDef ──────────────────────────────────────────
+describe("fetchRegistryDef", () => {
+  let registry;
+  let hermeticHome;
+  let fetchRegistryDef;
 
-describe("fetchRegistryDef", { skip: !!process.env.CI && "requires network access" }, () => {
-  it("fetches demo-fetch from live API", async () => {
+  before(async () => {
+    registry = await startFixtureRegistry();
+    hermeticHome = setHermeticHome("equip-fetch-registry-home");
+    ({ fetchRegistryDef } = loadRegistryModule(registry.origin));
+  });
+
+  after(async () => {
+    hermeticHome.restore();
+    fs.rmSync(hermeticHome.homeDir, { recursive: true, force: true });
+    await registry.close();
+  });
+
+  it("fetches the hermetic fixture from the local registry", async () => {
     const logger = recordingLogger();
-    const def = await fetchRegistryDef("demo-fetch", { logger });
+    const def = await fetchRegistryDef(HERMETIC_FIXTURE_NAME, { logger });
 
-    assert.ok(def, "Should fetch demo-fetch from API");
-    assert.equal(def.name, "demo-fetch");
+    assert.ok(def, "Should fetch the hermetic fixture from the local registry");
+    assert.equal(def.name, HERMETIC_FIXTURE_NAME);
     assert.equal(def.installMode, "direct");
-    assert.equal(def.serverUrl, "https://httpbin.org/anything");
+    assert.equal(def.serverUrl, `${registry.origin}/mcp/${HERMETIC_FIXTURE_NAME}`);
     assert.ok(def.rules, "Should have rules");
-    assert.equal(def.rules.marker, "demo-fetch");
+    assert.equal(def.rules.marker, HERMETIC_FIXTURE_NAME);
     assert.ok(def.skills, "Should have skills");
     assert.ok(def.skills.length > 0);
 
-    // Should have logged fetch and cache
     const infos = logger.calls.filter(c => c.level === "info");
     assert.ok(infos.some(c => c.msg.includes("fetched from API")));
-  });
-
-  it("fetches prior from live API as direct-mode", async () => {
-    const def = await fetchRegistryDef("prior");
-    assert.ok(def);
-    assert.equal(def.name, "prior");
-    assert.equal(def.installMode, "direct");
-    assert.equal(def.serverUrl, "https://api.cg3.io/mcp");
-    assert.ok(def.rules, "Should have rules");
-    assert.equal(def.rules.marker, "prior");
-    assert.ok(def.auth, "Should have auth config");
-    assert.equal(def.auth.type, "oauth_to_api_key");
   });
 
   it("returns null for nonexistent tool", async () => {
@@ -195,107 +374,141 @@ describe("fetchRegistryDef", { skip: !!process.env.CI && "requires network acces
   });
 
   it("caches fetched definitions", async () => {
-    // First fetch — hits API
-    await fetchRegistryDef("demo-fetch");
+    await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
 
-    // Verify cache file exists
-    const cachePath = path.join(os.homedir(), ".equip", "cache", "demo-fetch.json");
+    const cachePath = path.join(hermeticHome.homeDir, ".equip", "cache", `${HERMETIC_FIXTURE_NAME}.json`);
     assert.ok(fs.existsSync(cachePath), "Cache file should exist after fetch");
 
     const cached = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
-    assert.equal(cached.name, "demo-fetch");
+    assert.equal(cached.name, HERMETIC_FIXTURE_NAME);
     assert.equal(cached.installMode, "direct");
   });
 });
 
-// ─── Direct-mode CLI integration ───────────────────────────
+describe("direct-mode CLI", () => {
+  let registry;
+  let homeDir;
+  let codexHome;
+  let cliEnv;
 
-describe("direct-mode CLI", { skip: !!process.env.CI && "requires detected platforms and network" }, () => {
-  it("dry-run installs demo-fetch without writing files", () => {
-    const { execSync } = require("child_process");
-    // CLI writes to stderr, redirect stderr to stdout to capture
-    const out = execSync("node bin/equip.js demo-fetch --dry-run 2>&1", {
-      encoding: "utf-8",
-      cwd: path.join(__dirname, ".."),
-      timeout: 15000,
-      shell: true,
-    });
-    assert.ok(out.includes("Demo Fetch"), "Should show tool display name");
-    assert.ok(out.includes("DRY RUN"), "Should indicate dry run");
-    assert.ok(out.includes("MCP Server"), "Should show MCP install step");
-    assert.ok(out.includes("Done."), "Should complete successfully");
+  before(async () => {
+    registry = await startFixtureRegistry();
+    homeDir = tmpPath("equip-direct-cli-home");
+    codexHome = path.join(homeDir, ".codex");
+
+    fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+    fs.mkdirSync(codexHome, { recursive: true });
+    fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+
+    cliEnv = {
+      HOME: homeDir,
+      USERPROFILE: homeDir,
+      CODEX_HOME: codexHome,
+      EQUIP_REGISTRY_URL: registry.origin,
+    };
   });
 
-  it("verbose dry-run shows debug output", () => {
-    const { execSync } = require("child_process");
-    const out = execSync("node bin/equip.js demo-fetch --dry-run --verbose 2>&1", {
-      encoding: "utf-8",
-      cwd: path.join(__dirname, ".."),
-      timeout: 15000,
-      shell: true,
-    });
-    assert.ok(out.includes("[debug]"), "Should show debug-level output");
-    assert.ok(out.includes("Fetching augment definition from API"), "Should log API fetch");
+  after(async () => {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+    await registry.close();
   });
 
-  it("prior routes to direct-mode with auth", () => {
-    const { execSync } = require("child_process");
-    // Prior is now direct-mode. With --api-key and --dry-run we can test
-    // the full flow without OAuth or writing files.
-    const out = execSync("node bin/equip.js prior --api-key test-key --dry-run --verbose 2>&1", {
-      encoding: "utf-8",
-      cwd: path.join(__dirname, ".."),
-      timeout: 15000,
-      shell: true,
-    });
-    assert.ok(out.includes("direct"), "Should fetch as direct-mode");
-    assert.ok(out.includes("Authenticated"), "Should authenticate");
-    assert.ok(out.includes("MCP Server"), "Should install MCP");
-    assert.ok(out.includes("Behavioral Rules"), "Should install rules");
-    assert.ok(out.includes("Done."), "Should complete");
+  it("dry-run installs the hermetic fixture without writing platform files", async () => {
+    const result = await runEquip([
+      HERMETIC_FIXTURE_NAME,
+      "--dry-run",
+      "--platform",
+      "claude-code,codex",
+    ], cliEnv);
+
+    assert.equal(result.code, 0, result.output);
+    assert.ok(result.output.includes("Demo Direct Install"), "Should show tool title");
+    assert.ok(result.output.includes("DRY RUN"), "Should indicate dry run");
+    assert.ok(result.output.includes("MCP Server"), "Should show MCP install step");
+    assert.ok(result.output.includes("Done."), "Should complete successfully");
+    assert.equal(fs.existsSync(path.join(homeDir, ".claude.json")), false, "Dry run should not write Claude config");
+    assert.equal(fs.existsSync(path.join(codexHome, "config.toml")), false, "Dry run should not write Codex config");
   });
 
-  it("--platform flag filters platforms", () => {
-    const { execSync } = require("child_process");
-    const out = execSync("node bin/equip.js demo-fetch --platform claude-code --dry-run 2>&1", {
-      encoding: "utf-8",
-      cwd: path.join(__dirname, ".."),
-      timeout: 15000,
-      shell: true,
-    });
-    assert.ok(out.includes("Claude Code"), "Should include Claude Code");
-    assert.ok(!out.includes("Cursor"), "Should NOT include Cursor");
-    assert.ok(out.includes("1 platform configured"), "Should show 1 platform");
+  it("verbose dry-run shows debug output", async () => {
+    const result = await runEquip([
+      HERMETIC_FIXTURE_NAME,
+      "--dry-run",
+      "--verbose",
+      "--platform",
+      "claude-code,codex",
+    ], cliEnv);
+
+    assert.equal(result.code, 0, result.output);
+    assert.ok(result.output.includes("[debug]"), "Should show debug-level output");
+    assert.ok(result.output.includes("Fetching augment definition from API"), "Should log API fetch");
   });
 
-  it("equip update <tool> re-fetches and re-installs", () => {
-    const { execSync } = require("child_process");
-    const out = execSync("node bin/equip.js update demo-fetch --dry-run 2>&1", {
-      encoding: "utf-8",
-      cwd: path.join(__dirname, ".."),
-      timeout: 15000,
-      shell: true,
-    });
-    assert.ok(out.includes("equip update"), "Should show update header");
-    assert.ok(out.includes("Demo Fetch"), "Should fetch tool definition");
-    assert.ok(out.includes("Done."), "Should complete");
+  it("authenticated direct-mode fixtures route through auth flow", async () => {
+    const result = await runEquip([
+      AUTH_FIXTURE_NAME,
+      "--api-key",
+      "test-key",
+      "--dry-run",
+      "--verbose",
+      "--platform",
+      "claude-code,codex",
+    ], cliEnv);
+
+    assert.equal(result.code, 0, result.output);
+    assert.ok(result.output.includes("direct"), "Should fetch as direct-mode");
+    assert.ok(result.output.includes("Authenticated"), "Should authenticate");
+    assert.ok(result.output.includes("MCP Server"), "Should install MCP");
+    assert.ok(result.output.includes("Behavioral Rules"), "Should install rules");
+    assert.ok(result.output.includes("Done."), "Should complete");
   });
 
-  it("prior definition includes new data fields", async () => {
+  it("--platform flag filters platforms", async () => {
+    const result = await runEquip([
+      HERMETIC_FIXTURE_NAME,
+      "--platform",
+      "claude-code",
+      "--dry-run",
+    ], cliEnv);
+
+    assert.equal(result.code, 0, result.output);
+    assert.ok(result.output.includes("Claude Code"), "Should include Claude Code");
+    assert.ok(!result.output.includes("Codex"), "Should filter out Codex");
+    assert.ok(result.output.includes("1 platform configured"), "Should show 1 platform");
+  });
+
+  it("equip update <tool> re-fetches and re-installs", async () => {
+    const result = await runEquip([
+      "update",
+      HERMETIC_FIXTURE_NAME,
+      "--dry-run",
+      "--platform",
+      "claude-code,codex",
+    ], cliEnv);
+
+    assert.equal(result.code, 0, result.output);
+    assert.ok(result.output.includes("equip update"), "Should show update header");
+    assert.ok(result.output.includes("Demo Direct Install"), "Should fetch tool definition");
+    assert.ok(result.output.includes("Done."), "Should complete");
+  });
+});
+
+describe("live registry contract", {
+  skip: !process.env.EQUIP_LIVE_REGISTRY_TESTS && "set EQUIP_LIVE_REGISTRY_TESTS=1 to run live registry contract checks",
+}, () => {
+  it("prior definition includes current registry data fields", async () => {
+    const { fetchRegistryDef } = loadRegistryModule("https://api.cg3.io/equip");
     const def = await fetchRegistryDef("prior");
+
     assert.ok(def);
-    // Auth validation URL
     assert.ok(def.auth.validationUrl, "Should have validationUrl");
     assert.ok(def.auth.validationUrl.includes("/v1/agents/me"));
-    // Post-install actions
     assert.ok(def.postInstall, "Should have postInstall actions");
     assert.ok(Array.isArray(def.postInstall));
     assert.equal(def.postInstall[0].type, "open_with_code");
     assert.equal(def.postInstall[0].codePath, "data.code");
-    // Platform hints
     assert.ok(def.platformHints, "Should have platformHints");
     assert.ok(def.platformHints.cursor, "Should have Cursor hint");
-    // Rules fileName
     assert.ok(def.rules.fileName, "Should have rules fileName");
     assert.equal(def.rules.fileName, "prior.md");
   });
