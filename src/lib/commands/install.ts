@@ -32,6 +32,15 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   let apiKey: string | null = null;
   const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "api_key" as const } : { type: "none" as const });
 
+  // Prior Identity tokens are bearer credentials — require HTTPS on the augment's server URL
+  if (authConfig.type === "prior" && toolDef.serverUrl) {
+    const isLocal = toolDef.serverUrl.startsWith("http://localhost") || toolDef.serverUrl.startsWith("http://127.0.0.1");
+    if (!toolDef.serverUrl.startsWith("https://") && !isLocal) {
+      cli.fail("Prior Identity augments require HTTPS server URLs for security");
+      process.exit(1);
+    }
+  }
+
   if (authConfig.type !== "none") {
     const authResult = await resolveAuth({
       toolName: toolDef.name,

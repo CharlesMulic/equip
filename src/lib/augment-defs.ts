@@ -19,6 +19,12 @@ import type { RegistryDef } from "./registry";
 // ─── Types ──────────────────────────────────────────────────
 
 export type AugmentSource = "registry" | "local" | "wrapped";
+export type RegistryLifecycleStatus =
+  | "active"
+  | "retracted"
+  | "pending-review"
+  | "rejected"
+  | "synced-unreviewed";
 
 export interface AugmentRules {
   content: string;
@@ -115,8 +121,20 @@ export interface AugmentDef {
 
   // ── Registry tracking ──
 
-  /** Registry version this definition was synced from */
-  registryVersion?: string;
+  /** Backend content hash for the currently-synced registry snapshot */
+  registryContentHash?: string;
+
+  /** Backend ETag for the currently-synced registry representation */
+  registryEtag?: string;
+
+  /** Backend numeric version for the currently-synced registry snapshot */
+  registryVersionNumber?: number;
+
+  /** When the registry snapshot was most recently validated */
+  lastValidatedAt?: string;
+
+  /** Registry lifecycle status for this cached definition */
+  registryStatus?: RegistryLifecycleStatus;
 
   /** When the definition was last synced from the registry */
   syncedAt?: string;
@@ -165,6 +183,12 @@ export interface AugmentDef {
 
   createdAt: string;
   updatedAt: string;
+
+  /** @deprecated Legacy mixed field. Migrated to registryContentHash/registryVersionNumber. */
+  registryVersion?: string;
+
+  /** @deprecated Legacy "update available" flag written by the sidecar. */
+  registryLatestVersion?: number;
 }
 
 /** Provenance metadata for auto-wrapped augments */
@@ -245,29 +269,7 @@ export function readAugmentDef(name: string): AugmentDef | null {
     return null;
   }
 
-  const def = data as unknown as AugmentDef;
-
-  // Lazy migration: old single `weight` → baseWeight + loadedWeight
-  if (def.baseWeight === undefined && (def as any).weight !== undefined) {
-    def.baseWeight = (def as any).weight;
-    def.loadedWeight = 0;
-  }
-  // Ensure defaults
-  if (def.baseWeight === undefined) def.baseWeight = 0;
-  if (def.loadedWeight === undefined) def.loadedWeight = 0;
-
-  // Lazy migration: old wrappedFrom string → structured WrappedFromMeta
-  if (typeof def.wrappedFrom === "string") {
-    def.wrappedFrom = { type: "mcp", platform: def.wrappedFrom };
-  }
-
-  // Lazy migration: clear phantom transport on skill-only augments
-  // (Before transport was made optional, skill-only augments got transport: "stdio" as a placeholder)
-  if (def.transport && !def.serverUrl && !def.stdio) {
-    def.transport = undefined;
-  }
-
-  return def;
+  return normalizeAugmentDef(data as unknown as AugmentDef).def;
 }
 
 /** Promote a wrapped augment to local. One-way transition. */
@@ -285,6 +287,37 @@ export function promoteWrappedToLocal(name: string): AugmentDef | null {
 export function writeAugmentDef(def: AugmentDef): void {
   ensureAugmentsDir();
   atomicWriteFileSync(augmentPath(def.name), JSON.stringify(def, null, 2) + "\n");
+}
+
+/**
+ * Rewrite legacy registry tracking fields to the current schema.
+ * Safe to call on app startup; only dirty files are rewritten.
+ */
+export function migrateLegacyRegistryTrackingFields(): { migrated: number } {
+  ensureAugmentsDir();
+
+  let migrated = 0;
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(getAugmentsDir()).filter((f) => f.endsWith(".json"));
+  } catch {
+    return { migrated: 0 };
+  }
+
+  for (const file of files) {
+    const name = file.replace(/\.json$/, "");
+    const filePath = augmentPath(name);
+    const { data, status } = safeReadJsonSync(filePath);
+    if (status !== "ok" || !data) continue;
+
+    const normalized = normalizeAugmentDef(data as unknown as AugmentDef);
+    if (!normalized.changed) continue;
+
+    writeAugmentDef(normalized.def);
+    migrated++;
+  }
+
+  return { migrated };
 }
 
 /** List all augment definitions. */
@@ -373,7 +406,10 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
     loadedWeight: registryDef.loadedWeight || 0,
     installCount: registryDef.installCount || 0,
     modded: false,
-    registryVersion: registryDef.rules?.version || "1.0.0",
+    registryContentHash: registryDef.contentHash,
+    registryVersionNumber: registryDef.version,
+    lastValidatedAt: now,
+    registryStatus: "active",
     syncedAt: now,
     homepage: registryDef.homepage,
     repository: registryDef.repository,
@@ -391,7 +427,7 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
 /** Update an existing registry definition, preserving mods. */
 function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now: string): AugmentDef {
   const newVersion = registryDef.rules?.version || "1.0.0";
-  const oldVersion = existing.registryVersion || "";
+  const oldVersion = existing.rules?.version || existing.rulesUpstream?.version || "";
   const versionChanged = newVersion !== oldVersion;
 
   const updated: AugmentDef = {
@@ -416,7 +452,10 @@ function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now:
     subtitle: registryDef.subtitle || existing.subtitle,
     flavorText: registryDef.flavorText || existing.flavorText,
     installCount: registryDef.installCount ?? existing.installCount,
-    registryVersion: newVersion,
+    registryContentHash: registryDef.contentHash,
+    registryVersionNumber: registryDef.version ?? existing.registryVersionNumber,
+    lastValidatedAt: now,
+    registryStatus: "active",
     syncedAt: now,
     updatedAt: now,
   };
@@ -446,6 +485,75 @@ function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now:
 
   writeAugmentDef(updated);
   return updated;
+}
+
+function normalizeAugmentDef(def: AugmentDef): { def: AugmentDef; changed: boolean } {
+  let changed = false;
+  const legacy = def as AugmentDef & { weight?: number; contentHash?: string; registryVersion?: string };
+
+  // Lazy migration: old single `weight` → baseWeight + loadedWeight
+  if (def.baseWeight === undefined && legacy.weight !== undefined) {
+    def.baseWeight = legacy.weight;
+    def.loadedWeight = 0;
+    changed = true;
+  }
+  // Ensure defaults
+  if (def.baseWeight === undefined) {
+    def.baseWeight = 0;
+    changed = true;
+  }
+  if (def.loadedWeight === undefined) {
+    def.loadedWeight = 0;
+    changed = true;
+  }
+
+  // Lazy migration: old wrappedFrom string → structured WrappedFromMeta
+  if (typeof def.wrappedFrom === "string") {
+    def.wrappedFrom = { type: "mcp", platform: def.wrappedFrom };
+    changed = true;
+  }
+
+  // Lazy migration: clear phantom transport on skill-only augments
+  // (Before transport was made optional, skill-only augments got transport: "stdio" as a placeholder)
+  if (def.transport && !def.serverUrl && !def.stdio) {
+    def.transport = undefined;
+    changed = true;
+  }
+
+  // Legacy sidecar writes stored the content hash under `contentHash`.
+  if (def.registryContentHash === undefined && typeof legacy.contentHash === "string" && legacy.contentHash.trim()) {
+    def.registryContentHash = legacy.contentHash.trim();
+    changed = true;
+  }
+
+  // Only migrate purely numeric legacy registry versions. Older sidecar builds
+  // also stored rules-version strings here; the authoritative value still lives
+  // under def.rules.version, so this legacy field can be dropped safely.
+  if (
+    def.registryVersionNumber === undefined &&
+    typeof legacy.registryVersion === "string" &&
+    /^\d+$/.test(legacy.registryVersion.trim())
+  ) {
+    def.registryVersionNumber = parseInt(legacy.registryVersion.trim(), 10);
+    changed = true;
+  }
+
+  if (def.source === "registry" && def.registryStatus === undefined) {
+    def.registryStatus = "active";
+    changed = true;
+  }
+
+  if ("contentHash" in legacy) {
+    delete legacy.contentHash;
+    changed = true;
+  }
+
+  if ("registryVersion" in legacy) {
+    delete legacy.registryVersion;
+    changed = true;
+  }
+
+  return { def, changed };
 }
 
 // ─── Local Augments ─────────────────────────────────────────

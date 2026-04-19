@@ -17,7 +17,7 @@ import * as cli from "./cli";
 // ─── Types ─────────────────────────────────────────────────
 
 export interface AuthConfig {
-  type: "none" | "api_key" | "oauth" | "oauth_to_api_key";
+  type: "none" | "api_key" | "oauth" | "oauth_to_api_key" | "prior";
 
   /**
    * Identity provider for this augment's OAuth flow.
@@ -92,6 +92,14 @@ export interface AuthResolveOptions {
   apiKey?: string | null;
   nonInteractive?: boolean;
   dryRun?: boolean;
+  /** Equip session for Prior Identity auth. Provided by the sidecar bridge. */
+  session?: {
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: string;
+    tokenUrl: string;
+    clientId: string;
+  };
 }
 
 export interface AuthResult {
@@ -441,8 +449,14 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
   // 2. Stored credential
   const stored = readStoredCredential(toolName);
   if (stored?.credential) {
-    logger.info("Using stored credential", { toolName });
-    return { credential: stored.credential, method: "stored" };
+    // For 'prior' type, check if the identity token is expired before reusing
+    if (auth.type === "prior" && isJwtExpired(stored.credential)) {
+      logger.info("Stored Prior identity token expired, refreshing", { toolName });
+      // Fall through to auth flow below
+    } else {
+      logger.info("Using stored credential", { toolName });
+      return { credential: stored.credential, method: "stored" };
+    }
   }
 
   // 3. Environment variable
@@ -461,12 +475,250 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
       return resolveOAuth(toolName, auth, logger, nonInteractive, dryRun);
     case "oauth_to_api_key":
       return resolveOAuthToApiKey(toolName, auth, logger, nonInteractive, dryRun);
+    case "prior":
+      return resolvePrior(toolName, logger, nonInteractive, dryRun, options.session);
     default:
       return { credential: null, method: "unknown", error: `Unknown auth type: ${auth.type}` };
   }
 }
 
-// ─── API Key Flow ──────────────────────────────────────────
+// ─── Prior Identity Flow ──────────────────────────────────
+
+// Override only allowed in development to prevent credential redirect attacks in production
+const IDENTITY_TOKEN_URL = (process.env.NODE_ENV === "development" && process.env.EQUIP_IDENTITY_URL)
+  || "https://api.cg3.io";
+
+/** Check if a JWT string is expired (decode payload without verification). */
+function isJwtExpired(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf-8"));
+    if (typeof payload.exp === "number") {
+      return payload.exp < Math.floor(Date.now() / 1000);
+    }
+  } catch { /* can't decode */ }
+  return false;
+}
+
+/** Check if a JWT expires within the given number of seconds. */
+function isJwtExpiringSoon(token: string, withinSeconds: number): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf-8"));
+    if (typeof payload.exp === "number") {
+      return payload.exp < Math.floor(Date.now() / 1000) + withinSeconds;
+    }
+  } catch { /* can't decode */ }
+  return false;
+}
+
+async function resolvePrior(
+  toolName: string,
+  logger: EquipLogger,
+  nonInteractive: boolean,
+  dryRun: boolean,
+  session?: AuthResolveOptions["session"],
+): Promise<AuthResult> {
+  // Try reading session from disk if not provided
+  if (!session) {
+    try {
+      const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+      const raw = fs.readFileSync(sessionPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed?.accessToken && parsed?.refreshToken && parsed?.expiresAt) {
+        session = {
+          accessToken: parsed.accessToken,
+          refreshToken: parsed.refreshToken,
+          expiresAt: parsed.expiresAt,
+          tokenUrl: parsed.tokenUrl || "https://api.cg3.io/token",
+          clientId: parsed.clientId || "equip-desktop",
+        };
+      }
+    } catch { /* no session file */ }
+  }
+
+  if (!session) {
+    return { credential: null, method: "prior", error: "Not logged into Equip. Run 'equip login' first." };
+  }
+
+  // If the session token is expired:
+  // 1. Try re-reading from disk (the sidecar/bridge may have already refreshed it)
+  // 2. If still expired, attempt an inline refresh (for CLI callers without a sidecar)
+  if (isJwtExpired(session.accessToken)) {
+    logger.info("Session token expired, re-reading from disk");
+    let refreshed = false;
+    try {
+      const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+      const raw = fs.readFileSync(sessionPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed?.accessToken && !isJwtExpired(parsed.accessToken)) {
+        session.accessToken = parsed.accessToken;
+        if (parsed.refreshToken) session.refreshToken = parsed.refreshToken;
+        if (parsed.expiresAt) session.expiresAt = parsed.expiresAt;
+        refreshed = true;
+      }
+    } catch { /* disk read failed */ }
+
+    // Fallback: inline refresh for CLI callers (no sidecar running)
+    if (!refreshed && session.refreshToken) {
+      logger.info("Attempting inline session refresh");
+      try {
+        const refreshRes = await fetch(session.tokenUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: session.refreshToken,
+            client_id: session.clientId,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (refreshRes.ok) {
+          const data = await refreshRes.json() as any;
+          session.accessToken = data.access_token;
+          if (data.refresh_token) session.refreshToken = data.refresh_token;
+          session.expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+          // Write refreshed session to disk so other callers benefit
+          try {
+            const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+            const existing = JSON.parse(fs.readFileSync(sessionPath, "utf-8"));
+            existing.accessToken = session.accessToken;
+            if (data.refresh_token) existing.refreshToken = session.refreshToken;
+            existing.expiresAt = session.expiresAt;
+            existing.updatedAt = new Date().toISOString();
+            atomicWriteFileSync(sessionPath, JSON.stringify(existing, null, 2));
+          } catch { /* best effort */ }
+          refreshed = true;
+        }
+      } catch { /* refresh failed */ }
+    }
+
+    if (!refreshed) {
+      return { credential: null, method: "prior", error: "Session expired. Please log in again." };
+    }
+  }
+
+  if (dryRun) {
+    logger.info("[dry-run] Would request Prior Identity token", { toolName });
+    return { credential: "dry-run-prior-token", method: "prior" };
+  }
+
+  // Request identity token from Prior
+  try {
+    const res = await fetch(`${IDENTITY_TOKEN_URL}/v1/identity/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify({ augmentName: toolName }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    const body = await res.json() as any;
+    if (!body.ok || !body.data?.token) {
+      const errMsg = body.error?.message || `HTTP ${res.status}`;
+      return { credential: null, method: "prior", error: `Failed to obtain identity token: ${errMsg}` };
+    }
+
+    const identityToken = body.data.token;
+
+    // Store only the identity token — NOT the session tokens.
+    // Session refresh tokens are sensitive and should only live in session.json.
+    // refreshPriorTokens() reads the session from disk when it needs to refresh.
+    writeStoredCredential({
+      authType: "prior",
+      credential: identityToken,
+      toolName,
+      storedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    logger.info("Prior Identity token obtained", { toolName });
+    return { credential: identityToken, method: "prior" };
+  } catch (e: any) {
+    return { credential: null, method: "prior", error: `Identity token request failed: ${e.message}` };
+  }
+}
+
+/**
+ * Refresh all stored Prior Identity tokens that are expiring soon.
+ * Called by the background refresh daemon (Phase 1C).
+ */
+export async function refreshPriorTokens(
+  options: { logger?: EquipLogger; session?: AuthResolveOptions["session"] } = {},
+): Promise<Map<string, { success: boolean; error?: string }>> {
+  const logger = options.logger || NOOP_LOGGER;
+  const results = new Map<string, { success: boolean; error?: string }>();
+
+  // List all stored credentials
+  const credDir = getCredentialsDir();
+  if (!fs.existsSync(credDir)) return results;
+
+  const files = fs.readdirSync(credDir).filter(f => f.endsWith(".json"));
+  for (const file of files) {
+    try {
+      const raw = fs.readFileSync(path.join(credDir, file), "utf-8");
+      const cred: StoredCredential = JSON.parse(raw);
+      if (cred.authType !== "prior") continue;
+
+      // Check if token expires within 25 minutes
+      if (!isJwtExpiringSoon(cred.credential, 25 * 60)) {
+        results.set(cred.toolName, { success: true }); // still valid
+        continue;
+      }
+
+      logger.info("Refreshing expiring Prior Identity token", { toolName: cred.toolName });
+
+      // Read session from provided option or from disk (canonical source).
+      // Credential files no longer store session tokens (security: avoid duplicating refresh tokens).
+      let session = options.session;
+      if (!session) {
+        try {
+          const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+          const sessionRaw = fs.readFileSync(sessionPath, "utf-8");
+          const parsed = JSON.parse(sessionRaw);
+          if (parsed?.accessToken) {
+            session = {
+              accessToken: parsed.accessToken,
+              refreshToken: parsed.refreshToken || "",
+              expiresAt: parsed.expiresAt || "",
+              tokenUrl: parsed.tokenUrl || "https://api.cg3.io/token",
+              clientId: parsed.clientId || "equip-desktop",
+            };
+          }
+        } catch { /* no session file */ }
+      }
+      if (!session?.accessToken) {
+        results.set(cred.toolName, { success: false, error: "No session available for refresh" });
+        continue;
+      }
+
+      const authResult = await resolvePrior(cred.toolName, logger, true, false, session);
+
+      if (authResult.credential) {
+        // Rewrite MCP platform configs with the new token so AI platforms pick it up
+        const configsUpdated = updatePlatformConfigs(cred.toolName, authResult.credential, logger);
+        logger.info("Prior Identity token refreshed", { toolName: cred.toolName, configsUpdated });
+        results.set(cred.toolName, { success: true });
+      } else {
+        results.set(cred.toolName, { success: false, error: authResult.error });
+      }
+    } catch (e: any) {
+      results.set(file.replace(".json", ""), { success: false, error: e.message });
+    }
+  }
+
+  return results;
+}
+
+// ─── API Key Flow ─────────────────────────────────────────��
 
 async function resolveApiKey(
   toolName: string, auth: AuthConfig, logger: EquipLogger,

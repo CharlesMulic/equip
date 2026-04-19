@@ -111,6 +111,11 @@ export interface RegistryDef {
   hashAlgorithm?: string;
 }
 
+export type RegistryValidationResult =
+  | { status: "fetched"; def: RegistryDef; etag?: string }
+  | { status: "not-modified"; etag?: string }
+  | { status: "missing" };
+
 // ─── Fetch ─────────────────────────────────────────────────
 
 /**
@@ -129,44 +134,14 @@ export async function fetchRegistryDef(
 
   // 1. Try the registry API
   try {
-    const url = `${REGISTRY_API}/augments/${encodeURIComponent(name)}`;
-    logger.debug("Fetching augment definition from API", { url });
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const raw = await res.json() as RegistryDef & { displayName?: string };
-      // Normalize: title is the canonical field, displayName is deprecated
-      const def: RegistryDef = { ...raw, title: raw.title || raw.displayName || raw.name };
-      logger.info("Augment definition fetched from API", { name, installMode: def.installMode });
-
-      // Verify content hash integrity if present
-      if (def.contentHash) {
-        const { computeContentHash, extractManifest } = await import("./content-hash.js");
-        const computed = computeContentHash(extractManifest(def));
-        if (computed !== def.contentHash) {
-          logger.warn("INTEGRITY FAILURE: content hash mismatch — rejecting definition", {
-            name, expected: def.contentHash, computed, version: def.version,
-          });
-          // Fall back to cache (which has a previously-verified version)
-          return readCachedAugmentDef(name, logger);
-        }
-      }
-
-      cacheAugmentDef(name, def, logger);
-      return def;
+    const result = await fetchRegistryDefFromApi(name, logger);
+    if (result.status === "fetched") {
+      cacheAugmentDef(name, result.def, logger);
+      return result.def;
     }
-
-    if (res.status === 404) {
-      logger.debug("Augment not found in registry", { name });
+    if (result.status === "missing") {
       return null;
     }
-
-    logger.warn("API returned unexpected status", { name, status: res.status });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.debug("API fetch failed, falling back to cache", { name, error: msg });
@@ -174,6 +149,19 @@ export async function fetchRegistryDef(
 
   // 2. Try local cache
   return readCachedAugmentDef(name, logger);
+}
+
+/**
+ * Validate an augment directly against the live registry.
+ * Unlike fetchRegistryDef(), this does not fall back to local cache.
+ */
+export async function validateAgainstRegistry(
+  name: string,
+  options: { logger?: EquipLogger; ifNoneMatch?: string } = {},
+): Promise<RegistryValidationResult> {
+  validateToolName(name);
+  const logger = options.logger || NOOP_LOGGER;
+  return fetchRegistryDefFromApi(name, logger, { ifNoneMatch: options.ifNoneMatch });
 }
 
 // ─── Cache ─────────────────────────────────────────────────
@@ -200,6 +188,86 @@ function readCachedAugmentDef(name: string, logger: EquipLogger): RegistryDef | 
   } catch {
     return null;
   }
+}
+
+async function fetchRegistryDefFromApi(
+  name: string,
+  logger: EquipLogger,
+  options: { ifNoneMatch?: string } = {},
+): Promise<RegistryValidationResult> {
+  const url = `${REGISTRY_API}/augments/${encodeURIComponent(name)}`;
+  const ifNoneMatch = formatIfNoneMatch(options.ifNoneMatch);
+  logger.debug("Fetching augment definition from API", { url, conditional: !!ifNoneMatch });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const headers = ifNoneMatch ? { "If-None-Match": ifNoneMatch } : undefined;
+    const res = await fetch(url, { signal: controller.signal, headers });
+
+    if (res.status === 304) {
+      logger.info("Augment definition not modified", { name });
+      return {
+        status: "not-modified",
+        etag: extractStrongEtag(res.headers.get("etag")) || options.ifNoneMatch,
+      };
+    }
+
+    if (res.ok) {
+      const raw = await res.json() as RegistryDef & { displayName?: string };
+      // Normalize: title is the canonical field, displayName is deprecated
+      const def: RegistryDef = { ...raw, title: raw.title || raw.displayName || raw.name };
+      logger.info("Augment definition fetched from API", { name, installMode: def.installMode });
+
+      // Verify content hash integrity if present
+      if (def.contentHash) {
+        const { computeContentHash, extractManifest } = await import("./content-hash.js");
+        const computed = computeContentHash(extractManifest(def));
+        if (computed !== def.contentHash) {
+          logger.warn("INTEGRITY FAILURE: content hash mismatch — rejecting definition", {
+            name, expected: def.contentHash, computed, version: def.version,
+          });
+          throw new Error(`Registry content hash mismatch for ${name}`);
+        }
+      }
+
+      return {
+        status: "fetched",
+        def,
+        etag: extractStrongEtag(res.headers.get("etag")) || def.contentHash,
+      };
+    }
+
+    if (res.status === 404) {
+      logger.debug("Augment not found in registry", { name });
+      return { status: "missing" };
+    }
+
+    throw new Error(`Registry API returned ${res.status} for ${name}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function formatIfNoneMatch(contentHash?: string): string | undefined {
+  const trimmed = contentHash?.trim();
+  if (!trimmed) return undefined;
+  if ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) || trimmed === "*") {
+    return trimmed;
+  }
+  return `"${trimmed}"`;
+}
+
+function extractStrongEtag(headerValue: string | null): string | undefined {
+  if (!headerValue) return undefined;
+  const trimmed = headerValue.trim();
+  if (!trimmed) return undefined;
+  const withoutWeakPrefix = trimmed.startsWith("W/") ? trimmed.slice(2).trim() : trimmed;
+  if (withoutWeakPrefix.startsWith("\"") && withoutWeakPrefix.endsWith("\"")) {
+    return withoutWeakPrefix.slice(1, -1);
+  }
+  return withoutWeakPrefix || undefined;
 }
 
 // ─── Conversion ────────────────────────────────────────────

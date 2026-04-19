@@ -19,6 +19,7 @@ const {
   createLocalAugment,
   wrapUnmanaged,
   promoteWrappedToLocal,
+  migrateLegacyRegistryTrackingFields,
   modAugmentRules,
   resetAugmentRules,
 } = require("../dist/lib/augment-defs");
@@ -78,6 +79,8 @@ function makeRegistryToolDef(overrides = {}) {
     ],
     homepage: "https://example.com",
     categories: ["testing"],
+    version: 1,
+    contentHash: "hash-v1",
     ...overrides,
   };
 }
@@ -176,7 +179,9 @@ describe("syncFromRegistry", () => {
     assert.ok(result.requiresAuth);
     assert.equal(result.rules.version, "1.0.0");
     assert.equal(result.skills.length, 1);
-    assert.equal(result.registryVersion, "1.0.0");
+    assert.equal(result.registryVersionNumber, 1);
+    assert.equal(result.registryContentHash, "hash-v1");
+    assert.equal(result.registryStatus, "active");
     assert.ok(result.syncedAt);
     assert.ok(!result.modded);
 
@@ -193,13 +198,16 @@ describe("syncFromRegistry", () => {
     // Second sync with updated description
     const updated = syncFromRegistry(makeRegistryToolDef({
       description: "Updated description",
+      version: 2,
+      contentHash: "hash-v2",
       rules: { content: "## Updated\n\nNew rules.", version: "2.0.0", marker: "test-tool" },
     }));
 
     assert.equal(updated.description, "Updated description");
     assert.equal(updated.rules.version, "2.0.0");
     assert.equal(updated.rules.content, "## Updated\n\nNew rules.");
-    assert.equal(updated.registryVersion, "2.0.0");
+    assert.equal(updated.registryVersionNumber, 2);
+    assert.equal(updated.registryContentHash, "hash-v2");
     assert.ok(!updated.modded);
     assert.equal(updated.rulesUpstream, undefined, "No upstream needed when not modded");
   });
@@ -217,6 +225,8 @@ describe("syncFromRegistry", () => {
 
     // Registry pushes update
     const updated = syncFromRegistry(makeRegistryToolDef({
+      version: 2,
+      contentHash: "hash-v2",
       rules: { content: "## Updated Official\n\nNew official rules.", version: "2.0.0", marker: "test-tool" },
     }));
 
@@ -230,7 +240,8 @@ describe("syncFromRegistry", () => {
     assert.equal(updated.rulesUpstream.content, "## Updated Official\n\nNew official rules.");
 
     assert.ok(updated.modded);
-    assert.equal(updated.registryVersion, "2.0.0");
+    assert.equal(updated.registryVersionNumber, 2);
+    assert.equal(updated.registryContentHash, "hash-v2");
   });
 
   it("detects version change and flags for review", () => {
@@ -242,13 +253,16 @@ describe("syncFromRegistry", () => {
     });
 
     const v2 = syncFromRegistry(makeRegistryToolDef({
+      version: 2,
+      contentHash: "hash-v2",
       rules: { content: "v2 official", version: "2.0.0", marker: "test-tool" },
     }));
 
     // The definition should have both versions available for the UI to diff
     assert.equal(v2.rules.content, "custom"); // user's version
     assert.equal(v2.rulesUpstream.content, "v2 official"); // new upstream
-    assert.notEqual(v2.registryVersion, v2.rules.version); // diverged
+    assert.equal(v2.registryVersionNumber, 2);
+    assert.notEqual(String(v2.registryVersionNumber), v2.rules.version); // diverged
   });
 
   it("does not overwrite local augment with same name", () => {
@@ -596,5 +610,38 @@ describe("Authoring lifecycle fields", () => {
     assert.equal(def.publishIntent, true);
     assert.equal(def.hasUnpublishedChanges, false);
     assert.equal(def.publishedVersion, 3);
+  });
+
+  it("migrates legacy registry tracking fields on startup", () => {
+    const dir = path.join(os.homedir(), ".equip", "augments");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "legacy-registry.json"), JSON.stringify({
+      name: "legacy-registry",
+      source: "registry",
+      title: "Legacy Registry",
+      description: "legacy",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      requiresAuth: false,
+      skills: [],
+      baseWeight: 0,
+      loadedWeight: 0,
+      modded: false,
+      contentHash: "legacy-hash",
+      registryVersion: "42",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    }, null, 2));
+
+    const migrated = migrateLegacyRegistryTrackingFields();
+    const def = readAugmentDef("legacy-registry");
+
+    assert.equal(migrated.migrated, 1);
+    assert.ok(def);
+    assert.equal(def.registryContentHash, "legacy-hash");
+    assert.equal(def.registryVersionNumber, 42);
+    assert.equal(def.registryStatus, "active");
+    assert.equal("contentHash" in def, false);
+    assert.equal("registryVersion" in def, false);
   });
 });
