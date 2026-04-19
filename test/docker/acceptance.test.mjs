@@ -71,10 +71,42 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "equip-docker-acceptance-"));
   const homeDir = path.join(workspaceRoot, "home");
   const codexHome = path.join(homeDir, ".codex");
+  const claudeConfigPath = path.join(homeDir, ".claude.json");
+  const codexConfigPath = path.join(codexHome, "config.toml");
+  const claudeRulesPath = path.join(homeDir, ".claude", "CLAUDE.md");
+  const codexRulesPath = path.join(codexHome, "AGENTS.md");
+  const claudeBaselineRules = "# Existing Claude Rules\n\nKeep this Claude baseline.\n";
+  const codexBaselineRules = "# Existing Codex Rules\n\nKeep this Codex baseline.\n";
+  const claudeExistingServerUrl = "http://127.0.0.1:65535/existing-claude";
+  const codexExistingServerUrl = "http://127.0.0.1:65535/existing-codex";
 
   fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
   fs.mkdirSync(codexHome, { recursive: true });
   fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+  fs.writeFileSync(
+    claudeConfigPath,
+    JSON.stringify({
+      theme: "baseline-theme",
+      mcpServers: {
+        "existing-tool": {
+          url: claudeExistingServerUrl,
+          type: "http",
+        },
+      },
+    }, null, 2) + "\n",
+    "utf-8",
+  );
+  fs.writeFileSync(
+    codexConfigPath,
+    [
+      "[mcp_servers.existing-tool]",
+      `url = "${codexExistingServerUrl}"`,
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+  fs.writeFileSync(claudeRulesPath, claudeBaselineRules, "utf-8");
+  fs.writeFileSync(codexRulesPath, codexBaselineRules, "utf-8");
 
   const requests = [];
   let serverUrl = "";
@@ -107,9 +139,19 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 
+  const homeRoot = path.parse(homeDir).root;
+  const windowsHomePath = process.platform === "win32"
+    ? homeDir.slice(homeRoot.length - 1)
+    : undefined;
+
   const env = {
     ...process.env,
     HOME: homeDir,
+    USERPROFILE: homeDir,
+    HOMEDRIVE: process.platform === "win32" ? homeRoot.replace(/[\\\/]+$/, "") : process.env.HOMEDRIVE,
+    HOMEPATH: windowsHomePath ?? process.env.HOMEPATH,
+    APPDATA: path.join(homeDir, "AppData", "Roaming"),
+    LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
     CODEX_HOME: codexHome,
     EQUIP_REGISTRY_URL: `http://127.0.0.1:${address.port}`,
     NO_COLOR: "1",
@@ -132,23 +174,27 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
     "fixture registry should receive the augment definition request",
   );
 
-  const claudeConfigPath = path.join(homeDir, ".claude.json");
   const claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, "utf-8"));
   assert.equal(claudeConfig.mcpServers["demo-direct-install"].url, serverUrl);
   assert.equal(claudeConfig.mcpServers["demo-direct-install"].type, "http");
+  assert.equal(claudeConfig.mcpServers["existing-tool"].url, claudeExistingServerUrl);
+  assert.equal(claudeConfig.theme, "baseline-theme");
 
-  const codexConfigPath = path.join(codexHome, "config.toml");
   const codexConfig = fs.readFileSync(codexConfigPath, "utf-8");
   assert.match(codexConfig, /\[mcp_servers\.demo-direct-install\]/);
   assert.match(codexConfig, new RegExp(`url = "${escapeRegExp(serverUrl)}"`));
+  assert.match(codexConfig, /\[mcp_servers\.existing-tool\]/);
+  assert.match(codexConfig, new RegExp(`url = "${escapeRegExp(codexExistingServerUrl)}"`));
 
-  const claudeRules = fs.readFileSync(path.join(homeDir, ".claude", "CLAUDE.md"), "utf-8");
+  const claudeRules = fs.readFileSync(claudeRulesPath, "utf-8");
   assert.match(claudeRules, /<!-- demo-direct-install:v1\.0\.0 -->/);
   assert.match(claudeRules, /deterministic demo fixture data/);
+  assert.match(claudeRules, /Keep this Claude baseline/);
 
-  const codexRules = fs.readFileSync(path.join(codexHome, "AGENTS.md"), "utf-8");
+  const codexRules = fs.readFileSync(codexRulesPath, "utf-8");
   assert.match(codexRules, /<!-- demo-direct-install:v1\.0\.0 -->/);
   assert.match(codexRules, /deterministic demo fixture data/);
+  assert.match(codexRules, /Keep this Codex baseline/);
 
   const claudeSkillDir = path.join(homeDir, ".claude", "skills", "demo-direct-install", "registry-helper");
   assert.equal(
@@ -179,6 +225,8 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   const platformsMeta = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "platforms.json"), "utf-8"));
   assert.equal(platformsMeta.platforms["claude-code"].detected, true);
   assert.equal(platformsMeta.platforms.codex.detected, true);
+  assert.ok(fs.existsSync(path.join(homeDir, ".equip", "snapshots", "claude-code", ".initial-taken")));
+  assert.ok(fs.existsSync(path.join(homeDir, ".equip", "snapshots", "codex", ".initial-taken")));
 
   const claudeScan = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "platforms", "claude-code.json"), "utf-8"));
   assert.equal(claudeScan.augments["demo-direct-install"].managed, true);
@@ -193,4 +241,71 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   const doctor = await runCli(["bin/equip.js", "doctor"], env);
   assert.equal(doctor.code, 0, doctor.output);
   assert.match(doctor.output, /claude|codex/i);
+
+  const uninstall = await runCli(["bin/unequip.js", "demo-direct-install"], env);
+  assert.equal(uninstall.code, 0, uninstall.output);
+  assert.match(uninstall.output, /demo-direct-install removed from 2 platforms/i);
+
+  const claudeConfigAfterUninstall = JSON.parse(fs.readFileSync(claudeConfigPath, "utf-8"));
+  assert.ok(!claudeConfigAfterUninstall.mcpServers["demo-direct-install"]);
+  assert.equal(claudeConfigAfterUninstall.mcpServers["existing-tool"].url, claudeExistingServerUrl);
+  assert.equal(claudeConfigAfterUninstall.theme, "baseline-theme");
+
+  const codexConfigAfterUninstall = fs.readFileSync(codexConfigPath, "utf-8");
+  assert.doesNotMatch(codexConfigAfterUninstall, /\[mcp_servers\.demo-direct-install\]/);
+  assert.match(codexConfigAfterUninstall, /\[mcp_servers\.existing-tool\]/);
+  assert.match(codexConfigAfterUninstall, new RegExp(`url = "${escapeRegExp(codexExistingServerUrl)}"`));
+
+  const claudeRulesAfterUninstall = fs.readFileSync(claudeRulesPath, "utf-8");
+  assert.doesNotMatch(claudeRulesAfterUninstall, /demo-direct-install/);
+  assert.match(claudeRulesAfterUninstall, /Keep this Claude baseline/);
+
+  const codexRulesAfterUninstall = fs.readFileSync(codexRulesPath, "utf-8");
+  assert.doesNotMatch(codexRulesAfterUninstall, /demo-direct-install/);
+  assert.match(codexRulesAfterUninstall, /Keep this Codex baseline/);
+
+  assert.ok(!fs.existsSync(claudeSkillDir));
+  assert.ok(!fs.existsSync(codexSkillDir));
+
+  const installationsAfterUninstall = JSON.parse(
+    fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"),
+  );
+  assert.ok(!installationsAfterUninstall.augments["demo-direct-install"]);
+
+  const reinstall = await runCli([
+    "bin/equip.js",
+    "demo-direct-install",
+    "--platform",
+    "claude-code,codex",
+    "--non-interactive",
+  ], env);
+  assert.equal(reinstall.code, 0, reinstall.output);
+
+  const restoreClaude = await runCli(["bin/equip.js", "restore", "claude-code", "--non-interactive"], env);
+  assert.equal(restoreClaude.code, 0, restoreClaude.output);
+  assert.match(restoreClaude.output, /Config file restored/);
+  assert.match(restoreClaude.output, /Rules file restored/);
+
+  const restoreCodex = await runCli(["bin/equip.js", "restore", "codex", "--non-interactive"], env);
+  assert.equal(restoreCodex.code, 0, restoreCodex.output);
+  assert.match(restoreCodex.output, /Config file restored/);
+  assert.match(restoreCodex.output, /Rules file restored/);
+
+  const claudeConfigAfterRestore = JSON.parse(fs.readFileSync(claudeConfigPath, "utf-8"));
+  assert.ok(!claudeConfigAfterRestore.mcpServers["demo-direct-install"]);
+  assert.equal(claudeConfigAfterRestore.mcpServers["existing-tool"].url, claudeExistingServerUrl);
+  assert.equal(claudeConfigAfterRestore.theme, "baseline-theme");
+
+  const codexConfigAfterRestore = fs.readFileSync(codexConfigPath, "utf-8");
+  assert.doesNotMatch(codexConfigAfterRestore, /\[mcp_servers\.demo-direct-install\]/);
+  assert.match(codexConfigAfterRestore, /\[mcp_servers\.existing-tool\]/);
+  assert.match(codexConfigAfterRestore, new RegExp(`url = "${escapeRegExp(codexExistingServerUrl)}"`));
+
+  const claudeRulesAfterRestore = fs.readFileSync(claudeRulesPath, "utf-8");
+  assert.doesNotMatch(claudeRulesAfterRestore, /demo-direct-install/);
+  assert.match(claudeRulesAfterRestore, /Keep this Claude baseline/);
+
+  const codexRulesAfterRestore = fs.readFileSync(codexRulesPath, "utf-8");
+  assert.doesNotMatch(codexRulesAfterRestore, /demo-direct-install/);
+  assert.match(codexRulesAfterRestore, /Keep this Codex baseline/);
 });
