@@ -26,7 +26,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test test/equip.test.js test/observability.test.js test/registry.test.js test/auth.test.js test/docs.test.js test/augment-defs.test.js test/platform-state.test.js test/snapshots.test.js test/security.test.js test/content-hash.test.js test/cli.test.js",
+    "test": "tsc && node --test test/equip.test.js test/observability.test.js test/registry.test.js test/auth.test.js test/docs.test.js test/augment-defs.test.js test/platform-state.test.js test/snapshots.test.js test/security.test.js test/content-hash.test.js test/cli.test.js test/pack-verification.test.mjs",
+    "test:pack": "npm run build && node scripts/ci/verify-pack.mjs",
     "test:docker:acceptance": "node scripts/ci/run-docker-acceptance.mjs",
     "test:docker:acceptance:internal": "npm run build && node --test test/docker/acceptance.test.mjs",
     "changeset": "changeset",

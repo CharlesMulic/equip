@@ -46,7 +46,9 @@ On pushes to `main` it:
 2. builds
 3. runs `npm test`
 4. runs `npm run test:docker:acceptance`
-5. uses `changesets/action` to either:
+5. runs `npm run test:pack`
+   and uploads a machine-readable pack verification artifact for debugging
+6. uses `changesets/action` to either:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged
 
@@ -76,6 +78,7 @@ Useful local release commands:
 ```bash
 npm run changeset
 npm run version-packages
+npm run test:pack
 npm run release
 ```
 

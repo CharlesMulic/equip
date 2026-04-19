@@ -43,6 +43,18 @@ jobs:
       - name: Run hermetic Docker acceptance
         run: npm run test:docker:acceptance
 
+      - name: Verify packed npm artifact
+        env:
+          PACK_VERIFICATION_OUTPUT_PATH: .generated/pack/pack-verification.json
+        run: npm run test:pack
+
+      - name: Upload pack verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-verification
+          path: .generated/pack/pack-verification.json
+          if-no-files-found: error
+
       - name: Configure npm token fallback
         run: |
           if [ -n "${NPM_TOKEN:-}" ]; then

@@ -48,9 +48,11 @@ unequip prior                  # Remove an augment
 ```bash
 npm test                       # Unit + integration coverage on the host
 npm run test:docker:acceptance # Hermetic Docker acceptance for fake Claude/Codex homes
+npm run test:pack             # Verify the actual npm tarball contents before publish
 ```
 
 The Docker acceptance lane is intentionally narrow: it boots a clean Node container, serves a local fixture registry, installs a direct-mode augment into fake Claude Code and Codex homes, and verifies the written MCP config, rules, skills, and `~/.equip` state. This is the right place for CLI-level install flows that should stay hermetic and CI-friendly without depending on live registry data.
+The pack verification lane now also emits a machine-readable JSON report in CI so release/publish failures point at the exact tarball contract that broke.
 
 ## Release Model
 
@@ -67,6 +69,8 @@ Maintainer workflow:
 - merge changesets to `main`
 - let the release workflow open or update the `Version packages` PR
 - merge that PR to publish `@cg3/equip`
+
+The release workflow now also verifies the actual packed npm tarball before publish, so public-package mistakes like missing CLI entrypoints or accidentally included source/test files fail before npm publish.
 
 The committed `package.json` version on `main` is the canonical release version. Tags and GitHub releases are outputs of that flow, not the mechanism that decides the version.
 
@@ -191,4 +195,4 @@ Telemetry is on by default. To disable, edit `~/.equip/equip.json` and set `pref
 
 ## License
 
-MIT — Charles Mulic / [CG3, Inc.](https://cg3.io)
+FSL-1.1-ALv2 — Charles Mulic / [CG3, Inc.](https://cg3.io)
