@@ -50,6 +50,19 @@ On pushes to `main` it:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged
 
+## GitHub PR Creation Auth
+
+The Changesets workflow needs permission to open the `Version packages` PR.
+
+You can satisfy that requirement in either of these ways:
+
+- enable repository setting `Settings -> Actions -> General -> Workflow permissions -> Allow GitHub Actions to create and approve pull requests`
+- set a repository secret named `RELEASE_GITHUB_TOKEN` and let the workflow use that token for PR creation
+
+If you use the built-in `GITHUB_TOKEN`, the repository setting must be enabled or the workflow will fail when it tries to create the release PR.
+
+If you use `RELEASE_GITHUB_TOKEN`, prefer a fine-grained personal access token scoped to this repository with write access to contents and pull requests.
+
 ## Publishing Auth
 
 Preferred path:

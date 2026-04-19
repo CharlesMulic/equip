@@ -69,6 +69,8 @@ Maintainer workflow:
 - let the release workflow open or update the `Version packages` PR
 - merge that PR to publish `@cg3/equip`
 
+For the PR-creation step, either enable `Settings -> Actions -> General -> Workflow permissions -> Allow GitHub Actions to create and approve pull requests`, or set a `RELEASE_GITHUB_TOKEN` repository secret for the workflow to use instead.
+
 The committed `package.json` version on `main` is the canonical release version. Tags and GitHub releases are outputs of that flow, not the mechanism that decides the version.
 
 See [Release Management](./docs/release-management.md) for the full release and publishing contract.
