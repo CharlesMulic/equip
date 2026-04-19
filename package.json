@@ -21,11 +21,17 @@
     "bin/",
     "demo/"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "tsc && node --test test/equip.test.js test/observability.test.js test/registry.test.js test/auth.test.js test/docs.test.js test/augment-defs.test.js test/platform-state.test.js test/snapshots.test.js test/security.test.js test/content-hash.test.js test/cli.test.js",
     "test:docker:acceptance": "node scripts/ci/run-docker-acceptance.mjs",
     "test:docker:acceptance:internal": "npm run build && node --test test/docker/acceptance.test.mjs",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -53,6 +59,7 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@types/node": "^25.5.0",
     "typescript": "^6.0.2"
   }

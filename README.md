@@ -52,6 +52,26 @@ npm run test:docker:acceptance # Hermetic Docker acceptance for fake Claude/Code
 
 The Docker acceptance lane is intentionally narrow: it boots a clean Node container, serves a local fixture registry, installs a direct-mode augment into fake Claude Code and Codex homes, and verifies the written MCP config, rules, skills, and `~/.equip` state. This is the right place for CLI-level install flows that should stay hermetic and CI-friendly without depending on live registry data.
 
+## Release Model
+
+Stable npm releases now use Changesets plus a dedicated GitHub Actions release workflow.
+
+Contributor workflow:
+
+```bash
+npm run changeset
+```
+
+Maintainer workflow:
+
+- merge changesets to `main`
+- let the release workflow open or update the `Version packages` PR
+- merge that PR to publish `@cg3/equip`
+
+The committed `package.json` version on `main` is the canonical release version. Tags and GitHub releases are outputs of that flow, not the mechanism that decides the version.
+
+See [Release Management](./docs/release-management.md) for the full release and publishing contract.
+
 ## How Augments Work
 
 An augment is a bundle of up to four layers that enhance your agent:
@@ -139,6 +159,7 @@ Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-
 | [Agent Skills](./docs/skills.md) | SKILL.md format, cross-platform distribution |
 | [Lifecycle Hooks](./docs/hooks.md) | Event-driven enforcement scripts |
 | [CLI Reference](./docs/cli.md) | Commands, state, options |
+| [Release Management](./docs/release-management.md) | Changesets, CI publish flow, npm auth |
 
 ## State Management
 

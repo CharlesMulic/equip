@@ -2,24 +2,32 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
   id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - name: Use Node.js 22
+      - name: Use Node.js 24
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
 
@@ -32,38 +40,34 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+      - name: Run hermetic Docker acceptance
+        run: npm run test:docker:acceptance
 
-      - name: Verify package.json version matches tag
+      - name: Configure npm token fallback
         run: |
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          TAG_VERSION="${{ steps.version.outputs.version }}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::package.json version ($PKG_VERSION) does not match tag (v$TAG_VERSION)"
-            exit 1
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$HOME/.npmrc"
           fi
-
-      - name: Extract changelog for this version
-        id: changelog
-        run: |
-          # Extract the section for this version from CHANGELOG.md
-          VERSION="${{ steps.version.outputs.version }}"
-          NOTES=$(awk "/^## \\[$VERSION\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
-          if [ -z "$NOTES" ]; then
-            NOTES="Release v$VERSION"
-          fi
-          # Write to file to avoid escaping issues
-          echo "$NOTES" > /tmp/release-notes.md
-
-      - name: Publish to npm
-        run: npm publish --access public --provenance
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Create release PR or publish
+        id: changesets
+        uses: changesets/action@v1
         with:
-          body_path: /tmp/release-notes.md
-          generate_release_notes: false
+          version: npm run version-packages
+          publish: npm run release
+          commit: Version packages
+          title: Version packages
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize published packages
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          {
+            echo "## Published packages"
+            echo
+            echo '${{ steps.changesets.outputs.publishedPackages }}'
+          } >> "$GITHUB_STEP_SUMMARY"
