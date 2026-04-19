@@ -48,6 +48,7 @@ unequip prior                  # Remove an augment
 ```bash
 npm test                       # Unit + integration coverage on the host
 npm run test:docker:acceptance # Hermetic Docker acceptance for fake Claude/Codex homes
+npm pack --dry-run             # Inspect the exact npm payload before release
 ```
 
 The Docker acceptance lane is intentionally narrow: it boots a clean Node container, serves a local fixture registry, installs a direct-mode augment into fake Claude Code and Codex homes, and verifies the written MCP config, rules, skills, and `~/.equip` state. This is the right place for CLI-level install flows that should stay hermetic and CI-friendly without depending on live registry data.
