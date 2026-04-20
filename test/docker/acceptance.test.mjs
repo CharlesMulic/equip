@@ -20,6 +20,25 @@ function makeFixture(serverUrl) {
   return JSON.parse(raw.replaceAll("__SERVER_URL__", serverUrl));
 }
 
+function makeAuthFixture(serverUrl, registryOrigin) {
+  const base = makeFixture(serverUrl);
+  return {
+    ...base,
+    name: "demo-direct-install-auth",
+    title: "Demo Direct Install Auth",
+    description: "Hermetic Docker acceptance fixture for authenticated direct-mode installs",
+    rules: {
+      ...base.rules,
+      marker: "demo-direct-install-auth",
+    },
+    auth: {
+      type: "api_key",
+      keyEnvVar: "DEMO_DIRECT_INSTALL_AUTH_KEY",
+      validationUrl: `${registryOrigin}/validate`,
+    },
+  };
+}
+
 function listen(server) {
   return new Promise((resolve, reject) => {
     server.listen(0, "127.0.0.1", () => resolve(server.address()));
@@ -328,4 +347,139 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   const codexRulesAfterRestore = fs.readFileSync(codexRulesPath, "utf-8");
   assert.doesNotMatch(codexRulesAfterRestore, /demo-direct-install/);
   assert.match(codexRulesAfterRestore, /Keep this Codex baseline/);
+});
+
+test("authenticated direct-mode registry install writes MCP auth headers in Docker", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "equip-docker-auth-acceptance-"));
+  const homeDir = path.join(workspaceRoot, "home");
+  const codexHome = path.join(homeDir, ".codex");
+  const claudeConfigPath = path.join(homeDir, ".claude.json");
+  const codexConfigPath = path.join(codexHome, "config.toml");
+  const apiKeyPath = path.join(workspaceRoot, "demo-auth.key");
+  const apiKey = "ask_demo_auth_fixture";
+
+  fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+  fs.mkdirSync(codexHome, { recursive: true });
+  fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+  fs.writeFileSync(apiKeyPath, `${apiKey}\n`, "utf-8");
+
+  const requests = [];
+  let registryOrigin = "";
+  let serverUrl = "";
+
+  const server = http.createServer((req, res) => {
+    requests.push({
+      method: req.method || "GET",
+      url: req.url || "/",
+      authorization: req.headers.authorization || "",
+    });
+
+    if (req.method === "GET" && req.url === "/augments/demo-direct-install-auth") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(makeAuthFixture(serverUrl, registryOrigin)));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/validate") {
+      if (req.headers.authorization !== `Bearer ${apiKey}`) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "missing or invalid authorization header" }));
+        return;
+      }
+
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/telemetry") {
+      req.resume();
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+
+  const address = await listen(server);
+  registryOrigin = `http://127.0.0.1:${address.port}`;
+  serverUrl = `${registryOrigin}/mcp`;
+
+  t.after(async () => {
+    if (server.listening) {
+      await closeServer(server);
+    }
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+  });
+
+  const homeRoot = path.parse(homeDir).root;
+  const windowsHomePath = process.platform === "win32"
+    ? homeDir.slice(homeRoot.length - 1)
+    : undefined;
+
+  const env = {
+    ...process.env,
+    HOME: homeDir,
+    USERPROFILE: homeDir,
+    HOMEDRIVE: process.platform === "win32" ? homeRoot.replace(/[\\\/]+$/, "") : process.env.HOMEDRIVE,
+    HOMEPATH: windowsHomePath ?? process.env.HOMEPATH,
+    APPDATA: path.join(homeDir, "AppData", "Roaming"),
+    LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
+    CODEX_HOME: codexHome,
+    EQUIP_REGISTRY_URL: registryOrigin,
+    NO_COLOR: "1",
+    FORCE_COLOR: "0",
+  };
+
+  const install = await runCli([
+    "bin/equip.js",
+    "demo-direct-install-auth",
+    "--api-key-file",
+    apiKeyPath,
+    "--non-interactive",
+    "--verbose",
+    "--platform",
+    "claude-code,codex",
+  ], env);
+
+  assert.equal(install.code, 0, install.output);
+  assert.match(install.output, /Authenticated/i);
+  assert.match(install.output, /validated/i);
+  assert.ok(
+    requests.some(request => request.method === "GET" && request.url === "/augments/demo-direct-install-auth"),
+    "fixture registry should receive the authenticated augment definition request",
+  );
+  assert.ok(
+    requests.some(
+      request => request.method === "GET"
+        && request.url === "/validate"
+        && request.authorization === `Bearer ${apiKey}`,
+    ),
+    "credential validation should send the Bearer token to the fixture registry",
+  );
+
+  const claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, "utf-8"));
+  assert.equal(claudeConfig.mcpServers["demo-direct-install-auth"].url, serverUrl);
+  assert.equal(claudeConfig.mcpServers["demo-direct-install-auth"].type, "http");
+  assert.equal(
+    claudeConfig.mcpServers["demo-direct-install-auth"].headers.Authorization,
+    `Bearer ${apiKey}`,
+  );
+
+  const codexConfig = fs.readFileSync(codexConfigPath, "utf-8");
+  assert.match(codexConfig, /\[mcp_servers\.demo-direct-install-auth\]/);
+  assert.match(codexConfig, new RegExp(`url = "${escapeRegExp(serverUrl)}"`));
+  assert.match(codexConfig, /\[mcp_servers\.demo-direct-install-auth\.http_headers\]/);
+  assert.match(codexConfig, new RegExp(`Authorization = "Bearer ${escapeRegExp(apiKey)}"`));
+
+  const storedCredentialPath = path.join(homeDir, ".equip", "credentials", "demo-direct-install-auth.json");
+  assert.ok(fs.existsSync(storedCredentialPath), "install should persist the resolved credential");
+  const storedCredential = JSON.parse(fs.readFileSync(storedCredentialPath, "utf-8"));
+  assert.equal(storedCredential.authType, "api_key");
+  assert.equal(storedCredential.credential, apiKey);
+
+  const installations = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"));
+  assert.ok(installations.augments["demo-direct-install-auth"], "installations.json should record the authenticated augment");
 });

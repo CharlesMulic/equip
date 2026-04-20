@@ -51,7 +51,7 @@ npm run test:docker:acceptance # Hermetic Docker acceptance for fake Claude/Code
 npm run test:pack             # Verify the actual npm tarball contents before publish
 ```
 
-The Docker acceptance lane is intentionally narrow: it boots a clean Node container, serves a local fixture registry, installs a direct-mode augment into fake Claude Code and Codex homes, and verifies the written MCP config, rules, skills, and `~/.equip` state. It now also proves uninstall, restore, and cached offline reinstall behavior inside the same hermetic flow. This is the right place for CLI-level install flows that should stay hermetic and CI-friendly without depending on live registry data.
+The Docker acceptance lane is intentionally narrow: it boots a clean Node container, serves a local fixture registry, installs direct-mode augments into fake Claude Code and Codex homes, and verifies the written MCP config, auth headers, rules, skills, and `~/.equip` state. It now also proves uninstall, restore, and cached offline reinstall behavior inside the same hermetic flow. This is the right place for CLI-level install flows that should stay hermetic and CI-friendly without depending on live registry data.
 The pack verification lane now also emits a machine-readable JSON report in CI so release/publish failures point at the exact tarball contract that broke.
 
 ## Release Model
