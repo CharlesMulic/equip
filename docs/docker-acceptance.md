@@ -18,7 +18,7 @@ The current acceptance scenario is intentionally small and durable:
   - Claude JSON MCP config
   - Codex TOML MCP config
   - authenticated direct-mode installs validate credentials and write Bearer auth headers into platform MCP config
-  - package-mode installs dispatch through `npx`, forward safe CLI flags like `--platform` / `--non-interactive`, and reconcile state after the package setup completes
+  - package-mode installs and `equip update` dispatch through `npx`, forward safe CLI flags like `--platform` / `--non-interactive`, and reconcile state after the package setup completes
   - rules written to `CLAUDE.md` and `AGENTS.md`
   - skills copied to the expected platform skill directories
   - `~/.equip/installations.json`

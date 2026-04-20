@@ -123,8 +123,9 @@ async function cmdUpdate(parsedArgs: ParsedArgs): Promise<void> {
       process.exit(1);
     }
 
-    if (toolDef.installMode !== "direct") {
-      cli.log(`  ${DIM}${toolName} is package-mode — use: npx @cg3/${toolName} setup --update${RESET}\n`);
+    if (toolDef.installMode === "package") {
+      const packageArgs = ["--update", ...buildPackageArgs({ ...parsedArgs, _: parsedArgs._.slice(1) })];
+      spawnPackage(toolDef, toolDef.setupCommand || "setup", packageArgs, toolName);
       return;
     }
 

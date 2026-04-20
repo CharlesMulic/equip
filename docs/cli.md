@@ -74,7 +74,7 @@ equip update prior                 # Re-fetch definition, re-install augment
 equip update                       # Self-update equip + migrate configs
 ```
 
-With an augment name: clears the cache, re-fetches the definition from the API, validates stored credentials, and re-installs. Rules update if the registry has a newer version.
+With an augment name: clears the cache, re-fetches the definition from the API, validates stored credentials, and re-installs. For package-mode augments, equip now dispatches the package setup entrypoint with `--update` and then reconciles the written platform state back into `~/.equip/`. Rules update if the registry or the package setup writes a newer version.
 
 Without an augment name: updates equip itself and runs config migrations.
 

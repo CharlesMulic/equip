@@ -39,17 +39,19 @@ function makeAuthFixture(serverUrl, registryOrigin) {
   };
 }
 
-function makePackageFixture(name) {
+function makePackageFixture(name, options = {}) {
+  const version = options.version || "2.0.0";
+  const title = options.title || "Demo Package Install";
   return {
     name,
-    title: "Demo Package Install",
+    title,
     description: "Hermetic Docker acceptance fixture for package-mode dispatch",
     installMode: "package",
     npmPackage: "@cg3/demo-package-install",
     setupCommand: "setup",
     rules: {
-      content: "Use the package helper augment when you need deterministic package-mode fixture data.",
-      version: "2.0.0",
+      content: `Use the package helper augment when you need deterministic package-mode fixture data (v${version}).`,
+      version,
       marker: name,
     },
     skills: [
@@ -64,6 +66,97 @@ function makePackageFixture(name) {
       },
     ],
   };
+}
+
+function writeFakePackageRunner(fakeBinDir, options) {
+  const { recordPath, packageName, serverUrl, initialVersion = "2.0.0", updatedVersion = initialVersion } = options;
+  const runnerPath = path.join(fakeBinDir, "fake-npx-runner.mjs");
+
+  fs.writeFileSync(
+    runnerPath,
+    `import fs from "node:fs";
+import path from "node:path";
+
+const recordPath = ${JSON.stringify(recordPath)};
+const homeDir = process.env.HOME || process.env.USERPROFILE;
+const codexHome = process.env.CODEX_HOME || path.join(homeDir, ".codex");
+const toolName = ${JSON.stringify(packageName)};
+const serverUrl = ${JSON.stringify(serverUrl)};
+const initialVersion = ${JSON.stringify(initialVersion)};
+const updatedVersion = ${JSON.stringify(updatedVersion)};
+const args = process.argv.slice(2);
+const isUpdate = args.includes("--update");
+const version = isUpdate ? updatedVersion : initialVersion;
+const records = fs.existsSync(recordPath)
+  ? JSON.parse(fs.readFileSync(recordPath, "utf-8"))
+  : [];
+
+records.push({ argv: args, version });
+fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+fs.writeFileSync(recordPath, JSON.stringify(records, null, 2) + "\\n", "utf-8");
+
+fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+fs.mkdirSync(codexHome, { recursive: true });
+fs.mkdirSync(path.join(homeDir, ".claude", "skills", toolName, "package-helper"), { recursive: true });
+fs.mkdirSync(path.join(homeDir, ".agents", "skills", toolName, "package-helper"), { recursive: true });
+
+fs.writeFileSync(
+  path.join(homeDir, ".claude.json"),
+  JSON.stringify({
+    mcpServers: {
+      [toolName]: {
+        url: serverUrl,
+        type: "http",
+      },
+    },
+  }, null, 2) + "\\n",
+  "utf-8",
+);
+
+fs.writeFileSync(
+  path.join(codexHome, "config.toml"),
+  [
+    \`[mcp_servers.\${toolName}]\`,
+    \`url = "\${serverUrl}"\`,
+    "",
+  ].join("\\n"),
+  "utf-8",
+);
+
+const rulesContent = \`<!-- \${toolName}:v\${version} -->\\nPackage mode fixture rules v\${version}.\\n<!-- /\${toolName} -->\\n\`;
+fs.writeFileSync(path.join(homeDir, ".claude", "CLAUDE.md"), rulesContent, "utf-8");
+fs.writeFileSync(path.join(codexHome, "AGENTS.md"), rulesContent, "utf-8");
+fs.writeFileSync(
+  path.join(homeDir, ".claude", "skills", toolName, "package-helper", "SKILL.md"),
+  \`# Package Helper\\n\\nUse this skill to inspect hermetic package-mode fixture responses during Docker acceptance tests (v\${version}).\`,
+  "utf-8",
+);
+fs.writeFileSync(
+  path.join(homeDir, ".agents", "skills", toolName, "package-helper", "SKILL.md"),
+  \`# Package Helper\\n\\nUse this skill to inspect hermetic package-mode fixture responses during Docker acceptance tests (v\${version}).\`,
+  "utf-8",
+);
+
+console.log(isUpdate ? "fake package update ran" : "fake package setup ran");
+`,
+    "utf-8",
+  );
+
+  fs.writeFileSync(
+    path.join(fakeBinDir, "npx"),
+    `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} "$0-runner-placeholder" "$@"\n`.replace(
+      '"$0-runner-placeholder"',
+      `"$(dirname "$0")/fake-npx-runner.mjs"`,
+    ),
+    "utf-8",
+  );
+  fs.chmodSync(path.join(fakeBinDir, "npx"), 0o755);
+
+  fs.writeFileSync(
+    path.join(fakeBinDir, "npx.cmd"),
+    `@echo off\r\n"${process.execPath.replace(/"/g, '""')}" "%~dp0fake-npx-runner.mjs" %*\r\n`,
+    "utf-8",
+  );
 }
 
 function listen(server) {
@@ -516,7 +609,6 @@ test("package-mode registry installs dispatch through npx and reconcile state in
   const homeDir = path.join(workspaceRoot, "home");
   const codexHome = path.join(homeDir, ".codex");
   const fakeBinDir = path.join(workspaceRoot, "bin");
-  const runnerPath = path.join(fakeBinDir, "fake-npx-runner.mjs");
   const recordPath = path.join(workspaceRoot, "npx-invocation.json");
   const claudeConfigPath = path.join(homeDir, ".claude.json");
   const codexConfigPath = path.join(codexHome, "config.toml");
@@ -530,82 +622,7 @@ test("package-mode registry installs dispatch through npx and reconcile state in
   fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
   fs.mkdirSync(fakeBinDir, { recursive: true });
 
-  fs.writeFileSync(
-    runnerPath,
-    `import fs from "node:fs";
-import path from "node:path";
-
-const recordPath = ${JSON.stringify(recordPath)};
-const homeDir = process.env.HOME || process.env.USERPROFILE;
-const codexHome = process.env.CODEX_HOME || path.join(homeDir, ".codex");
-const toolName = ${JSON.stringify(packageName)};
-const serverUrl = ${JSON.stringify(serverUrl)};
-
-fs.mkdirSync(path.dirname(recordPath), { recursive: true });
-fs.writeFileSync(recordPath, JSON.stringify({ argv: process.argv.slice(2) }, null, 2) + "\\n", "utf-8");
-
-fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
-fs.mkdirSync(codexHome, { recursive: true });
-fs.mkdirSync(path.join(homeDir, ".claude", "skills", toolName, "package-helper"), { recursive: true });
-fs.mkdirSync(path.join(homeDir, ".agents", "skills", toolName, "package-helper"), { recursive: true });
-
-fs.writeFileSync(
-  path.join(homeDir, ".claude.json"),
-  JSON.stringify({
-    mcpServers: {
-      [toolName]: {
-        url: serverUrl,
-        type: "http",
-      },
-    },
-  }, null, 2) + "\\n",
-  "utf-8",
-);
-
-fs.writeFileSync(
-  path.join(codexHome, "config.toml"),
-  [
-    \`[mcp_servers.\${toolName}]\`,
-    \`url = "\${serverUrl}"\`,
-    "",
-  ].join("\\n"),
-  "utf-8",
-);
-
-const rulesContent = \`<!-- \${toolName}:v2.0.0 -->\\nPackage mode fixture rules.\\n<!-- /\${toolName} -->\\n\`;
-fs.writeFileSync(path.join(homeDir, ".claude", "CLAUDE.md"), rulesContent, "utf-8");
-fs.writeFileSync(path.join(codexHome, "AGENTS.md"), rulesContent, "utf-8");
-fs.writeFileSync(
-  path.join(homeDir, ".claude", "skills", toolName, "package-helper", "SKILL.md"),
-  "# Package Helper\\n\\nUse this skill to inspect hermetic package-mode fixture responses during Docker acceptance tests.",
-  "utf-8",
-);
-fs.writeFileSync(
-  path.join(homeDir, ".agents", "skills", toolName, "package-helper", "SKILL.md"),
-  "# Package Helper\\n\\nUse this skill to inspect hermetic package-mode fixture responses during Docker acceptance tests.",
-  "utf-8",
-);
-
-console.log("fake package setup ran");
-`,
-    "utf-8",
-  );
-
-  fs.writeFileSync(
-    path.join(fakeBinDir, "npx"),
-    `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} "$0-runner-placeholder" "$@"\n`.replace(
-      '"$0-runner-placeholder"',
-      `"$(dirname "$0")/fake-npx-runner.mjs"`,
-    ),
-    "utf-8",
-  );
-  fs.chmodSync(path.join(fakeBinDir, "npx"), 0o755);
-
-  fs.writeFileSync(
-    path.join(fakeBinDir, "npx.cmd"),
-    `@echo off\r\n"${process.execPath.replace(/"/g, '""')}" "%~dp0fake-npx-runner.mjs" %*\r\n`,
-    "utf-8",
-  );
+  writeFakePackageRunner(fakeBinDir, { recordPath, packageName, serverUrl });
 
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -666,7 +683,7 @@ console.log("fake package setup ran");
     "fixture registry should receive the package-mode augment definition request",
   );
 
-  const invocation = JSON.parse(fs.readFileSync(recordPath, "utf-8"));
+  const [invocation] = JSON.parse(fs.readFileSync(recordPath, "utf-8"));
   assert.deepEqual(invocation.argv, [
     "-y",
     "@cg3/demo-package-install@latest",
@@ -675,6 +692,7 @@ console.log("fake package setup ran");
     "--platform",
     "claude-code,codex",
   ]);
+  assert.equal(invocation.version, "2.0.0");
 
   const claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, "utf-8"));
   assert.equal(claudeConfig.mcpServers[packageName].url, serverUrl);
@@ -708,4 +726,134 @@ console.log("fake package setup ran");
   assert.equal(installation.artifacts.codex.mcp, true);
   assert.equal(installation.artifacts.codex.rules, "2.0.0");
   assert.deepEqual(installation.artifacts.codex.skills, ["package-helper"]);
+});
+
+test("package-mode equip update dispatches setup --update and refreshes reconciled state in Docker", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "equip-docker-package-update-"));
+  const homeDir = path.join(workspaceRoot, "home");
+  const codexHome = path.join(homeDir, ".codex");
+  const fakeBinDir = path.join(workspaceRoot, "bin");
+  const recordPath = path.join(workspaceRoot, "npx-invocation.json");
+  const packageName = "demo-package-install";
+  const serverUrl = "https://fixtures.cg3.test/package-install";
+  const claudeRulesPath = path.join(homeDir, ".claude", "CLAUDE.md");
+  const codexRulesPath = path.join(codexHome, "AGENTS.md");
+  let packageVersion = "2.0.0";
+  let packageTitle = "Demo Package Install";
+
+  fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+  fs.mkdirSync(codexHome, { recursive: true });
+  fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+  fs.mkdirSync(fakeBinDir, { recursive: true });
+
+  writeFakePackageRunner(fakeBinDir, {
+    recordPath,
+    packageName,
+    serverUrl,
+    initialVersion: "2.0.0",
+    updatedVersion: "2.1.0",
+  });
+
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({ method: req.method || "GET", url: req.url || "/" });
+
+    if (req.method === "GET" && req.url === `/augments/${packageName}`) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(makePackageFixture(packageName, {
+        version: packageVersion,
+        title: packageTitle,
+      })));
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+
+  const address = await listen(server);
+
+  t.after(async () => {
+    if (server.listening) {
+      await closeServer(server);
+    }
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+  });
+
+  const homeRoot = path.parse(homeDir).root;
+  const windowsHomePath = process.platform === "win32"
+    ? homeDir.slice(homeRoot.length - 1)
+    : undefined;
+
+  const env = {
+    ...process.env,
+    HOME: homeDir,
+    USERPROFILE: homeDir,
+    HOMEDRIVE: process.platform === "win32" ? homeRoot.replace(/[\\\/]+$/, "") : process.env.HOMEDRIVE,
+    HOMEPATH: windowsHomePath ?? process.env.HOMEPATH,
+    APPDATA: path.join(homeDir, "AppData", "Roaming"),
+    LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
+    CODEX_HOME: codexHome,
+    EQUIP_REGISTRY_URL: `http://127.0.0.1:${address.port}`,
+    PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH || ""}`,
+    NO_COLOR: "1",
+    FORCE_COLOR: "0",
+  };
+
+  const install = await runCli([
+    "bin/equip.js",
+    packageName,
+    "--non-interactive",
+    "--platform",
+    "claude-code,codex",
+  ], env);
+  assert.equal(install.code, 0, install.output);
+  assert.match(install.output, /fake package setup ran/);
+
+  packageVersion = "2.1.0";
+  packageTitle = "Demo Package Install Updated";
+
+  const update = await runCli([
+    "bin/equip.js",
+    "update",
+    packageName,
+    "--non-interactive",
+    "--platform",
+    "claude-code,codex",
+  ], env);
+
+  assert.equal(update.code, 0, update.output);
+  assert.match(update.output, /equip update/);
+  assert.match(update.output, /fake package update ran/);
+  assert.match(update.output, /tracked demo-package-install on 2 platforms/i);
+
+  const invocations = JSON.parse(fs.readFileSync(recordPath, "utf-8"));
+  assert.equal(invocations.length, 2, "package setup runner should record install and update invocations");
+  assert.deepEqual(invocations[1].argv, [
+    "-y",
+    "@cg3/demo-package-install@latest",
+    "setup",
+    "--update",
+    "--non-interactive",
+    "--platform",
+    "claude-code,codex",
+  ]);
+  assert.equal(invocations[1].version, "2.1.0");
+
+  const augmentDefPath = path.join(homeDir, ".equip", "augments", `${packageName}.json`);
+  const augmentDef = JSON.parse(fs.readFileSync(augmentDefPath, "utf-8"));
+  assert.equal(augmentDef.title, "Demo Package Install Updated");
+  assert.equal(augmentDef.rules.version, "2.1.0");
+
+  const installations = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"));
+  const installation = installations.augments[packageName];
+  assert.equal(installation.title, "Demo Package Install Updated");
+  assert.equal(installation.artifacts["claude-code"].rules, "2.1.0");
+  assert.equal(installation.artifacts.codex.rules, "2.1.0");
+
+  const claudeRules = fs.readFileSync(claudeRulesPath, "utf-8");
+  assert.match(claudeRules, /<!-- demo-package-install:v2\.1\.0 -->/);
+
+  const codexRules = fs.readFileSync(codexRulesPath, "utf-8");
+  assert.match(codexRules, /<!-- demo-package-install:v2\.1\.0 -->/);
 });
