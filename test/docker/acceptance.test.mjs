@@ -135,7 +135,9 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   serverUrl = `http://127.0.0.1:${address.port}/mcp`;
 
   t.after(async () => {
-    await closeServer(server);
+    if (server.listening) {
+      await closeServer(server);
+    }
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 
@@ -272,14 +274,32 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   );
   assert.ok(!installationsAfterUninstall.augments["demo-direct-install"]);
 
+  const requestsBeforeOfflineReinstall = requests.length;
+  await closeServer(server);
+
   const reinstall = await runCli([
     "bin/equip.js",
     "demo-direct-install",
+    "--verbose",
     "--platform",
     "claude-code,codex",
     "--non-interactive",
   ], env);
   assert.equal(reinstall.code, 0, reinstall.output);
+  assert.match(reinstall.output, /loaded from cache/i);
+  assert.equal(
+    requests.length,
+    requestsBeforeOfflineReinstall,
+    "offline reinstall should not hit the registry after the server is closed",
+  );
+
+  const installationsAfterOfflineReinstall = JSON.parse(
+    fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"),
+  );
+  assert.ok(
+    installationsAfterOfflineReinstall.augments["demo-direct-install"],
+    "offline reinstall should restore the cached installation record",
+  );
 
   const restoreClaude = await runCli(["bin/equip.js", "restore", "claude-code", "--non-interactive"], env);
   assert.equal(restoreClaude.code, 0, restoreClaude.output);

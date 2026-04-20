@@ -22,6 +22,9 @@ The current acceptance scenario is intentionally small and durable:
   - `~/.equip/installations.json`
   - platform metadata and scan files
   - `equip status` and `equip doctor` still run cleanly afterward
+  - uninstall preserves the pre-existing Claude/Codex baseline config and rules
+  - restore returns both platforms to their initial captured state
+  - a second install succeeds from the local cache after the fixture registry is offline
 
 ## Why This Exists
 
@@ -43,8 +46,6 @@ GitHub Actions keeps the existing OS/Node matrix for `npm test` and adds a dedic
 
 After the first direct-install lane is stable, the next useful additions are:
 
-- uninstall and restore verification
 - authenticated direct-mode install with header injection
 - package-mode dispatch path
-- cached install fallback after an initial live fetch
 - later, a cross-repo flow where the monolith creates or serves an augment definition and `equip` installs it inside a specialized stack
