@@ -16,8 +16,10 @@ export interface ContentManifest {
 }
 
 /**
- * Compute the content hash for an augment definition.
+ * Compute the **v1** content hash for an augment definition.
  * SHA-256 of a canonical JSON array of security-relevant fields.
+ * Retained for backward compat during the v1→v2 backfill window —
+ * new publish / update code paths should use [computeContentHashV2].
  */
 export function computeContentHash(manifest: ContentManifest): string {
   const canonical = JSON.stringify([
@@ -29,6 +31,61 @@ export function computeContentHash(manifest: ContentManifest): string {
     manifest.stdioCommand,
     manifest.stdioArgs,
     manifest.transport,
+  ]);
+  return crypto.createHash("sha256").update(canonical).digest("hex");
+}
+
+/**
+ * Phase 4 of MANUAL_UPDATE_PLAN — **v2** content hash.
+ *
+ * Extends v1 with publisher-editable display + metadata fields so a
+ * title-only change mutates the hash. Without this, Phase 1's
+ * /updates/check endpoint can't detect display-only edits; with it,
+ * the client sees the hash change and the user can decide to apply
+ * the update.
+ *
+ * **Must produce byte-identical output** to the Kotlin impl in
+ * equip-product/ContentHashService.kt `computeContentHashV2`. The
+ * ContentHashGoldenTest suite enforces this with a lockstep vector.
+ */
+export interface ContentManifestV2 extends ContentManifest {
+  title: string | null;
+  description: string | null;
+  subtitle: string | null;
+  flavorText: string | null;
+  primaryCategory: string | null;
+  /** Raw array; computeContentHashV2 sorts it for stable ordering. */
+  categories: string[] | null;
+  homepage: string | null;
+  repository: string | null;
+  iconUrl: string | null;
+}
+
+export function computeContentHashV2(manifest: ContentManifestV2): string {
+  // Categories: stable ordering — ["a","b"] and ["b","a"] must hash the
+  // same, because the registry doesn't make array order semantic.
+  const sortedCategories = manifest.categories
+    ? [...manifest.categories].sort()
+    : null;
+
+  const canonical = JSON.stringify([
+    manifest.rulesContent,
+    manifest.rulesMarker,
+    manifest.skills ? normalizeSkills(manifest.skills) : null,
+    manifest.hooks,
+    manifest.serverUrl,
+    manifest.stdioCommand,
+    manifest.stdioArgs,
+    manifest.transport,
+    manifest.title,
+    manifest.description,
+    manifest.subtitle,
+    manifest.flavorText,
+    manifest.primaryCategory,
+    sortedCategories,
+    manifest.homepage,
+    manifest.repository,
+    manifest.iconUrl,
   ]);
   return crypto.createHash("sha256").update(canonical).digest("hex");
 }

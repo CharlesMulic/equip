@@ -3,7 +3,7 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { computeContentHash, extractManifest } = require("../dist/lib/content-hash");
+const { computeContentHash, computeContentHashV2, extractManifest } = require("../dist/lib/content-hash");
 
 // ─── Shared test vectors ────────────────────────────────────
 // These MUST match the Kotlin ContentHashServiceTest exactly.
@@ -161,6 +161,66 @@ describe("extractManifest", () => {
     assert.equal(manifest.skills, null);
     assert.equal(manifest.serverUrl, null);
     assert.equal(manifest.transport, null);
+  });
+});
+
+// ─── Phase 4 v2 lockstep golden ─────────────────────────────
+//
+// The Kotlin ContentHashServiceTest expects the same hash for these
+// inputs. Both sides own this invariant; drift breaks the
+// /updates/check contract on every installed client.
+
+describe("computeContentHashV2 — lockstep with Kotlin", () => {
+  it("golden vector matches Kotlin ContentHashServiceTest", () => {
+    const hash = computeContentHashV2({
+      rulesContent: "rules body",
+      rulesMarker: "marker-1",
+      skills: null,
+      hooks: null,
+      serverUrl: "https://example.test/mcp",
+      stdioCommand: null,
+      stdioArgs: null,
+      transport: "http",
+      title: "Test Augment",
+      description: "A Phase 4 test augment",
+      subtitle: null,
+      flavorText: null,
+      primaryCategory: "productivity",
+      categories: ["productivity", "dev"],
+      homepage: "https://example.test",
+      repository: "https://github.com/example/test",
+      iconUrl: null,
+    });
+    // If this fails: update the literal here AND the matching Kotlin
+    // test, verified byte-identical. Never update just one side.
+    assert.equal(
+      hash,
+      "552479d77614e032034a904090a21629d08d7a04505295075cfc8531123081c7",
+    );
+  });
+
+  it("categories are order-independent", () => {
+    const base = {
+      rulesContent: null, rulesMarker: null, skills: null, hooks: null,
+      serverUrl: null, stdioCommand: null, stdioArgs: null, transport: null,
+      title: "T", description: null, subtitle: null, flavorText: null,
+      primaryCategory: null, categories: ["a", "b", "c"],
+      homepage: null, repository: null, iconUrl: null,
+    };
+    const reordered = { ...base, categories: ["c", "a", "b"] };
+    assert.equal(computeContentHashV2(base), computeContentHashV2(reordered));
+  });
+
+  it("display-field mutation changes the v2 hash", () => {
+    const base = {
+      rulesContent: "body", rulesMarker: null, skills: null, hooks: null,
+      serverUrl: null, stdioCommand: null, stdioArgs: null, transport: null,
+      title: "Old", description: null, subtitle: null, flavorText: null,
+      primaryCategory: null, categories: null,
+      homepage: null, repository: null, iconUrl: null,
+    };
+    const mutated = { ...base, title: "New" };
+    assert.notEqual(computeContentHashV2(base), computeContentHashV2(mutated));
   });
 });
 
