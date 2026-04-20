@@ -43,6 +43,13 @@ jobs:
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
         run: npm run test:pack
 
+      - name: Smoke install packed npm tarball
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
+        env:
+          PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
+          PACK_INSTALL_SMOKE_OUTPUT_PATH: .generated/pack/pack-install-smoke.json
+        run: npm run test:pack:smoke
+
       - name: Upload pack verification
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
         uses: actions/upload-artifact@v4
@@ -57,6 +64,14 @@ jobs:
         with:
           name: pack-tarball
           path: .generated/pack/tarball/*.tgz
+          if-no-files-found: error
+
+      - name: Upload pack install smoke report
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-install-smoke
+          path: .generated/pack/pack-install-smoke.json
           if-no-files-found: error
 
   docker-acceptance:

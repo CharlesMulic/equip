@@ -48,7 +48,9 @@ On pushes to `main` it:
 4. runs `npm run test:docker:acceptance`
 5. runs `npm run test:pack`
    and uploads both a machine-readable pack verification artifact and the actual packed `.tgz` for debugging / inspection
-6. uses `changesets/action` to either:
+6. runs `npm run test:pack:smoke`
+   to install the produced tarball into a clean temp project and prove the packaged CLI + exports still work from the npm package boundary
+7. uses `changesets/action` to either:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged
 
@@ -79,6 +81,7 @@ Useful local release commands:
 npm run changeset
 npm run version-packages
 npm run test:pack
+npm run test:pack:smoke
 npm run release
 ```
 

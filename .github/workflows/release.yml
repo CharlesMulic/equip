@@ -49,6 +49,12 @@ jobs:
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
         run: npm run test:pack
 
+      - name: Smoke install packed npm tarball
+        env:
+          PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
+          PACK_INSTALL_SMOKE_OUTPUT_PATH: .generated/pack/pack-install-smoke.json
+        run: npm run test:pack:smoke
+
       - name: Upload pack verification
         uses: actions/upload-artifact@v4
         with:
@@ -61,6 +67,13 @@ jobs:
         with:
           name: pack-tarball
           path: .generated/pack/tarball/*.tgz
+          if-no-files-found: error
+
+      - name: Upload pack install smoke report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-install-smoke
+          path: .generated/pack/pack-install-smoke.json
           if-no-files-found: error
 
       - name: Configure npm token fallback
