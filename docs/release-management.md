@@ -47,7 +47,7 @@ On pushes to `main` it:
 3. runs `npm test`
 4. runs `npm run test:docker:acceptance`
 5. runs `npm run test:pack`
-   and uploads a machine-readable pack verification artifact for debugging
+   and uploads both a machine-readable pack verification artifact and the actual packed `.tgz` for debugging / inspection
 6. uses `changesets/action` to either:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged

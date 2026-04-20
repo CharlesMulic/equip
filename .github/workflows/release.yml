@@ -46,6 +46,7 @@ jobs:
       - name: Verify packed npm artifact
         env:
           PACK_VERIFICATION_OUTPUT_PATH: .generated/pack/pack-verification.json
+          PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
         run: npm run test:pack
 
       - name: Upload pack verification
@@ -53,6 +54,13 @@ jobs:
         with:
           name: pack-verification
           path: .generated/pack/pack-verification.json
+          if-no-files-found: error
+
+      - name: Upload packed npm tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-tarball
+          path: .generated/pack/tarball/*.tgz
           if-no-files-found: error
 
       - name: Configure npm token fallback

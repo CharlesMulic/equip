@@ -27,8 +27,24 @@ function createPackEntry(overrides = {}) {
 test("verifyPackMetadata passes for expected published files", () => {
   const verification = verifyPackMetadata(createPackEntry());
   assert.equal(verification.hasFailures, false);
+  assert.equal(verification.tarballFileName, "");
+  assert.equal(verification.packageSizeBytes, 0);
   assert.deepEqual(verification.missingRequiredFiles, []);
   assert.deepEqual(verification.forbiddenFiles, []);
+});
+
+test("verifyPackMetadata preserves npm tarball metadata when present", () => {
+  const verification = verifyPackMetadata(createPackEntry({
+    filename: "cg3-equip-0.17.7.tgz",
+    size: 132850,
+    shasum: "26eeda2b0be2fb688555cb6d21f49d4830735457",
+    integrity: "sha512-example",
+  }));
+
+  assert.equal(verification.tarballFileName, "cg3-equip-0.17.7.tgz");
+  assert.equal(verification.packageSizeBytes, 132850);
+  assert.equal(verification.shasum, "26eeda2b0be2fb688555cb6d21f49d4830735457");
+  assert.equal(verification.integrity, "sha512-example");
 });
 
 test("verifyPackMetadata flags missing required files", () => {
