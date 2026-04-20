@@ -39,6 +39,33 @@ function makeAuthFixture(serverUrl, registryOrigin) {
   };
 }
 
+function makePackageFixture(name) {
+  return {
+    name,
+    title: "Demo Package Install",
+    description: "Hermetic Docker acceptance fixture for package-mode dispatch",
+    installMode: "package",
+    npmPackage: "@cg3/demo-package-install",
+    setupCommand: "setup",
+    rules: {
+      content: "Use the package helper augment when you need deterministic package-mode fixture data.",
+      version: "2.0.0",
+      marker: name,
+    },
+    skills: [
+      {
+        name: "package-helper",
+        files: [
+          {
+            path: "SKILL.md",
+            content: "# Package Helper\n\nUse this skill to inspect hermetic package-mode fixture responses during Docker acceptance tests.",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function listen(server) {
   return new Promise((resolve, reject) => {
     server.listen(0, "127.0.0.1", () => resolve(server.address()));
@@ -482,4 +509,203 @@ test("authenticated direct-mode registry install writes MCP auth headers in Dock
 
   const installations = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"));
   assert.ok(installations.augments["demo-direct-install-auth"], "installations.json should record the authenticated augment");
+});
+
+test("package-mode registry installs dispatch through npx and reconcile state in Docker", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "equip-docker-package-acceptance-"));
+  const homeDir = path.join(workspaceRoot, "home");
+  const codexHome = path.join(homeDir, ".codex");
+  const fakeBinDir = path.join(workspaceRoot, "bin");
+  const runnerPath = path.join(fakeBinDir, "fake-npx-runner.mjs");
+  const recordPath = path.join(workspaceRoot, "npx-invocation.json");
+  const claudeConfigPath = path.join(homeDir, ".claude.json");
+  const codexConfigPath = path.join(codexHome, "config.toml");
+  const claudeRulesPath = path.join(homeDir, ".claude", "CLAUDE.md");
+  const codexRulesPath = path.join(codexHome, "AGENTS.md");
+  const packageName = "demo-package-install";
+  const serverUrl = "https://fixtures.cg3.test/package-install";
+
+  fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+  fs.mkdirSync(codexHome, { recursive: true });
+  fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+  fs.mkdirSync(fakeBinDir, { recursive: true });
+
+  fs.writeFileSync(
+    runnerPath,
+    `import fs from "node:fs";
+import path from "node:path";
+
+const recordPath = ${JSON.stringify(recordPath)};
+const homeDir = process.env.HOME || process.env.USERPROFILE;
+const codexHome = process.env.CODEX_HOME || path.join(homeDir, ".codex");
+const toolName = ${JSON.stringify(packageName)};
+const serverUrl = ${JSON.stringify(serverUrl)};
+
+fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+fs.writeFileSync(recordPath, JSON.stringify({ argv: process.argv.slice(2) }, null, 2) + "\\n", "utf-8");
+
+fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+fs.mkdirSync(codexHome, { recursive: true });
+fs.mkdirSync(path.join(homeDir, ".claude", "skills", toolName, "package-helper"), { recursive: true });
+fs.mkdirSync(path.join(homeDir, ".agents", "skills", toolName, "package-helper"), { recursive: true });
+
+fs.writeFileSync(
+  path.join(homeDir, ".claude.json"),
+  JSON.stringify({
+    mcpServers: {
+      [toolName]: {
+        url: serverUrl,
+        type: "http",
+      },
+    },
+  }, null, 2) + "\\n",
+  "utf-8",
+);
+
+fs.writeFileSync(
+  path.join(codexHome, "config.toml"),
+  [
+    \`[mcp_servers.\${toolName}]\`,
+    \`url = "\${serverUrl}"\`,
+    "",
+  ].join("\\n"),
+  "utf-8",
+);
+
+const rulesContent = \`<!-- \${toolName}:v2.0.0 -->\\nPackage mode fixture rules.\\n<!-- /\${toolName} -->\\n\`;
+fs.writeFileSync(path.join(homeDir, ".claude", "CLAUDE.md"), rulesContent, "utf-8");
+fs.writeFileSync(path.join(codexHome, "AGENTS.md"), rulesContent, "utf-8");
+fs.writeFileSync(
+  path.join(homeDir, ".claude", "skills", toolName, "package-helper", "SKILL.md"),
+  "# Package Helper\\n\\nUse this skill to inspect hermetic package-mode fixture responses during Docker acceptance tests.",
+  "utf-8",
+);
+fs.writeFileSync(
+  path.join(homeDir, ".agents", "skills", toolName, "package-helper", "SKILL.md"),
+  "# Package Helper\\n\\nUse this skill to inspect hermetic package-mode fixture responses during Docker acceptance tests.",
+  "utf-8",
+);
+
+console.log("fake package setup ran");
+`,
+    "utf-8",
+  );
+
+  fs.writeFileSync(
+    path.join(fakeBinDir, "npx"),
+    `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} "$0-runner-placeholder" "$@"\n`.replace(
+      '"$0-runner-placeholder"',
+      `"$(dirname "$0")/fake-npx-runner.mjs"`,
+    ),
+    "utf-8",
+  );
+  fs.chmodSync(path.join(fakeBinDir, "npx"), 0o755);
+
+  fs.writeFileSync(
+    path.join(fakeBinDir, "npx.cmd"),
+    `@echo off\r\n"${process.execPath.replace(/"/g, '""')}" "%~dp0fake-npx-runner.mjs" %*\r\n`,
+    "utf-8",
+  );
+
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({ method: req.method || "GET", url: req.url || "/" });
+
+    if (req.method === "GET" && req.url === `/augments/${packageName}`) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(makePackageFixture(packageName)));
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+
+  const address = await listen(server);
+
+  t.after(async () => {
+    if (server.listening) {
+      await closeServer(server);
+    }
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+  });
+
+  const homeRoot = path.parse(homeDir).root;
+  const windowsHomePath = process.platform === "win32"
+    ? homeDir.slice(homeRoot.length - 1)
+    : undefined;
+
+  const env = {
+    ...process.env,
+    HOME: homeDir,
+    USERPROFILE: homeDir,
+    HOMEDRIVE: process.platform === "win32" ? homeRoot.replace(/[\\\/]+$/, "") : process.env.HOMEDRIVE,
+    HOMEPATH: windowsHomePath ?? process.env.HOMEPATH,
+    APPDATA: path.join(homeDir, "AppData", "Roaming"),
+    LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
+    CODEX_HOME: codexHome,
+    EQUIP_REGISTRY_URL: `http://127.0.0.1:${address.port}`,
+    PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH || ""}`,
+    NO_COLOR: "1",
+    FORCE_COLOR: "0",
+  };
+
+  const install = await runCli([
+    "bin/equip.js",
+    packageName,
+    "--non-interactive",
+    "--platform",
+    "claude-code,codex",
+  ], env);
+
+  assert.equal(install.code, 0, install.output);
+  assert.match(install.output, /fake package setup ran/);
+  assert.match(install.output, /tracked demo-package-install on 2 platforms/i);
+  assert.ok(
+    requests.some(request => request.method === "GET" && request.url === `/augments/${packageName}`),
+    "fixture registry should receive the package-mode augment definition request",
+  );
+
+  const invocation = JSON.parse(fs.readFileSync(recordPath, "utf-8"));
+  assert.deepEqual(invocation.argv, [
+    "-y",
+    "@cg3/demo-package-install@latest",
+    "setup",
+    "--non-interactive",
+    "--platform",
+    "claude-code,codex",
+  ]);
+
+  const claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, "utf-8"));
+  assert.equal(claudeConfig.mcpServers[packageName].url, serverUrl);
+  assert.equal(claudeConfig.mcpServers[packageName].type, "http");
+
+  const codexConfig = fs.readFileSync(codexConfigPath, "utf-8");
+  assert.match(codexConfig, /\[mcp_servers\.demo-package-install\]/);
+  assert.match(codexConfig, new RegExp(`url = "${escapeRegExp(serverUrl)}"`));
+
+  const claudeRules = fs.readFileSync(claudeRulesPath, "utf-8");
+  assert.match(claudeRules, /<!-- demo-package-install:v2\.0\.0 -->/);
+
+  const codexRules = fs.readFileSync(codexRulesPath, "utf-8");
+  assert.match(codexRules, /<!-- demo-package-install:v2\.0\.0 -->/);
+
+  const augmentDefPath = path.join(homeDir, ".equip", "augments", `${packageName}.json`);
+  assert.ok(fs.existsSync(augmentDefPath), "package-mode reconcile should sync the registry definition locally");
+  const augmentDef = JSON.parse(fs.readFileSync(augmentDefPath, "utf-8"));
+  assert.equal(augmentDef.title, "Demo Package Install");
+  assert.equal(augmentDef.source, "registry");
+
+  const installations = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"));
+  const installation = installations.augments[packageName];
+  assert.ok(installation, "installations.json should record the package-mode augment");
+  assert.equal(installation.package, "@cg3/demo-package-install");
+  assert.equal(installation.title, "Demo Package Install");
+  assert.deepEqual([...installation.platforms].sort(), ["claude-code", "codex"]);
+  assert.equal(installation.artifacts["claude-code"].mcp, true);
+  assert.equal(installation.artifacts["claude-code"].rules, "2.0.0");
+  assert.deepEqual(installation.artifacts["claude-code"].skills, ["package-helper"]);
+  assert.equal(installation.artifacts.codex.mcp, true);
+  assert.equal(installation.artifacts.codex.rules, "2.0.0");
+  assert.deepEqual(installation.artifacts.codex.skills, ["package-helper"]);
 });

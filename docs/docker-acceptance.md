@@ -13,15 +13,17 @@ The current acceptance scenario is intentionally small and durable:
 - start from a clean Node container
 - run against a local fixture registry inside the container
 - seed fake Claude Code and Codex home directories
-- install a direct-mode augment through the real `equip` CLI
+- install direct-mode and package-mode augments through the real `equip` CLI
 - verify:
   - Claude JSON MCP config
   - Codex TOML MCP config
   - authenticated direct-mode installs validate credentials and write Bearer auth headers into platform MCP config
+  - package-mode installs dispatch through `npx`, forward safe CLI flags like `--platform` / `--non-interactive`, and reconcile state after the package setup completes
   - rules written to `CLAUDE.md` and `AGENTS.md`
   - skills copied to the expected platform skill directories
   - `~/.equip/installations.json`
   - `~/.equip/credentials/*.json` for stored direct-mode credentials
+  - `~/.equip/augments/*.json` for reconciled registry definitions after package-mode setup
   - platform metadata and scan files
   - `equip status` and `equip doctor` still run cleanly afterward
   - uninstall preserves the pre-existing Claude/Codex baseline config and rules
@@ -48,5 +50,4 @@ GitHub Actions keeps the existing OS/Node matrix for `npm test` and adds a dedic
 
 After the first direct-install lane is stable, the next useful additions are:
 
-- package-mode dispatch path
 - later, a cross-repo flow where the monolith creates or serves an augment definition and `equip` installs it inside a specialized stack

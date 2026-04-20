@@ -208,12 +208,24 @@ function runLocal(localPath: string, extraArgs: string[]): void {
   });
 }
 
-function spawnPackage(pkg: string, command: string, extraArgs: string[], augmentName: string): void {
+function buildPackageArgs(parsedArgs: ParsedArgs): string[] {
+  const args: string[] = [];
+
+  if (parsedArgs.verbose) args.push("--verbose");
+  if (parsedArgs.dryRun) args.push("--dry-run");
+  if (parsedArgs.nonInteractive) args.push("--non-interactive");
+  if (parsedArgs.platform) args.push("--platform", parsedArgs.platform);
+
+  return [...args, ...parsedArgs._];
+}
+
+function spawnPackage(toolDef: RegistryDef, command: string, extraArgs: string[], augmentName: string): void {
   // Capture initial snapshots before the package modifies configs
   try {
     ensureInitialSnapshots(detectPlatforms());
   } catch {}
 
+  const pkg = toolDef.npmPackage!;
   const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
   const child = spawn(npxCmd, ["-y", `${pkg}@latest`, command, ...extraArgs], {
     stdio: "inherit",
@@ -223,7 +235,12 @@ function spawnPackage(pkg: string, command: string, extraArgs: string[], augment
   child.on("close", (code) => {
     if (augmentName) {
       try {
-        const changed = reconcileState({ toolName: augmentName, package: pkg, marker: augmentName });
+        const changed = reconcileState({
+          toolName: augmentName,
+          package: pkg,
+          marker: augmentName,
+          toolDef,
+        });
         if (changed > 0) {
           process.stderr.write(`\n  equip: tracked ${augmentName} on ${changed} platform${changed === 1 ? "" : "s"}\n`);
         }
@@ -260,7 +277,8 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
   }
 
   if (toolDef && toolDef.installMode === "package") {
-    spawnPackage(toolDef.npmPackage!, toolDef.setupCommand || "setup", extraArgs, alias);
+    const packageArgs = buildPackageArgs(parsedArgs);
+    spawnPackage(toolDef, toolDef.setupCommand || "setup", packageArgs, alias);
     return;
   }
 

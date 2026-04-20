@@ -32,6 +32,8 @@ equip prior --non-interactive      # No prompts (fail if info missing)
 
 Equip fetches the augment definition from the registry API (`api.cg3.io/equip`), syncs it to a local augment definition (`~/.equip/augments/<name>.json`), and installs MCP config, rules, hooks, and skills across all detected enabled platforms.
 
+For package-mode augments, equip dispatches to the augment package's setup entrypoint through `npx`, forwards safe install flags like `--platform`, `--non-interactive`, `--dry-run`, and `--verbose`, then reconciles the written platform state back into `~/.equip/`.
+
 Disabled platforms are automatically skipped.
 
 If the API is unreachable, equip falls back to a locally cached definition (`~/.equip/cache/`).
