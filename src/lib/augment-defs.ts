@@ -189,6 +189,71 @@ export interface AugmentDef {
 
   /** @deprecated Legacy "update available" flag written by the sidecar. */
   registryLatestVersion?: number;
+
+  /**
+   * Manual-update signal (Phase 1 of MANUAL_UPDATE_PLAN). Set by
+   * `augmentCheckUpdates` when `POST /v1/equip/updates/check` reports
+   * a newer approved content_hash for this augment. Consumed by the
+   * UI's "Update available" badge / Discover indicator and cleared by
+   * `refreshAugmentFromRegistry` after an accepted update.
+   */
+  registryLatestContentHash?: string;
+
+  /**
+   * Companion flag to [registryLatestContentHash]. True when the
+   * server's advisory bit is set on the current approved version —
+   * clients render flagged updates distinctly ("Security update —
+   * recommended") and may opt into per-augment auto-apply.
+   */
+  registryLatestSecurityAdvisory?: boolean;
+
+  // ── Publisher draft state (Phase 2 of MANUAL_UPDATE_PLAN) ──
+
+  /**
+   * Publisher's in-flight edits that haven't been submitted (or have
+   * been submitted and are in review). Stored alongside the approved
+   * def on `~/.equip/augments/<name>.json` rather than in a separate
+   * drafts directory — the sidecar already owns the per-augment def
+   * file, so drafts are a new dimension of that existing state rather
+   * than a parallel store.
+   *
+   * Shape is a partial AugmentDef-compatible object: only the fields
+   * the publisher has edited. The approved-state fields elsewhere on
+   * this def stay authoritative for what's running on platforms.
+   *
+   * Cleared on successful publish-and-approve (the sidecar's accept-
+   * update flow migrates pending → approved). Survives on admin
+   * rejection so the publisher can revise and re-publish.
+   */
+  pendingEdit?: Partial<AugmentDef>;
+
+  /**
+   * Server-side review row ID correlating a submitted [pendingEdit]
+   * to the open review queue entry. Set on successful publish POST;
+   * cleared on accepted update or explicit discard.
+   *
+   * `undefined` → no active review (local draft only, not submitted).
+   * Non-null → review is open server-side; frontend surfaces a
+   * "pending review" badge.
+   */
+  pendingReviewId?: string;
+
+  /**
+   * Most recent admin rejection reason for a prior submission of this
+   * draft, if any. Cleared on next successful submission. Surfaces
+   * on the publisher edit UI so they know what to revise.
+   */
+  pendingRejectionReason?: string;
+
+  /**
+   * Timestamp of the most recent explicit user interaction with this
+   * augment (equip, unequip, add-to-set, remove-from-set, save-draft).
+   * Used by the "last used" cache-visibility UI and as input to the
+   * deferred Level-2 lazy-eviction policy. Strictly sidecar-local —
+   * NEVER serialized into `/updates/check` body or any backend-facing
+   * payload (Phase 2 security-review hard requirement).
+   */
+  lastUserActionAt?: string;
 }
 
 /** Provenance metadata for auto-wrapped augments */
@@ -251,7 +316,18 @@ function augmentPath(name: string): string {
 function ensureAugmentsDir(): void {
   const dir = getAugmentsDir();
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    // Phase 2: create with 0700 so draft content (publisher's
+    // unreviewed edits stored in `pendingEdit`) isn't world-readable.
+    // A co-resident process with a different user would otherwise
+    // be able to exfiltrate unreviewed content from this dir.
+    // Best-effort — on Windows `mkdir` ignores the mode and the
+    // ACL-restriction happens via filesystem default (user home
+    // directory inherits user-only access on typical NTFS setups).
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } else {
+    // Existing dir — tighten perms if they're looser than 0700.
+    // No-op on Windows; chmod on unix is idempotent + cheap.
+    try { fs.chmodSync(dir, 0o700); } catch { /* best effort */ }
   }
 }
 
