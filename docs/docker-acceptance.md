@@ -50,6 +50,8 @@ GitHub Actions keeps the existing OS/Node matrix for `npm test` and adds a dedic
 
 Set `EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR` to preserve those artifacts locally or in CI.
 
+Those Docker artifacts now also feed the higher-level `.generated/release/release-verification-report.json` rollup in CI/release, alongside the npm pack verification and tarball-install smoke results.
+
 ## Next Good Scenarios
 
 After the first direct-install lane is stable, the next useful additions are:
