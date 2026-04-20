@@ -37,6 +37,11 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
       // Fall back to direct write — less atomic but avoids hard failure.
       try { fs.unlinkSync(tmp); } catch {}
       fs.writeFileSync(filePath, content);
+      // Phase 2 security-review fix M-2: match the .tmp path's 0600
+      // hardening on the fallback branch too. Matters on WSL / cross-
+      // mount scenarios where unix perms are enforced even though the
+      // write code ran on the Windows fallback.
+      try { fs.chmodSync(filePath, 0o600); } catch { /* best effort */ }
     } else {
       throw err;
     }
