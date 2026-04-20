@@ -45,6 +45,10 @@ GitHub Actions keeps the existing OS/Node matrix for `npm test` and adds a dedic
 - resolves a Docker CLI binary, including common Docker Desktop locations on Windows
 - builds `test/docker/Dockerfile`
 - runs the internal acceptance suite inside the container
+- can write `.generated/docker-acceptance/docker-acceptance-report.json` plus raw `docker-build.log` / `docker-run.log`
+- appends a concise job summary when `GITHUB_STEP_SUMMARY` is available
+
+Set `EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR` to preserve those artifacts locally or in CI.
 
 ## Next Good Scenarios
 

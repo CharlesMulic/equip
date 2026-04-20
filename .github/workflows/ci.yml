@@ -89,4 +89,13 @@ jobs:
         run: docker version
 
       - name: Run hermetic Docker acceptance
+        env:
+          EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR: .generated/docker-acceptance
         run: node scripts/ci/run-docker-acceptance.mjs
+
+      - name: Upload Docker acceptance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-acceptance
+          path: .generated/docker-acceptance/*
+          if-no-files-found: error

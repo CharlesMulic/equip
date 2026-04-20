@@ -46,6 +46,7 @@ On pushes to `main` it:
 2. builds
 3. runs `npm test`
 4. runs `npm run test:docker:acceptance`
+   and uploads the machine-readable Docker acceptance report plus raw build/run logs
 5. runs `npm run test:pack`
    and uploads both a machine-readable pack verification artifact and the actual packed `.tgz` for debugging / inspection
 6. runs `npm run test:pack:smoke`

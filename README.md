@@ -52,7 +52,7 @@ npm run test:pack             # Verify the actual npm tarball contents before pu
 npm run test:pack:smoke       # Install the produced tarball into a clean temp project
 ```
 
-The Docker acceptance lane is intentionally narrow: it boots a clean Node container, serves a local fixture registry, installs direct-mode and package-mode augments into fake Claude Code and Codex homes, and verifies the written MCP config, auth headers, rules, skills, and `~/.equip` state. It now also proves package-mode `npx` dispatch plus reconciliation, uninstall, restore, and cached offline reinstall behavior inside the same hermetic flow. This is the right place for CLI-level install flows that should stay hermetic and CI-friendly without depending on live registry data.
+The Docker acceptance lane is intentionally narrow: it boots a clean Node container, serves a local fixture registry, installs direct-mode and package-mode augments into fake Claude Code and Codex homes, and verifies the written MCP config, auth headers, rules, skills, and `~/.equip` state. It now also proves package-mode `npx` dispatch plus reconciliation, uninstall, restore, and cached offline reinstall behavior inside the same hermetic flow. This is the right place for CLI-level install flows that should stay hermetic and CI-friendly without depending on live registry data. CI now uploads a machine-readable Docker acceptance report plus raw build/run logs so failures point at the exact container step that regressed.
 The pack verification lane now also emits a machine-readable JSON report in CI and uploads the actual packed `.tgz`, so release/publish failures point at the exact tarball contract that broke and leave behind the inspected artifact. A second tarball smoke lane now installs that exact `.tgz` into a clean temp project and proves the packaged `equip` / `unequip` CLIs plus the exported library entrypoint still work from the npm package boundary.
 
 ## Release Model
@@ -71,7 +71,7 @@ Maintainer workflow:
 - let the release workflow open or update the `Version packages` PR
 - merge that PR to publish `@cg3/equip`
 
-The release workflow now also verifies the actual packed npm tarball before publish, smoke-installs that same tarball into a clean temp project, and uploads both the tarball and the resulting reports as workflow artifacts, so public-package mistakes like missing CLI entrypoints or accidentally included source/test files fail before npm publish and leave behind the exact package that was inspected.
+The release workflow now also verifies the actual packed npm tarball before publish, smoke-installs that same tarball into a clean temp project, uploads Docker acceptance artifacts, and preserves the resulting reports as workflow artifacts. That means public-package mistakes like missing CLI entrypoints or accidentally included source/test files fail before npm publish and leave behind the exact package plus hermetic acceptance evidence that was inspected.
 
 The committed `package.json` version on `main` is the canonical release version. Tags and GitHub releases are outputs of that flow, not the mechanism that decides the version.
 
