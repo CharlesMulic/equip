@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 function normalizeArtifacts(artifacts) {
   if (!artifacts || typeof artifacts !== "object") {
@@ -8,6 +9,107 @@ function normalizeArtifacts(artifacts) {
   return Object.fromEntries(
     Object.entries(artifacts).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
   );
+}
+
+function resolveExistingPath(filePath, fallback = "") {
+  if (filePath) {
+    const candidate = path.resolve(filePath);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return typeof fallback === "string" ? fallback : "";
+}
+
+function resolveSiblingArtifact(referencePath, siblingFileName, fallback = "") {
+  if (!referencePath) {
+    return typeof fallback === "string" ? fallback : "";
+  }
+
+  return resolveExistingPath(path.join(path.dirname(path.resolve(referencePath)), siblingFileName), fallback);
+}
+
+function resolveTarballPath(tarballFileName, tarballDir, fallback = "") {
+  if (tarballFileName && tarballDir) {
+    const candidate = path.resolve(tarballDir, tarballFileName);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return typeof fallback === "string" ? fallback : "";
+}
+
+export function rebaseReleaseVerificationInputs({
+  packVerification,
+  packVerificationPath = "",
+  packInstallSmoke,
+  packInstallSmokePath = "",
+  dockerAcceptance,
+  dockerAcceptanceReportPath = "",
+  packTarballDir = "",
+}) {
+  return {
+    packVerification: packVerification
+      ? {
+          ...packVerification,
+          tarballPath: resolveTarballPath(
+            packVerification?.tarballFileName || "",
+            packTarballDir,
+            packVerification?.tarballPath || "",
+          ),
+          artifacts: {
+            ...normalizeArtifacts(packVerification?.artifacts),
+            logPath: resolveSiblingArtifact(
+              packVerificationPath,
+              "pack-verification.log",
+              packVerification?.artifacts?.logPath || "",
+            ),
+          },
+        }
+      : null,
+    packInstallSmoke: packInstallSmoke
+      ? {
+          ...packInstallSmoke,
+          tarballPath: resolveTarballPath(
+            packInstallSmoke?.tarballFileName || "",
+            packTarballDir,
+            packInstallSmoke?.tarballPath || "",
+          ),
+          artifacts: {
+            ...normalizeArtifacts(packInstallSmoke?.artifacts),
+            logPath: resolveSiblingArtifact(
+              packInstallSmokePath,
+              "pack-install-smoke.log",
+              packInstallSmoke?.artifacts?.logPath || "",
+            ),
+          },
+        }
+      : null,
+    dockerAcceptance: dockerAcceptance
+      ? {
+          ...dockerAcceptance,
+          artifacts: {
+            ...normalizeArtifacts(dockerAcceptance?.artifacts),
+            reportPath: resolveExistingPath(
+              dockerAcceptanceReportPath,
+              dockerAcceptance?.artifacts?.reportPath || "",
+            ),
+            buildLogPath: resolveSiblingArtifact(
+              dockerAcceptanceReportPath,
+              "docker-build.log",
+              dockerAcceptance?.artifacts?.buildLogPath || "",
+            ),
+            runLogPath: resolveSiblingArtifact(
+              dockerAcceptanceReportPath,
+              "docker-run.log",
+              dockerAcceptance?.artifacts?.runLogPath || "",
+            ),
+          },
+        }
+      : null,
+  };
 }
 
 function buildPackageSection(packVerification) {

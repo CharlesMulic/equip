@@ -138,6 +138,14 @@ jobs:
           name: pack-install-smoke
           path: .generated/downloaded/pack-install-smoke
 
+      - name: Download packed npm tarball
+        id: download-pack-tarball
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: pack-tarball
+          path: .generated/downloaded/pack-tarball
+
       - name: Download Docker acceptance artifacts
         id: download-docker-acceptance
         continue-on-error: true
@@ -150,6 +158,7 @@ jobs:
         env:
           PACK_VERIFICATION_PATH: .generated/downloaded/pack-verification/pack-verification.json
           PACK_INSTALL_SMOKE_PATH: .generated/downloaded/pack-install-smoke/pack-install-smoke.json
+          PACK_TARBALL_DIR: .generated/downloaded/pack-tarball
           DOCKER_ACCEPTANCE_REPORT_PATH: .generated/downloaded/docker-acceptance/docker-acceptance-report.json
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
         run: node scripts/ci/write-release-verification-report.mjs

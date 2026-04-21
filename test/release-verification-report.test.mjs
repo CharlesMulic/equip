@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   appendReleaseVerificationSummary,
   buildReleaseVerificationReport,
+  rebaseReleaseVerificationInputs,
 } from "../scripts/ci/release-verification-report-lib.mjs";
 
 test("buildReleaseVerificationReport marks the rollup passed when all component gates pass", () => {
@@ -183,4 +184,75 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
   assert.match(summary, /Docker report: `\.generated\/docker-acceptance\/docker-acceptance-report\.json`/i);
   assert.match(summary, /Docker build log: `\.generated\/docker-acceptance\/docker-build\.log`/i);
   assert.match(summary, /Docker run log: `\.generated\/docker-acceptance\/docker-run\.log`/i);
+});
+
+test("rebaseReleaseVerificationInputs rewrites artifact paths to the current verification workspace", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-rebase-"));
+  const packDir = path.join(root, "pack-verification");
+  const smokeDir = path.join(root, "pack-install-smoke");
+  const dockerDir = path.join(root, "docker-acceptance");
+  const tarballDir = path.join(root, "pack-tarball");
+
+  fs.mkdirSync(packDir, { recursive: true });
+  fs.mkdirSync(smokeDir, { recursive: true });
+  fs.mkdirSync(dockerDir, { recursive: true });
+  fs.mkdirSync(tarballDir, { recursive: true });
+
+  const packVerificationPath = path.join(packDir, "pack-verification.json");
+  const packLogPath = path.join(packDir, "pack-verification.log");
+  const packInstallSmokePath = path.join(smokeDir, "pack-install-smoke.json");
+  const packSmokeLogPath = path.join(smokeDir, "pack-install-smoke.log");
+  const dockerAcceptanceReportPath = path.join(dockerDir, "docker-acceptance-report.json");
+  const dockerBuildLogPath = path.join(dockerDir, "docker-build.log");
+  const dockerRunLogPath = path.join(dockerDir, "docker-run.log");
+  const tarballPath = path.join(tarballDir, "cg3-equip-0.17.7.tgz");
+
+  for (const filePath of [
+    packVerificationPath,
+    packLogPath,
+    packInstallSmokePath,
+    packSmokeLogPath,
+    dockerAcceptanceReportPath,
+    dockerBuildLogPath,
+    dockerRunLogPath,
+    tarballPath,
+  ]) {
+    fs.writeFileSync(filePath, "stub\n", "utf8");
+  }
+
+  const rebased = rebaseReleaseVerificationInputs({
+    packVerification: {
+      tarballFileName: "cg3-equip-0.17.7.tgz",
+      tarballPath: "/old/job/pack/cg3-equip-0.17.7.tgz",
+      artifacts: {
+        logPath: "/old/job/pack/pack-verification.log",
+      },
+    },
+    packVerificationPath,
+    packInstallSmoke: {
+      tarballFileName: "cg3-equip-0.17.7.tgz",
+      tarballPath: "/old/job/pack/cg3-equip-0.17.7.tgz",
+      artifacts: {
+        logPath: "/old/job/pack/pack-install-smoke.log",
+      },
+    },
+    packInstallSmokePath,
+    dockerAcceptance: {
+      artifacts: {
+        reportPath: "/old/job/docker/docker-acceptance-report.json",
+        buildLogPath: "/old/job/docker/docker-build.log",
+        runLogPath: "/old/job/docker/docker-run.log",
+      },
+    },
+    dockerAcceptanceReportPath,
+    packTarballDir: tarballDir,
+  });
+
+  assert.equal(rebased.packVerification.tarballPath, path.resolve(tarballPath));
+  assert.equal(rebased.packVerification.artifacts.logPath, path.resolve(packLogPath));
+  assert.equal(rebased.packInstallSmoke.tarballPath, path.resolve(tarballPath));
+  assert.equal(rebased.packInstallSmoke.artifacts.logPath, path.resolve(packSmokeLogPath));
+  assert.equal(rebased.dockerAcceptance.artifacts.reportPath, path.resolve(dockerAcceptanceReportPath));
+  assert.equal(rebased.dockerAcceptance.artifacts.buildLogPath, path.resolve(dockerBuildLogPath));
+  assert.equal(rebased.dockerAcceptance.artifacts.runLogPath, path.resolve(dockerRunLogPath));
 });

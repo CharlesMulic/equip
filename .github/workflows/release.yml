@@ -107,6 +107,7 @@ jobs:
         env:
           PACK_VERIFICATION_PATH: .generated/pack/pack-verification.json
           PACK_INSTALL_SMOKE_PATH: .generated/pack/pack-install-smoke.json
+          PACK_TARBALL_DIR: .generated/pack/tarball
           DOCKER_ACCEPTANCE_REPORT_PATH: .generated/docker-acceptance/docker-acceptance-report.json
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
         run: node scripts/ci/write-release-verification-report.mjs
