@@ -17,11 +17,12 @@ function buildPackageSection(packVerification) {
       forbiddenPrefixesChecked: [],
       hasFailures: true,
       problems: ["pack verification artifact missing"],
+      failureMessage: "pack verification artifact missing",
       missingReason: "pack verification artifact missing",
     };
   }
 
-  const status = packVerification?.hasFailures ? "failed" : "passed";
+  const status = packVerification?.status || (packVerification?.hasFailures ? "failed" : "passed");
   return {
     status,
     packageName: packVerification?.packageName || "",
@@ -41,6 +42,7 @@ function buildPackageSection(packVerification) {
       : [],
     hasFailures: !!packVerification?.hasFailures,
     problems: Array.isArray(packVerification?.problems) ? packVerification.problems : [],
+    failureMessage: packVerification?.failureMessage || "",
     missingReason: "",
   };
 }
@@ -56,14 +58,16 @@ function buildTarballSmokeSection(packInstallSmoke) {
       unequipVersion: "",
       helpIncludesUsage: false,
       exportsCheck: "",
+      failureMessage: "tarball smoke artifact missing",
       missingReason: "tarball smoke artifact missing",
     };
   }
 
   const status =
-    packInstallSmoke?.helpIncludesUsage === true && packInstallSmoke?.exportsCheck === "exports-ok"
+    packInstallSmoke?.status ||
+    (packInstallSmoke?.helpIncludesUsage === true && packInstallSmoke?.exportsCheck === "exports-ok"
       ? "passed"
-      : "failed";
+      : "failed");
   return {
     status,
     tarballFileName: packInstallSmoke?.tarballFileName || "",
@@ -73,6 +77,7 @@ function buildTarballSmokeSection(packInstallSmoke) {
     unequipVersion: packInstallSmoke?.unequipVersion || "",
     helpIncludesUsage: !!packInstallSmoke?.helpIncludesUsage,
     exportsCheck: packInstallSmoke?.exportsCheck || "",
+    failureMessage: packInstallSmoke?.failureMessage || "",
     missingReason: "",
   };
 }

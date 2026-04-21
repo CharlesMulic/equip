@@ -50,7 +50,7 @@ GitHub Actions keeps the existing OS/Node matrix for `npm test` and adds a dedic
 
 Set `EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR` to preserve those artifacts locally or in CI.
 
-Those Docker artifacts now also feed the higher-level `.generated/release/release-verification-report.json` rollup in CI/release, alongside the npm pack verification and tarball-install smoke results. CI and release now upload that rollup before a dedicated assertion step turns it into an explicit gate, and the rollup can still be written with a `missing` component status when another verification lane failed too early to produce its own artifact. That keeps the machine-readable report and raw Docker logs available for inspection instead of failing with no combined diagnostic record.
+Those Docker artifacts now also feed the higher-level `.generated/release/release-verification-report.json` rollup in CI/release, alongside the npm pack verification and tarball-install smoke results. CI and release now upload that rollup before a dedicated assertion step turns it into an explicit gate, and the rollup can still be written with a `missing` component status when another verification lane failed too early to produce its own artifact. Because the pack verification and tarball-smoke scripts now also preserve explicit failure artifacts, the rollup can usually report richer component-specific failure details instead of collapsing everything into a generic missing-artifact state. That keeps the machine-readable report and raw Docker logs available for inspection instead of failing with no combined diagnostic record.
 
 ## Next Good Scenarios
 

@@ -12,6 +12,20 @@ const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || null;
 const explicitTarballPath = process.env.PACK_TARBALL_PATH || "";
 const tarballOutputDir = process.env.PACK_TARBALL_OUTPUT_DIR || "";
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const result = {
+  kind: "equip-pack-install-smoke",
+  generatedAt: new Date().toISOString(),
+  status: "failed",
+  failureMessage: "",
+  tarballPath: "",
+  tarballFileName: "",
+  installedVersion: "",
+  installRoot: "",
+  equipVersion: "",
+  unequipVersion: "",
+  helpIncludesUsage: false,
+  exportsCheck: "",
+};
 
 function runOrThrow(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -83,110 +97,127 @@ function resolveTarballPath() {
   return createTarballInTempDir();
 }
 
-const tarballPath = resolveTarballPath();
-const installRoot = mkdtempSync(path.join(os.tmpdir(), "equip-pack-install-smoke-"));
-const packageJsonPath = path.join(installRoot, "package.json");
+function writeResultArtifact() {
+  if (!outputPath) {
+    return;
+  }
 
-mkdirSync(installRoot, { recursive: true });
-writeFileSync(
-  packageJsonPath,
-  `${JSON.stringify({ name: "equip-pack-smoke", private: true }, null, 2)}\n`,
-  "utf8",
-);
-
-runOrThrow(
-  npmCommand,
-  [
-    "install",
-    "--ignore-scripts",
-    "--no-package-lock",
-    "--no-fund",
-    "--no-audit",
-    tarballPath,
-  ],
-  { cwd: installRoot },
-);
-
-const installedPackageDir = path.join(installRoot, "node_modules", "@cg3", "equip");
-const installedPackageJson = JSON.parse(
-  readFileSync(path.join(installedPackageDir, "package.json"), "utf8"),
-);
-
-const equipVersion = runOrThrow(
-  process.execPath,
-  [path.join(installedPackageDir, "bin", "equip.js"), "--version"],
-  { cwd: installRoot },
-);
-
-const equipHelp = runOrThrow(
-  process.execPath,
-  [path.join(installedPackageDir, "bin", "equip.js"), "--help"],
-  { cwd: installRoot },
-);
-
-const unequipVersion = runOrThrow(
-  process.execPath,
-  [path.join(installedPackageDir, "bin", "unequip.js"), "--version"],
-  { cwd: installRoot },
-);
-
-const exportsCheck = runOrThrow(
-  process.execPath,
-  [
-    "-e",
-    [
-      "const lib = require('@cg3/equip');",
-      "if (typeof lib.Augment !== 'function') throw new Error('Augment export missing');",
-      "if (typeof lib.createManualPlatform !== 'function') throw new Error('createManualPlatform export missing');",
-      "console.log('exports-ok');",
-    ].join(" "),
-  ],
-  { cwd: installRoot },
-);
-
-const result = {
-  kind: "equip-pack-install-smoke",
-  generatedAt: new Date().toISOString(),
-  tarballPath,
-  tarballFileName: path.basename(tarballPath),
-  installedVersion: installedPackageJson.version,
-  installRoot,
-  equipVersion,
-  unequipVersion,
-  helpIncludesUsage: /Usage: equip/.test(equipHelp),
-  exportsCheck,
-};
-
-if (!result.helpIncludesUsage) {
-  throw new Error("Installed equip --help output did not include the expected usage header.");
-}
-
-if (exportsCheck !== "exports-ok") {
-  throw new Error(`Unexpected export smoke output: ${exportsCheck}`);
-}
-
-if (outputPath) {
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
 }
 
-if (stepSummaryPath) {
+function appendSummary() {
+  if (!stepSummaryPath) {
+    return;
+  }
+
   appendFileSync(
     stepSummaryPath,
     [
       "## npm tarball install smoke",
       "",
-      `- Tarball: \`${result.tarballFileName}\``,
-      `- Installed version: \`${result.installedVersion}\``,
-      `- equip --version: \`${result.equipVersion}\``,
-      `- unequip --version: \`${result.unequipVersion}\``,
+      `- Status: \`${result.status}\``,
+      `- Tarball: \`${result.tarballFileName || "unavailable"}\``,
+      `- Installed version: \`${result.installedVersion || "unknown"}\``,
+      `- equip --version: \`${result.equipVersion || "unknown"}\``,
+      `- unequip --version: \`${result.unequipVersion || "unknown"}\``,
       `- Help check: ${result.helpIncludesUsage ? "passed" : "failed"}`,
+      result.failureMessage ? `- Failure: ${result.failureMessage}` : null,
       "",
-    ].join("\n"),
+    ].filter(Boolean).join("\n"),
     "utf8",
   );
 }
 
+try {
+  const tarballPath = resolveTarballPath();
+  const installRoot = mkdtempSync(path.join(os.tmpdir(), "equip-pack-install-smoke-"));
+  const packageJsonPath = path.join(installRoot, "package.json");
+
+  result.tarballPath = tarballPath;
+  result.tarballFileName = path.basename(tarballPath);
+  result.installRoot = installRoot;
+
+  mkdirSync(installRoot, { recursive: true });
+  writeFileSync(
+    packageJsonPath,
+    `${JSON.stringify({ name: "equip-pack-smoke", private: true }, null, 2)}\n`,
+    "utf8",
+  );
+
+  runOrThrow(
+    npmCommand,
+    [
+      "install",
+      "--ignore-scripts",
+      "--no-package-lock",
+      "--no-fund",
+      "--no-audit",
+      tarballPath,
+    ],
+    { cwd: installRoot },
+  );
+
+  const installedPackageDir = path.join(installRoot, "node_modules", "@cg3", "equip");
+  const installedPackageJson = JSON.parse(
+    readFileSync(path.join(installedPackageDir, "package.json"), "utf8"),
+  );
+
+  result.installedVersion = installedPackageJson.version;
+  result.equipVersion = runOrThrow(
+    process.execPath,
+    [path.join(installedPackageDir, "bin", "equip.js"), "--version"],
+    { cwd: installRoot },
+  );
+
+  const equipHelp = runOrThrow(
+    process.execPath,
+    [path.join(installedPackageDir, "bin", "equip.js"), "--help"],
+    { cwd: installRoot },
+  );
+
+  result.unequipVersion = runOrThrow(
+    process.execPath,
+    [path.join(installedPackageDir, "bin", "unequip.js"), "--version"],
+    { cwd: installRoot },
+  );
+
+  result.exportsCheck = runOrThrow(
+    process.execPath,
+    [
+      "-e",
+      [
+        "const lib = require('@cg3/equip');",
+        "if (typeof lib.Augment !== 'function') throw new Error('Augment export missing');",
+        "if (typeof lib.createManualPlatform !== 'function') throw new Error('createManualPlatform export missing');",
+        "console.log('exports-ok');",
+      ].join(" "),
+    ],
+    { cwd: installRoot },
+  );
+
+  result.helpIncludesUsage = /Usage: equip/.test(equipHelp);
+  if (!result.helpIncludesUsage) {
+    throw new Error("Installed equip --help output did not include the expected usage header.");
+  }
+
+  if (result.exportsCheck !== "exports-ok") {
+    throw new Error(`Unexpected export smoke output: ${result.exportsCheck}`);
+  }
+
+  result.status = "passed";
+} catch (error) {
+  result.status = "failed";
+  result.failureMessage = error instanceof Error ? error.message : String(error);
+}
+
+writeResultArtifact();
+appendSummary();
+
+if (result.status !== "passed") {
+  throw new Error(result.failureMessage || "npm tarball install smoke failed.");
+}
+
 console.log(
-  `[pack-smoke] installed ${installedPackageJson.name}@${installedPackageJson.version} from ${path.basename(tarballPath)}`,
+  `[pack-smoke] installed @cg3/equip@${result.installedVersion} from ${result.tarballFileName}`,
 );

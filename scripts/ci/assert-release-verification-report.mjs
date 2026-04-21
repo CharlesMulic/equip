@@ -15,19 +15,26 @@ function buildFailureDetails(report) {
     if (problems.length > 0) {
       details.push(`package problems: ${problems.join("; ")}`);
     }
+    if (report?.package?.failureMessage) {
+      details.push(`package failure: ${report.package.failureMessage}`);
+    }
   }
   if (report?.package?.status === "missing" && report?.package?.missingReason) {
     details.push(`package missing: ${report.package.missingReason}`);
   }
 
   if (report?.tarballSmoke?.status === "failed") {
-    const tarballSmokeDetails = [
-      `helpIncludesUsage=${report?.tarballSmoke?.helpIncludesUsage === true ? "true" : "false"}`,
-      `exportsCheck=${report?.tarballSmoke?.exportsCheck || "unknown"}`,
-      `equipVersion=${report?.tarballSmoke?.equipVersion || "unknown"}`,
-      `unequipVersion=${report?.tarballSmoke?.unequipVersion || "unknown"}`,
-    ];
-    details.push(`tarball smoke details: ${tarballSmokeDetails.join(", ")}`);
+    if (report?.tarballSmoke?.failureMessage) {
+      details.push(`tarball smoke failure: ${report.tarballSmoke.failureMessage}`);
+    } else {
+      const tarballSmokeDetails = [
+        `helpIncludesUsage=${report?.tarballSmoke?.helpIncludesUsage === true ? "true" : "false"}`,
+        `exportsCheck=${report?.tarballSmoke?.exportsCheck || "unknown"}`,
+        `equipVersion=${report?.tarballSmoke?.equipVersion || "unknown"}`,
+        `unequipVersion=${report?.tarballSmoke?.unequipVersion || "unknown"}`,
+      ];
+      details.push(`tarball smoke details: ${tarballSmokeDetails.join(", ")}`);
+    }
   }
   if (report?.tarballSmoke?.status === "missing" && report?.tarballSmoke?.missingReason) {
     details.push(`tarball smoke missing: ${report.tarballSmoke.missingReason}`);

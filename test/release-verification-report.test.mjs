@@ -54,12 +54,16 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
 test("buildReleaseVerificationReport marks the rollup failed when any component gate fails", () => {
   const report = buildReleaseVerificationReport({
     packVerification: {
+      status: "failed",
       hasFailures: true,
       problems: ["missing required files"],
+      failureMessage: "npm pack verification failed",
     },
     packInstallSmoke: {
+      status: "failed",
       helpIncludesUsage: false,
       exportsCheck: "exports-ok",
+      failureMessage: "installed equip --help output did not include the expected usage header",
     },
     dockerAcceptance: {
       status: "failed",
@@ -72,6 +76,8 @@ test("buildReleaseVerificationReport marks the rollup failed when any component 
   assert.equal(report.package.status, "failed");
   assert.equal(report.tarballSmoke.status, "failed");
   assert.equal(report.dockerAcceptance.status, "failed");
+  assert.match(report.package.failureMessage, /npm pack verification failed/i);
+  assert.match(report.tarballSmoke.failureMessage, /expected usage header/i);
   assert.match(report.dockerAcceptance.failureMessage, /docker run failed/i);
 });
 

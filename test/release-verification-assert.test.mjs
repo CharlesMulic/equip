@@ -53,13 +53,11 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
     package: {
       status: "failed",
       problems: ["missing bin/equip.js", "unexpected src/ fixture"],
+      failureMessage: "npm pack verification failed",
     },
     tarballSmoke: {
       status: "failed",
-      helpIncludesUsage: false,
-      exportsCheck: "exports-missing",
-      equipVersion: "0.17.7",
-      unequipVersion: "",
+      failureMessage: "Installed equip --help output did not include the expected usage header.",
     },
     dockerAcceptance: {
       status: "failed",
@@ -80,7 +78,8 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.match(result.stderr, /Failed components: package, tarballSmoke, dockerAcceptance\./i);
   assert.match(result.stderr, /Components: package=failed, tarballSmoke=failed, dockerAcceptance=failed\./i);
   assert.match(result.stderr, /package problems: missing bin\/equip\.js; unexpected src\/ fixture/i);
-  assert.match(result.stderr, /tarball smoke details: helpIncludesUsage=false, exportsCheck=exports-missing, equipVersion=0\.17\.7, unequipVersion=unknown/i);
+  assert.match(result.stderr, /package failure: npm pack verification failed/i);
+  assert.match(result.stderr, /tarball smoke failure: Installed equip --help output did not include the expected usage header\./i);
   assert.match(result.stderr, /docker acceptance details: docker run failed; failing steps: docker-run\(exit=1\)/i);
 });
 
