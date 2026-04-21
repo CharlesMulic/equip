@@ -83,3 +83,32 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.match(result.stderr, /tarball smoke details: helpIncludesUsage=false, exportsCheck=exports-missing, equipVersion=0\.17\.7, unequipVersion=unknown/i);
   assert.match(result.stderr, /docker acceptance details: docker run failed; failing steps: docker-run\(exit=1\)/i);
 });
+
+test("assert-release-verification-report reports missing component artifacts clearly", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
+  const reportPath = path.join(root, "release-verification-report.json");
+
+  writeJson(reportPath, {
+    overallStatus: "failed",
+    package: {
+      status: "missing",
+      missingReason: "pack verification artifact missing",
+    },
+    tarballSmoke: {
+      status: "passed",
+    },
+    dockerAcceptance: {
+      status: "missing",
+      missingReason: "docker acceptance artifact missing",
+    },
+  });
+
+  const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
+    RELEASE_VERIFICATION_REPORT_PATH: reportPath,
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Components: package=missing, tarballSmoke=passed, dockerAcceptance=missing\./i);
+  assert.match(result.stderr, /package missing: pack verification artifact missing/i);
+  assert.match(result.stderr, /docker acceptance missing: docker acceptance artifact missing/i);
+});

@@ -16,6 +16,9 @@ function buildFailureDetails(report) {
       details.push(`package problems: ${problems.join("; ")}`);
     }
   }
+  if (report?.package?.status === "missing" && report?.package?.missingReason) {
+    details.push(`package missing: ${report.package.missingReason}`);
+  }
 
   if (report?.tarballSmoke?.status === "failed") {
     const tarballSmokeDetails = [
@@ -25,6 +28,9 @@ function buildFailureDetails(report) {
       `unequipVersion=${report?.tarballSmoke?.unequipVersion || "unknown"}`,
     ];
     details.push(`tarball smoke details: ${tarballSmokeDetails.join(", ")}`);
+  }
+  if (report?.tarballSmoke?.status === "missing" && report?.tarballSmoke?.missingReason) {
+    details.push(`tarball smoke missing: ${report.tarballSmoke.missingReason}`);
   }
 
   if (report?.dockerAcceptance?.status === "failed") {
@@ -47,6 +53,9 @@ function buildFailureDetails(report) {
     if (dockerDetails.length > 0) {
       details.push(`docker acceptance details: ${dockerDetails.join("; ")}`);
     }
+  }
+  if (report?.dockerAcceptance?.status === "missing" && report?.dockerAcceptance?.missingReason) {
+    details.push(`docker acceptance missing: ${report.dockerAcceptance.missingReason}`);
   }
 
   return details;

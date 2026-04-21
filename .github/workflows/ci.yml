@@ -51,28 +51,28 @@ jobs:
         run: npm run test:pack:smoke
 
       - name: Upload pack verification
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
+        if: ${{ always() && matrix.os == 'ubuntu-latest' && matrix.node-version == 22 }}
         uses: actions/upload-artifact@v4
         with:
           name: pack-verification
           path: .generated/pack/pack-verification.json
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Upload packed npm tarball
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
+        if: ${{ always() && matrix.os == 'ubuntu-latest' && matrix.node-version == 22 }}
         uses: actions/upload-artifact@v4
         with:
           name: pack-tarball
           path: .generated/pack/tarball/*.tgz
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Upload pack install smoke report
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
+        if: ${{ always() && matrix.os == 'ubuntu-latest' && matrix.node-version == 22 }}
         uses: actions/upload-artifact@v4
         with:
           name: pack-install-smoke
           path: .generated/pack/pack-install-smoke.json
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   docker-acceptance:
     runs-on: ubuntu-latest
@@ -94,6 +94,7 @@ jobs:
         run: node scripts/ci/run-docker-acceptance.mjs
 
       - name: Upload Docker acceptance artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: docker-acceptance
@@ -101,6 +102,7 @@ jobs:
           if-no-files-found: error
 
   verification-report:
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     needs:
       - build-and-test
@@ -115,18 +117,24 @@ jobs:
           node-version: 22
 
       - name: Download pack verification
+        id: download-pack-verification
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: pack-verification
           path: .generated/downloaded/pack-verification
 
       - name: Download pack install smoke report
+        id: download-pack-install-smoke
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: pack-install-smoke
           path: .generated/downloaded/pack-install-smoke
 
       - name: Download Docker acceptance artifacts
+        id: download-docker-acceptance
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: docker-acceptance
@@ -141,6 +149,7 @@ jobs:
         run: node scripts/ci/write-release-verification-report.mjs
 
       - name: Upload release verification report
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: release-verification-report
@@ -148,6 +157,7 @@ jobs:
           if-no-files-found: error
 
       - name: Assert release verification report
+        if: ${{ always() }}
         env:
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
         run: node scripts/ci/assert-release-verification-report.mjs

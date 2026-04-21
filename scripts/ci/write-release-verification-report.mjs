@@ -24,9 +24,17 @@ if (!dockerAcceptanceReportPath) {
   throw new Error("DOCKER_ACCEPTANCE_REPORT_PATH is required.");
 }
 
-const packVerification = JSON.parse(fs.readFileSync(packVerificationPath, "utf8"));
-const packInstallSmoke = JSON.parse(fs.readFileSync(packInstallSmokePath, "utf8"));
-const dockerAcceptance = JSON.parse(fs.readFileSync(dockerAcceptanceReportPath, "utf8"));
+function readOptionalJson(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return null;
+  }
+
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+const packVerification = readOptionalJson(packVerificationPath);
+const packInstallSmoke = readOptionalJson(packInstallSmokePath);
+const dockerAcceptance = readOptionalJson(dockerAcceptanceReportPath);
 
 const report = buildReleaseVerificationReport({
   packVerification,

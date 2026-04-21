@@ -74,3 +74,26 @@ test("buildReleaseVerificationReport marks the rollup failed when any component 
   assert.equal(report.dockerAcceptance.status, "failed");
   assert.match(report.dockerAcceptance.failureMessage, /docker run failed/i);
 });
+
+test("buildReleaseVerificationReport marks missing component artifacts explicitly", () => {
+  const report = buildReleaseVerificationReport({
+    packVerification: null,
+    packInstallSmoke: {
+      helpIncludesUsage: true,
+      exportsCheck: "exports-ok",
+      equipVersion: "0.17.7",
+      unequipVersion: "0.17.7",
+    },
+    dockerAcceptance: null,
+  });
+
+  assert.equal(report.overallStatus, "failed");
+  assert.equal(report.inputs.hasPackVerification, false);
+  assert.equal(report.inputs.hasTarballSmoke, true);
+  assert.equal(report.inputs.hasDockerAcceptance, false);
+  assert.equal(report.package.status, "missing");
+  assert.equal(report.package.missingReason, "pack verification artifact missing");
+  assert.equal(report.tarballSmoke.status, "passed");
+  assert.equal(report.dockerAcceptance.status, "missing");
+  assert.equal(report.dockerAcceptance.missingReason, "docker acceptance artifact missing");
+});

@@ -41,11 +41,14 @@ jobs:
         run: npm test
 
       - name: Run hermetic Docker acceptance
+        id: docker-acceptance
+        continue-on-error: true
         env:
           EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR: .generated/docker-acceptance
         run: npm run test:docker:acceptance
 
       - name: Upload Docker acceptance artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: docker-acceptance
@@ -53,39 +56,48 @@ jobs:
           if-no-files-found: error
 
       - name: Verify packed npm artifact
+        id: pack-verification
+        continue-on-error: true
         env:
           PACK_VERIFICATION_OUTPUT_PATH: .generated/pack/pack-verification.json
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
         run: npm run test:pack
 
       - name: Smoke install packed npm tarball
+        id: pack-install-smoke
+        if: ${{ always() }}
+        continue-on-error: true
         env:
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
           PACK_INSTALL_SMOKE_OUTPUT_PATH: .generated/pack/pack-install-smoke.json
         run: npm run test:pack:smoke
 
       - name: Upload pack verification
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: pack-verification
           path: .generated/pack/pack-verification.json
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Upload packed npm tarball
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: pack-tarball
           path: .generated/pack/tarball/*.tgz
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Upload pack install smoke report
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: pack-install-smoke
           path: .generated/pack/pack-install-smoke.json
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Write release verification report
+        if: ${{ always() }}
         env:
           PACK_VERIFICATION_PATH: .generated/pack/pack-verification.json
           PACK_INSTALL_SMOKE_PATH: .generated/pack/pack-install-smoke.json
@@ -94,6 +106,7 @@ jobs:
         run: node scripts/ci/write-release-verification-report.mjs
 
       - name: Upload release verification report
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: release-verification-report
@@ -101,6 +114,7 @@ jobs:
           if-no-files-found: error
 
       - name: Assert release verification report
+        if: ${{ always() }}
         env:
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
         run: node scripts/ci/assert-release-verification-report.mjs
