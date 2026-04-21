@@ -176,6 +176,7 @@ jobs:
 
       - name: Create release PR or publish
         id: changesets
+        continue-on-error: true
         uses: changesets/action@v1
         with:
           version: npm run version-packages
@@ -185,6 +186,29 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write changesets release result
+        if: ${{ always() }}
+        env:
+          CHANGESETS_RELEASE_RESULT_PATH: .generated/release/changesets-release-result.json
+          CHANGESETS_STEP_OUTCOME: ${{ steps.changesets.outcome }}
+          CHANGESETS_PUBLISHED: ${{ steps.changesets.outputs.published }}
+          CHANGESETS_PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+        run: node scripts/ci/write-changesets-release-result.mjs
+
+      - name: Upload changesets release result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: changesets-release-result
+          path: .generated/release/changesets-release-result.json
+          if-no-files-found: error
+
+      - name: Assert changesets release result
+        if: ${{ always() }}
+        env:
+          CHANGESETS_RELEASE_RESULT_PATH: .generated/release/changesets-release-result.json
+        run: node scripts/ci/assert-changesets-release-result.mjs
 
       - name: Summarize published packages
         if: steps.changesets.outputs.published == 'true'

@@ -68,6 +68,9 @@ On pushes to `main` it:
 13. uses `changesets/action` to either:
     - open/update a `Version packages` PR when pending changesets exist, or
     - publish the already-versioned package after that PR is merged
+14. writes `.generated/release/changesets-release-result.json`
+    after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails
+15. uploads that artifact and then asserts it explicitly, so release-PR/publish failures still leave behind a structured result before the workflow turns red
 
 ## Publishing Auth
 
