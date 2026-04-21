@@ -28,6 +28,7 @@ test("assert-release-verification-report passes healthy rollups", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
   const reportPath = path.join(root, "release-verification-report.json");
   const assertionPath = path.join(root, "release-verification-assertion.json");
+  const summaryPath = path.join(root, "step-summary.md");
 
   writeJson(reportPath, {
     overallStatus: "passed",
@@ -39,10 +40,12 @@ test("assert-release-verification-report passes healthy rollups", () => {
   const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
     RELEASE_VERIFICATION_REPORT_PATH: reportPath,
     RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+    GITHUB_STEP_SUMMARY: summaryPath,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  const summary = fs.readFileSync(summaryPath, "utf8");
   assert.match(result.stdout, /status passed/i);
   assert.match(result.stdout, /package=passed, tarballSmoke=passed, dockerAcceptance=passed/i);
   assert.equal(assertion.kind, "equip-release-verification-assertion");
@@ -54,12 +57,17 @@ test("assert-release-verification-report passes healthy rollups", () => {
     dockerAcceptance: "passed",
   });
   assert.deepEqual(assertion.failureDetails, []);
+  assert.match(summary, /## Release verification assertion/i);
+  assert.match(summary, /Outcome: `passed`/i);
+  assert.match(summary, /package: `passed`/i);
+  assert.match(summary, /dockerAcceptance: `passed`/i);
 });
 
 test("assert-release-verification-report fails unhealthy rollups with helpful detail", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
   const reportPath = path.join(root, "release-verification-report.json");
   const assertionPath = path.join(root, "release-verification-assertion.json");
+  const summaryPath = path.join(root, "step-summary.md");
 
   writeJson(reportPath, {
     overallStatus: "failed",
@@ -96,10 +104,12 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
     RELEASE_VERIFICATION_REPORT_PATH: reportPath,
     RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+    GITHUB_STEP_SUMMARY: summaryPath,
   });
 
   assert.notEqual(result.status, 0);
   const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  const summary = fs.readFileSync(summaryPath, "utf8");
   assert.match(result.stderr, /assertion failed/i);
   assert.match(result.stderr, /Failed components: package, tarballSmoke, dockerAcceptance\./i);
   assert.match(result.stderr, /Components: package=failed, tarballSmoke=failed, dockerAcceptance=failed\./i);
@@ -128,6 +138,10 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.ok(assertion.failureDetails.some((detail) => /tarball smoke artifacts:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance details:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance artifacts:/i.test(detail)));
+  assert.match(summary, /Outcome: `failed`/i);
+  assert.match(summary, /Failure details:/i);
+  assert.match(summary, /package problems: missing bin\/equip\.js; unexpected src\/ fixture/i);
+  assert.match(summary, /tarball smoke failure: Installed equip --help output did not include the expected usage header\./i);
 });
 
 test("assert-release-verification-report reports missing component artifacts clearly", () => {

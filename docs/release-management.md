@@ -60,6 +60,7 @@ On pushes to `main` it:
 8. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
 9. writes `.generated/release/release-verification-assertion.json`
    as a final machine-readable gate verdict with component statuses and failure details
+10. appends a final `Release verification assertion` section to the GitHub job summary so the human-readable workflow output reflects the post-assert gate outcome too
 10. uses `changesets/action` to either:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged

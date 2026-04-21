@@ -91,6 +91,52 @@ function writeAssertionArtifact(outputPath, result) {
   fs.writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
 }
 
+function appendAssertionSummary(summaryPath, result) {
+  if (!summaryPath) {
+    return;
+  }
+
+  const lines = [
+    "## Release verification assertion",
+    "",
+    `- Outcome: \`${result.outcome || "unknown"}\``,
+    `- Overall status: \`${result.overallStatus || "unknown"}\``,
+  ];
+
+  const components = result.components && typeof result.components === "object"
+    ? result.components
+    : {};
+  const componentEntries = Object.entries(components);
+  if (componentEntries.length > 0) {
+    for (const [name, status] of componentEntries) {
+      lines.push(`- ${name}: \`${status}\``);
+    }
+  }
+
+  if (result.reportPath) {
+    lines.push(`- Report: \`${result.reportPath}\``);
+  }
+
+  if (result.assertionPath) {
+    lines.push(`- Assertion artifact: \`${result.assertionPath}\``);
+  }
+
+  const failureDetails = Array.isArray(result.failureDetails) ? result.failureDetails : [];
+  if (failureDetails.length > 0) {
+    lines.push("- Failure details:");
+    for (const detail of failureDetails) {
+      lines.push(`  - ${detail}`);
+    }
+  }
+
+  if (result.error) {
+    lines.push(`- Error: ${result.error}`);
+  }
+
+  lines.push("");
+  fs.appendFileSync(summaryPath, `${lines.join("\n")}\n`, "utf8");
+}
+
 function main() {
   const reportPath =
     process.env.RELEASE_VERIFICATION_REPORT_PATH ||
@@ -98,6 +144,7 @@ function main() {
   const assertionPath =
     process.env.RELEASE_VERIFICATION_ASSERTION_PATH ||
     path.join(".generated", "release", "release-verification-assertion.json");
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY || "";
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   const componentStatuses = {
     package: report?.package?.status || "unknown",
@@ -123,7 +170,7 @@ function main() {
     );
   }
 
-  writeAssertionArtifact(assertionPath, {
+  const assertionResult = {
     kind: "equip-release-verification-assertion",
     evaluatedAt: new Date().toISOString(),
     outcome: "passed",
@@ -132,7 +179,9 @@ function main() {
     overallStatus: report.overallStatus,
     components: componentStatuses,
     failureDetails: [],
-  });
+  };
+  writeAssertionArtifact(assertionPath, assertionResult);
+  appendAssertionSummary(summaryPath, assertionResult);
 
   console.log(`[release-verification] status passed for ${reportPath}`);
   console.log(`[release-verification] components: ${componentSummary || "none"}`);
@@ -156,7 +205,7 @@ try {
     dockerAcceptance: report?.dockerAcceptance?.status || "unknown",
   };
   const failureDetails = report ? buildFailureDetails(report) : [];
-  writeAssertionArtifact(assertionPath, {
+  const assertionResult = {
     kind: "equip-release-verification-assertion",
     evaluatedAt: new Date().toISOString(),
     outcome: "failed",
@@ -166,7 +215,9 @@ try {
     components: componentStatuses,
     failureDetails,
     error: error.message,
-  });
+  };
+  writeAssertionArtifact(assertionPath, assertionResult);
+  appendAssertionSummary(process.env.GITHUB_STEP_SUMMARY || "", assertionResult);
   console.error(`[release-verification] assertion failed: ${error.message}`);
   process.exit(1);
 }
