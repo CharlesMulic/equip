@@ -67,10 +67,16 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
       status: "failed",
       problems: ["missing bin/equip.js", "unexpected src/ fixture"],
       failureMessage: "npm pack verification failed",
+      artifacts: {
+        logPath: ".generated/release/pack-verification.log",
+      },
     },
     tarballSmoke: {
       status: "failed",
       failureMessage: "Installed equip --help output did not include the expected usage header.",
+      artifacts: {
+        logPath: ".generated/release/pack-install-smoke.log",
+      },
     },
     dockerAcceptance: {
       status: "failed",
@@ -79,6 +85,11 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
         { name: "docker-build", exitCode: 0 },
         { name: "docker-run", exitCode: 1 },
       ],
+      artifacts: {
+        reportPath: ".generated/docker-acceptance/docker-acceptance-report.json",
+        buildLogPath: ".generated/docker-acceptance/docker-build.log",
+        runLogPath: ".generated/docker-acceptance/docker-run.log",
+      },
     },
   });
 
@@ -94,8 +105,14 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.match(result.stderr, /Components: package=failed, tarballSmoke=failed, dockerAcceptance=failed\./i);
   assert.match(result.stderr, /package problems: missing bin\/equip\.js; unexpected src\/ fixture/i);
   assert.match(result.stderr, /package failure: npm pack verification failed/i);
+  assert.match(result.stderr, /package artifacts: logPath=\.generated\/release\/pack-verification\.log/i);
   assert.match(result.stderr, /tarball smoke failure: Installed equip --help output did not include the expected usage header\./i);
+  assert.match(result.stderr, /tarball smoke artifacts: logPath=\.generated\/release\/pack-install-smoke\.log/i);
   assert.match(result.stderr, /docker acceptance details: docker run failed; failing steps: docker-run\(exit=1\)/i);
+  assert.match(
+    result.stderr,
+    /docker acceptance artifacts: reportPath=\.generated\/docker-acceptance\/docker-acceptance-report\.json, buildLogPath=\.generated\/docker-acceptance\/docker-build\.log, runLogPath=\.generated\/docker-acceptance\/docker-run\.log/i,
+  );
   assert.equal(assertion.kind, "equip-release-verification-assertion");
   assert.equal(assertion.outcome, "failed");
   assert.equal(assertion.overallStatus, "failed");
@@ -106,8 +123,11 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
     dockerAcceptance: "failed",
   });
   assert.ok(assertion.failureDetails.some((detail) => /package problems:/i.test(detail)));
+  assert.ok(assertion.failureDetails.some((detail) => /package artifacts:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /tarball smoke failure:/i.test(detail)));
+  assert.ok(assertion.failureDetails.some((detail) => /tarball smoke artifacts:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance details:/i.test(detail)));
+  assert.ok(assertion.failureDetails.some((detail) => /docker acceptance artifacts:/i.test(detail)));
 });
 
 test("assert-release-verification-report reports missing component artifacts clearly", () => {

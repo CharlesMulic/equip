@@ -1,5 +1,15 @@
 import fs from "node:fs";
 
+function normalizeArtifacts(artifacts) {
+  if (!artifacts || typeof artifacts !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifacts).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+  );
+}
+
 function buildPackageSection(packVerification) {
   if (!packVerification) {
     return {
@@ -17,6 +27,7 @@ function buildPackageSection(packVerification) {
       forbiddenPrefixesChecked: [],
       hasFailures: true,
       problems: ["pack verification artifact missing"],
+      artifacts: {},
       failureMessage: "pack verification artifact missing",
       missingReason: "pack verification artifact missing",
     };
@@ -42,6 +53,7 @@ function buildPackageSection(packVerification) {
       : [],
     hasFailures: !!packVerification?.hasFailures,
     problems: Array.isArray(packVerification?.problems) ? packVerification.problems : [],
+    artifacts: normalizeArtifacts(packVerification?.artifacts),
     failureMessage: packVerification?.failureMessage || "",
     missingReason: "",
   };
@@ -58,6 +70,8 @@ function buildTarballSmokeSection(packInstallSmoke) {
       unequipVersion: "",
       helpIncludesUsage: false,
       exportsCheck: "",
+      steps: [],
+      artifacts: {},
       failureMessage: "tarball smoke artifact missing",
       missingReason: "tarball smoke artifact missing",
     };
@@ -77,6 +91,14 @@ function buildTarballSmokeSection(packInstallSmoke) {
     unequipVersion: packInstallSmoke?.unequipVersion || "",
     helpIncludesUsage: !!packInstallSmoke?.helpIncludesUsage,
     exportsCheck: packInstallSmoke?.exportsCheck || "",
+    steps: Array.isArray(packInstallSmoke?.steps)
+      ? packInstallSmoke.steps.map((step) => ({
+          name: step.name || "",
+          status: step.status || "",
+          exitCode: step.exitCode ?? null,
+        }))
+      : [],
+    artifacts: normalizeArtifacts(packInstallSmoke?.artifacts),
     failureMessage: packInstallSmoke?.failureMessage || "",
     missingReason: "",
   };
@@ -167,13 +189,28 @@ export function appendReleaseVerificationSummary({
   if (report.package.missingReason) {
     lines.push(`- Pack verification detail: ${report.package.missingReason}`);
   }
+  if (report.package.failureMessage) {
+    lines.push(`- Pack verification failure: ${report.package.failureMessage}`);
+  }
+  if (report.package.artifacts?.logPath) {
+    lines.push(`- Pack verification log: \`${report.package.artifacts.logPath}\``);
+  }
 
   if (report.tarballSmoke.missingReason) {
     lines.push(`- Tarball smoke detail: ${report.tarballSmoke.missingReason}`);
   }
+  if (report.tarballSmoke.failureMessage) {
+    lines.push(`- Tarball smoke failure: ${report.tarballSmoke.failureMessage}`);
+  }
+  if (report.tarballSmoke.artifacts?.logPath) {
+    lines.push(`- Tarball smoke log: \`${report.tarballSmoke.artifacts.logPath}\``);
+  }
 
   if (report.dockerAcceptance.missingReason) {
     lines.push(`- Docker acceptance detail: ${report.dockerAcceptance.missingReason}`);
+  }
+  if (report.dockerAcceptance.failureMessage) {
+    lines.push(`- Docker acceptance failure: ${report.dockerAcceptance.failureMessage}`);
   }
 
   if (report.package.tarballFileName) {
@@ -182,6 +219,15 @@ export function appendReleaseVerificationSummary({
 
   if (report.dockerAcceptance.totalDurationMs) {
     lines.push(`- Docker duration: \`${report.dockerAcceptance.totalDurationMs} ms\``);
+  }
+  if (report.dockerAcceptance.artifacts?.reportPath) {
+    lines.push(`- Docker report: \`${report.dockerAcceptance.artifacts.reportPath}\``);
+  }
+  if (report.dockerAcceptance.artifacts?.buildLogPath) {
+    lines.push(`- Docker build log: \`${report.dockerAcceptance.artifacts.buildLogPath}\``);
+  }
+  if (report.dockerAcceptance.artifacts?.runLogPath) {
+    lines.push(`- Docker run log: \`${report.dockerAcceptance.artifacts.runLogPath}\``);
   }
 
   lines.push("");

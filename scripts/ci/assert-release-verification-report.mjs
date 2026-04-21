@@ -9,6 +9,17 @@ function formatStatusMap(statusMap) {
 
 function buildFailureDetails(report) {
   const details = [];
+  const formatArtifactDetails = (prefix, artifacts) => {
+    const entries = artifacts && typeof artifacts === "object"
+      ? Object.entries(artifacts).filter(([, value]) => typeof value === "string" && value)
+      : [];
+
+    if (entries.length > 0) {
+      details.push(
+        `${prefix} artifacts: ${entries.map(([key, value]) => `${key}=${value}`).join(", ")}`,
+      );
+    }
+  };
 
   if (report?.package?.status === "failed") {
     const problems = Array.isArray(report?.package?.problems) ? report.package.problems : [];
@@ -18,6 +29,7 @@ function buildFailureDetails(report) {
     if (report?.package?.failureMessage) {
       details.push(`package failure: ${report.package.failureMessage}`);
     }
+    formatArtifactDetails("package", report?.package?.artifacts);
   }
   if (report?.package?.status === "missing" && report?.package?.missingReason) {
     details.push(`package missing: ${report.package.missingReason}`);
@@ -35,6 +47,7 @@ function buildFailureDetails(report) {
       ];
       details.push(`tarball smoke details: ${tarballSmokeDetails.join(", ")}`);
     }
+    formatArtifactDetails("tarball smoke", report?.tarballSmoke?.artifacts);
   }
   if (report?.tarballSmoke?.status === "missing" && report?.tarballSmoke?.missingReason) {
     details.push(`tarball smoke missing: ${report.tarballSmoke.missingReason}`);
@@ -60,6 +73,7 @@ function buildFailureDetails(report) {
     if (dockerDetails.length > 0) {
       details.push(`docker acceptance details: ${dockerDetails.join("; ")}`);
     }
+    formatArtifactDetails("docker acceptance", report?.dockerAcceptance?.artifacts);
   }
   if (report?.dockerAcceptance?.status === "missing" && report?.dockerAcceptance?.missingReason) {
     details.push(`docker acceptance missing: ${report.dockerAcceptance.missingReason}`);
