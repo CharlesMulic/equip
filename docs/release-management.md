@@ -53,7 +53,8 @@ On pushes to `main` it:
    to install the produced tarball into a clean temp project and prove the packaged CLI + exports still work from the npm package boundary
 7. writes `.generated/release/release-verification-report.json`
    as a single machine-readable rollup of pack verification, tarball-install smoke, and Docker acceptance
-8. uses `changesets/action` to either:
+8. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
+9. uses `changesets/action` to either:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged
 

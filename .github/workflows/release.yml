@@ -100,6 +100,11 @@ jobs:
           path: .generated/release/release-verification-report.json
           if-no-files-found: error
 
+      - name: Assert release verification report
+        env:
+          RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
+        run: node scripts/ci/assert-release-verification-report.mjs
+
       - name: Configure npm token fallback
         run: |
           if [ -n "${NPM_TOKEN:-}" ]; then
