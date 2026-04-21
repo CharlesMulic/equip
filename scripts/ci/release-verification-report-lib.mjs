@@ -274,11 +274,26 @@ export function buildReleaseVerificationReport({
 export function appendReleaseVerificationSummary({
   summaryPath = "",
   report,
+  assertion = null,
 }) {
   if (!summaryPath) {
     return;
   }
 
+  fs.appendFileSync(
+    summaryPath,
+    buildReleaseVerificationSummaryMarkdown({
+      report,
+      assertion,
+    }),
+    "utf8",
+  );
+}
+
+export function buildReleaseVerificationSummaryMarkdown({
+  report,
+  assertion = null,
+}) {
   const lines = [
     "## Release verification rollup",
     "",
@@ -332,6 +347,42 @@ export function appendReleaseVerificationSummary({
     lines.push(`- Docker run log: \`${report.dockerAcceptance.artifacts.runLogPath}\``);
   }
 
+  if (assertion && typeof assertion === "object") {
+    lines.push("");
+    lines.push("## Final assertion");
+    lines.push("");
+    lines.push(`- Outcome: \`${assertion.outcome || "unknown"}\``);
+    lines.push(`- Overall status: \`${assertion.overallStatus || "unknown"}\``);
+
+    const components =
+      assertion.components && typeof assertion.components === "object"
+        ? assertion.components
+        : {};
+    for (const [name, status] of Object.entries(components)) {
+      lines.push(`- ${name}: \`${status}\``);
+    }
+
+    if (assertion.reportPath) {
+      lines.push(`- Report: \`${assertion.reportPath}\``);
+    }
+
+    if (assertion.assertionPath) {
+      lines.push(`- Assertion artifact: \`${assertion.assertionPath}\``);
+    }
+
+    const failureDetails = Array.isArray(assertion.failureDetails) ? assertion.failureDetails : [];
+    if (failureDetails.length > 0) {
+      lines.push("- Failure details:");
+      for (const detail of failureDetails) {
+        lines.push(`  - ${detail}`);
+      }
+    }
+
+    if (assertion.error) {
+      lines.push(`- Error: ${assertion.error}`);
+    }
+  }
+
   lines.push("");
-  fs.appendFileSync(summaryPath, `${lines.join("\n")}\n`, "utf8");
+  return `${lines.join("\n")}\n`;
 }

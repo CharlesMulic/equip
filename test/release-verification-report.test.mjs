@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   appendReleaseVerificationSummary,
+  buildReleaseVerificationSummaryMarkdown,
   buildReleaseVerificationReport,
   rebaseReleaseVerificationInputs,
 } from "../scripts/ci/release-verification-report-lib.mjs";
@@ -184,6 +185,115 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
   assert.match(summary, /Docker report: `\.generated\/docker-acceptance\/docker-acceptance-report\.json`/i);
   assert.match(summary, /Docker build log: `\.generated\/docker-acceptance\/docker-build\.log`/i);
   assert.match(summary, /Docker run log: `\.generated\/docker-acceptance\/docker-run\.log`/i);
+});
+
+test("buildReleaseVerificationSummaryMarkdown can include the final assertion section", () => {
+  const report = buildReleaseVerificationReport({
+    packVerification: {
+      status: "passed",
+      hasFailures: false,
+      problems: [],
+      tarballFileName: "cg3-equip-0.17.7.tgz",
+      artifacts: {
+        logPath: ".generated/release/pack-verification.log",
+      },
+    },
+    packInstallSmoke: {
+      status: "passed",
+      helpIncludesUsage: true,
+      exportsCheck: "exports-ok",
+      artifacts: {
+        logPath: ".generated/release/pack-install-smoke.log",
+      },
+    },
+    dockerAcceptance: {
+      status: "passed",
+      totalDurationMs: 6789,
+      steps: [],
+      artifacts: {
+        reportPath: ".generated/docker-acceptance/docker-acceptance-report.json",
+      },
+    },
+  });
+
+  const markdown = buildReleaseVerificationSummaryMarkdown({
+    report,
+    assertion: {
+      outcome: "failed",
+      overallStatus: "failed",
+      components: {
+        package: "passed",
+        tarballSmoke: "failed",
+        dockerAcceptance: "passed",
+      },
+      reportPath: ".generated/release/release-verification-report.json",
+      assertionPath: ".generated/release/release-verification-assertion.json",
+      failureDetails: [
+        "tarball smoke failure: Installed equip --help output did not include the expected usage header.",
+      ],
+      error: "release verification failed",
+    },
+  });
+
+  assert.match(markdown, /## Release verification rollup/i);
+  assert.match(markdown, /## Final assertion/i);
+  assert.match(markdown, /Outcome: `failed`/i);
+  assert.match(markdown, /tarballSmoke: `failed`/i);
+  assert.match(markdown, /Assertion artifact: `\.generated\/release\/release-verification-assertion\.json`/i);
+  assert.match(markdown, /Failure details:/i);
+  assert.match(markdown, /release verification failed/i);
+});
+
+test("appendReleaseVerificationSummary can append both rollup and assertion details", () => {
+  const summaryDir = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-summary-"));
+  const summaryPath = path.join(summaryDir, "summary-with-assertion.md");
+  const report = buildReleaseVerificationReport({
+    packVerification: {
+      status: "passed",
+      hasFailures: false,
+      problems: [],
+      artifacts: {
+        logPath: ".generated/release/pack-verification.log",
+      },
+    },
+    packInstallSmoke: {
+      status: "passed",
+      helpIncludesUsage: true,
+      exportsCheck: "exports-ok",
+      artifacts: {
+        logPath: ".generated/release/pack-install-smoke.log",
+      },
+    },
+    dockerAcceptance: {
+      status: "passed",
+      steps: [],
+      artifacts: {
+        reportPath: ".generated/docker-acceptance/docker-acceptance-report.json",
+      },
+    },
+  });
+
+  appendReleaseVerificationSummary({
+    summaryPath,
+    report,
+    assertion: {
+      outcome: "passed",
+      overallStatus: "passed",
+      components: {
+        package: "passed",
+        tarballSmoke: "passed",
+        dockerAcceptance: "passed",
+      },
+      reportPath: ".generated/release/release-verification-report.json",
+      assertionPath: ".generated/release/release-verification-assertion.json",
+      failureDetails: [],
+    },
+  });
+
+  const summary = fs.readFileSync(summaryPath, "utf8");
+  assert.match(summary, /## Release verification rollup/i);
+  assert.match(summary, /## Final assertion/i);
+  assert.match(summary, /Outcome: `passed`/i);
 });
 
 test("rebaseReleaseVerificationInputs rewrites artifact paths to the current verification workspace", () => {

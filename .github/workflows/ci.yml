@@ -178,10 +178,26 @@ jobs:
           RELEASE_VERIFICATION_ASSERTION_PATH: .generated/release/release-verification-assertion.json
         run: node scripts/ci/assert-release-verification-report.mjs
 
+      - name: Write release verification summary
+        if: ${{ always() }}
+        env:
+          RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
+          RELEASE_VERIFICATION_ASSERTION_PATH: .generated/release/release-verification-assertion.json
+          RELEASE_VERIFICATION_SUMMARY_PATH: .generated/release/release-verification-summary.md
+        run: node scripts/ci/write-release-verification-summary.mjs
+
       - name: Upload release verification assertion
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: release-verification-assertion
           path: .generated/release/release-verification-assertion.json
+          if-no-files-found: ignore
+
+      - name: Upload release verification summary
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-verification-summary
+          path: .generated/release/release-verification-summary.md
           if-no-files-found: ignore
