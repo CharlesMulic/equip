@@ -50,9 +50,25 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
 
   writeJson(reportPath, {
     overallStatus: "failed",
-    package: { status: "passed" },
-    tarballSmoke: { status: "failed" },
-    dockerAcceptance: { status: "failed" },
+    package: {
+      status: "failed",
+      problems: ["missing bin/equip.js", "unexpected src/ fixture"],
+    },
+    tarballSmoke: {
+      status: "failed",
+      helpIncludesUsage: false,
+      exportsCheck: "exports-missing",
+      equipVersion: "0.17.7",
+      unequipVersion: "",
+    },
+    dockerAcceptance: {
+      status: "failed",
+      failureMessage: "docker run failed",
+      steps: [
+        { name: "docker-build", exitCode: 0 },
+        { name: "docker-run", exitCode: 1 },
+      ],
+    },
   });
 
   const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
@@ -61,6 +77,9 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /assertion failed/i);
-  assert.match(result.stderr, /Failed components: tarballSmoke, dockerAcceptance\./i);
-  assert.match(result.stderr, /Components: package=passed, tarballSmoke=failed, dockerAcceptance=failed\./i);
+  assert.match(result.stderr, /Failed components: package, tarballSmoke, dockerAcceptance\./i);
+  assert.match(result.stderr, /Components: package=failed, tarballSmoke=failed, dockerAcceptance=failed\./i);
+  assert.match(result.stderr, /package problems: missing bin\/equip\.js; unexpected src\/ fixture/i);
+  assert.match(result.stderr, /tarball smoke details: helpIncludesUsage=false, exportsCheck=exports-missing, equipVersion=0\.17\.7, unequipVersion=unknown/i);
+  assert.match(result.stderr, /docker acceptance details: docker run failed; failing steps: docker-run\(exit=1\)/i);
 });
