@@ -57,7 +57,9 @@ On pushes to `main` it:
    as a single machine-readable rollup of pack verification, tarball-install smoke, and Docker acceptance
    even if one of those upstream artifacts is missing because a verification lane failed early
 8. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
-9. uses `changesets/action` to either:
+9. writes `.generated/release/release-verification-assertion.json`
+   as a final machine-readable gate verdict with component statuses and failure details
+10. uses `changesets/action` to either:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged
 

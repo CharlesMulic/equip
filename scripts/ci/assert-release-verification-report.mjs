@@ -68,10 +68,22 @@ function buildFailureDetails(report) {
   return details;
 }
 
+function writeAssertionArtifact(outputPath, result) {
+  if (!outputPath) {
+    return;
+  }
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+}
+
 function main() {
   const reportPath =
     process.env.RELEASE_VERIFICATION_REPORT_PATH ||
     path.join(".generated", "release", "release-verification-report.json");
+  const assertionPath =
+    process.env.RELEASE_VERIFICATION_ASSERTION_PATH ||
+    path.join(".generated", "release", "release-verification-assertion.json");
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   const componentStatuses = {
     package: report?.package?.status || "unknown",
@@ -97,6 +109,17 @@ function main() {
     );
   }
 
+  writeAssertionArtifact(assertionPath, {
+    kind: "equip-release-verification-assertion",
+    evaluatedAt: new Date().toISOString(),
+    outcome: "passed",
+    reportPath: path.resolve(reportPath),
+    assertionPath: path.resolve(assertionPath),
+    overallStatus: report.overallStatus,
+    components: componentStatuses,
+    failureDetails: [],
+  });
+
   console.log(`[release-verification] status passed for ${reportPath}`);
   console.log(`[release-verification] components: ${componentSummary || "none"}`);
 }
@@ -104,6 +127,32 @@ function main() {
 try {
   main();
 } catch (error) {
+  const reportPath =
+    process.env.RELEASE_VERIFICATION_REPORT_PATH ||
+    path.join(".generated", "release", "release-verification-report.json");
+  const assertionPath =
+    process.env.RELEASE_VERIFICATION_ASSERTION_PATH ||
+    path.join(".generated", "release", "release-verification-assertion.json");
+  const report = fs.existsSync(reportPath)
+    ? JSON.parse(fs.readFileSync(reportPath, "utf8"))
+    : null;
+  const componentStatuses = {
+    package: report?.package?.status || "unknown",
+    tarballSmoke: report?.tarballSmoke?.status || "unknown",
+    dockerAcceptance: report?.dockerAcceptance?.status || "unknown",
+  };
+  const failureDetails = report ? buildFailureDetails(report) : [];
+  writeAssertionArtifact(assertionPath, {
+    kind: "equip-release-verification-assertion",
+    evaluatedAt: new Date().toISOString(),
+    outcome: "failed",
+    reportPath: path.resolve(reportPath),
+    assertionPath: path.resolve(assertionPath),
+    overallStatus: report?.overallStatus || "unknown",
+    components: componentStatuses,
+    failureDetails,
+    error: error.message,
+  });
   console.error(`[release-verification] assertion failed: ${error.message}`);
   process.exit(1);
 }
