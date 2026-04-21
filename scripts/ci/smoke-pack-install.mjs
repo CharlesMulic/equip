@@ -8,10 +8,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 
 const outputPath = process.env.PACK_INSTALL_SMOKE_OUTPUT_PATH || null;
+const logPath =
+  process.env.PACK_INSTALL_SMOKE_LOG_PATH ||
+  (outputPath ? path.join(path.dirname(path.resolve(outputPath)), "pack-install-smoke.log") : null);
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || null;
 const explicitTarballPath = process.env.PACK_TARBALL_PATH || "";
 const tarballOutputDir = process.env.PACK_TARBALL_OUTPUT_DIR || "";
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const stepLogs = [];
 const result = {
   kind: "equip-pack-install-smoke",
   generatedAt: new Date().toISOString(),
@@ -25,9 +29,13 @@ const result = {
   unequipVersion: "",
   helpIncludesUsage: false,
   exportsCheck: "",
+  steps: [],
+  artifacts: {
+    logPath: logPath ? path.resolve(logPath) : "",
+  },
 };
 
-function runOrThrow(command, args, options = {}) {
+function runOrThrow(name, command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd || repoRoot,
     encoding: "utf8",
@@ -39,6 +47,16 @@ function runOrThrow(command, args, options = {}) {
   if (result.error) {
     throw result.error;
   }
+
+  stepLogs.push({
+    name,
+    command,
+    args,
+    status: typeof result.status === "number" && result.status === 0 ? "passed" : "failed",
+    exitCode: result.status ?? null,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+  });
 
   if (typeof result.status === "number" && result.status !== 0) {
     throw new Error(
@@ -70,7 +88,7 @@ function resolveTarballFromDirectory(dir) {
 
 function createTarballInTempDir() {
   const packDir = mkdtempSync(path.join(os.tmpdir(), "equip-pack-smoke-tarball-"));
-  const output = runOrThrow(npmCommand, ["pack", "--json", "--pack-destination", packDir], {
+  const output = runOrThrow("npm-pack", npmCommand, ["pack", "--json", "--pack-destination", packDir], {
     cwd: repoRoot,
   });
   const packEntries = JSON.parse(output);
@@ -106,6 +124,27 @@ function writeResultArtifact() {
   writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
 }
 
+function writeLog() {
+  if (!logPath) {
+    return;
+  }
+
+  mkdirSync(path.dirname(logPath), { recursive: true });
+  const contents = stepLogs.length > 0
+    ? stepLogs
+        .map((step) => [
+          `## ${step.name}`,
+          `$ ${step.command} ${step.args.join(" ")}`,
+          `status=${step.status}${step.exitCode !== null ? ` exit=${step.exitCode}` : ""}`,
+          step.stdout ? `stdout:\n${step.stdout.trimEnd()}` : "",
+          step.stderr ? `stderr:\n${step.stderr.trimEnd()}` : "",
+          "",
+        ].filter(Boolean).join("\n"))
+        .join("\n")
+    : (result.failureMessage || "pack install smoke failed");
+  writeFileSync(logPath, contents.endsWith("\n") ? contents : `${contents}\n`, "utf8");
+}
+
 function appendSummary() {
   if (!stepSummaryPath) {
     return;
@@ -123,6 +162,7 @@ function appendSummary() {
       `- unequip --version: \`${result.unequipVersion || "unknown"}\``,
       `- Help check: ${result.helpIncludesUsage ? "passed" : "failed"}`,
       result.failureMessage ? `- Failure: ${result.failureMessage}` : null,
+      result.artifacts?.logPath ? `- Log: \`${result.artifacts.logPath}\`` : null,
       "",
     ].filter(Boolean).join("\n"),
     "utf8",
@@ -146,6 +186,7 @@ try {
   );
 
   runOrThrow(
+    "npm-install",
     npmCommand,
     [
       "install",
@@ -165,24 +206,28 @@ try {
 
   result.installedVersion = installedPackageJson.version;
   result.equipVersion = runOrThrow(
+    "equip-version",
     process.execPath,
     [path.join(installedPackageDir, "bin", "equip.js"), "--version"],
     { cwd: installRoot },
   );
 
   const equipHelp = runOrThrow(
+    "equip-help",
     process.execPath,
     [path.join(installedPackageDir, "bin", "equip.js"), "--help"],
     { cwd: installRoot },
   );
 
   result.unequipVersion = runOrThrow(
+    "unequip-version",
     process.execPath,
     [path.join(installedPackageDir, "bin", "unequip.js"), "--version"],
     { cwd: installRoot },
   );
 
   result.exportsCheck = runOrThrow(
+    "exports-check",
     process.execPath,
     [
       "-e",
@@ -211,6 +256,12 @@ try {
   result.failureMessage = error instanceof Error ? error.message : String(error);
 }
 
+result.steps = stepLogs.map((step) => ({
+  name: step.name,
+  status: step.status,
+  exitCode: step.exitCode,
+}));
+writeLog();
 writeResultArtifact();
 appendSummary();
 

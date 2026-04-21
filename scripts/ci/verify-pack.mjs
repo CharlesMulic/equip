@@ -4,6 +4,9 @@ import path from "node:path";
 import { verifyPackMetadata } from "./pack-verification-lib.mjs";
 
 const outputPath = process.env.PACK_VERIFICATION_OUTPUT_PATH || null;
+const logPath =
+  process.env.PACK_VERIFICATION_LOG_PATH ||
+  (outputPath ? path.join(path.dirname(path.resolve(outputPath)), "pack-verification.log") : null);
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || null;
 const tarballOutputDir = process.env.PACK_TARBALL_OUTPUT_DIR || "";
 
@@ -14,6 +17,15 @@ function writeVerificationArtifact(verification) {
 
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(verification, null, 2)}\n`, "utf8");
+}
+
+function writeLog(contents) {
+  if (!logPath) {
+    return;
+  }
+
+  mkdirSync(path.dirname(logPath), { recursive: true });
+  writeFileSync(logPath, contents.endsWith("\n") ? contents : `${contents}\n`, "utf8");
 }
 
 function appendSummary(verification) {
@@ -40,6 +52,7 @@ function appendSummary(verification) {
       `- Forbidden prefixes checked: ${verification.forbiddenPrefixesChecked.join(", ") || "(none)"}`,
       verification.shasum ? `- Tarball shasum: \`${verification.shasum}\`` : null,
       verification.problems.length > 0 ? `- Problems: ${verification.problems.join("; ")}` : null,
+      verification.artifacts?.logPath ? `- Log: \`${verification.artifacts.logPath}\`` : null,
       "",
     ].filter(Boolean).join("\n"),
     "utf8",
@@ -47,6 +60,7 @@ function appendSummary(verification) {
 }
 
 let verification;
+let logContents = "";
 
 try {
   if (tarballOutputDir) {
@@ -62,6 +76,12 @@ try {
     env: process.env,
     shell: true,
   });
+  logContents = [
+    `$ ${packCommand}`,
+    "",
+    output.trimEnd(),
+    "",
+  ].join("\n");
 
   const metadata = JSON.parse(output);
   verification = verifyPackMetadata(metadata);
@@ -74,8 +94,20 @@ try {
     status: verification.hasFailures ? "failed" : "passed",
     failureMessage: verification.hasFailures ? verification.problems.join("; ") : "",
     tarballPath: tarballPath && existsSync(tarballPath) ? tarballPath : "",
+    artifacts: {
+      logPath: logPath ? path.resolve(logPath) : "",
+    },
   };
 } catch (error) {
+  const stdout = typeof error?.stdout === "string" ? error.stdout : "";
+  const stderr = typeof error?.stderr === "string" ? error.stderr : "";
+  logContents = [
+    `$ ${tarballOutputDir ? `npm pack --json --pack-destination "${tarballOutputDir}"` : "npm pack --dry-run --json"}`,
+    "",
+    stdout.trimEnd(),
+    stderr.trimEnd(),
+    "",
+  ].filter(Boolean).join("\n");
   verification = {
     kind: "equip-pack-verification",
     status: "failed",
@@ -95,9 +127,13 @@ try {
     hasFailures: true,
     problems: [error instanceof Error ? error.message : String(error)],
     failureMessage: error instanceof Error ? error.message : String(error),
+    artifacts: {
+      logPath: logPath ? path.resolve(logPath) : "",
+    },
   };
 }
 
+writeLog(logContents || verification.failureMessage || "");
 writeVerificationArtifact(verification);
 appendSummary(verification);
 

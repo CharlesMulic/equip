@@ -48,11 +48,11 @@ On pushes to `main` it:
 4. runs `npm run test:docker:acceptance`
    and uploads the machine-readable Docker acceptance report plus raw build/run logs
 5. runs `npm run test:pack`
-   and uploads both a machine-readable pack verification artifact and the actual packed `.tgz` for debugging / inspection
+   and uploads a machine-readable pack verification artifact, a raw `pack-verification.log`, and the actual packed `.tgz` for debugging / inspection
    even when `npm pack` itself fails before normal verification can complete
 6. runs `npm run test:pack:smoke`
    to install the produced tarball into a clean temp project and prove the packaged CLI + exports still work from the npm package boundary
-   while still preserving a machine-readable failure artifact if the smoke dies before it can pass
+   while still preserving a machine-readable failure artifact plus raw `pack-install-smoke.log` output if the smoke dies before it can pass
 7. writes `.generated/release/release-verification-report.json`
    as a single machine-readable rollup of pack verification, tarball-install smoke, and Docker acceptance
    even if one of those upstream artifacts is missing because a verification lane failed early

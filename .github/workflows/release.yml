@@ -60,6 +60,7 @@ jobs:
         continue-on-error: true
         env:
           PACK_VERIFICATION_OUTPUT_PATH: .generated/pack/pack-verification.json
+          PACK_VERIFICATION_LOG_PATH: .generated/pack/pack-verification.log
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
         run: npm run test:pack
 
@@ -70,6 +71,7 @@ jobs:
         env:
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
           PACK_INSTALL_SMOKE_OUTPUT_PATH: .generated/pack/pack-install-smoke.json
+          PACK_INSTALL_SMOKE_LOG_PATH: .generated/pack/pack-install-smoke.log
         run: npm run test:pack:smoke
 
       - name: Upload pack verification
@@ -77,7 +79,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pack-verification
-          path: .generated/pack/pack-verification.json
+          path: |
+            .generated/pack/pack-verification.json
+            .generated/pack/pack-verification.log
           if-no-files-found: ignore
 
       - name: Upload packed npm tarball
@@ -93,7 +97,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pack-install-smoke
-          path: .generated/pack/pack-install-smoke.json
+          path: |
+            .generated/pack/pack-install-smoke.json
+            .generated/pack/pack-install-smoke.log
           if-no-files-found: ignore
 
       - name: Write release verification report
