@@ -484,8 +484,11 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
 
 // ─── Prior Identity Flow ──────────────────────────────────
 
-// Override only allowed in development to prevent credential redirect attacks in production
-const IDENTITY_TOKEN_URL = (process.env.NODE_ENV === "development" && process.env.EQUIP_IDENTITY_URL)
+// Override only allowed in test mode to prevent credential redirect attacks in production.
+// Gate mirrors equip-app/sidecar/session.ts — unified test-mode signal across both files.
+// Production builds must strip these env vars at launch (tracked in Phase 1 deferred items).
+const IDENTITY_TEST_MODE_OK = process.env.NODE_ENV === "development" || process.env.EQUIP_TEST_MODE === "1";
+const IDENTITY_TOKEN_URL = (IDENTITY_TEST_MODE_OK && process.env.EQUIP_IDENTITY_URL)
   || "https://api.cg3.io";
 
 /** Check if a JWT string is expired (decode payload without verification). */
