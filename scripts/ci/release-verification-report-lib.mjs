@@ -243,6 +243,8 @@ export function buildReleaseVerificationReport({
   packVerification,
   packInstallSmoke,
   dockerAcceptance,
+  assertion = null,
+  artifacts = {},
   generatedAt = new Date().toISOString(),
 }) {
   const packageSection = buildPackageSection(packVerification);
@@ -260,6 +262,7 @@ export function buildReleaseVerificationReport({
     kind: "equip-release-verification-report",
     generatedAt,
     overallStatus,
+    artifacts: normalizeArtifacts(artifacts),
     inputs: {
       hasPackVerification: !!packVerification,
       hasTarballSmoke: !!packInstallSmoke,
@@ -268,6 +271,21 @@ export function buildReleaseVerificationReport({
     package: packageSection,
     tarballSmoke: tarballSmokeSection,
     dockerAcceptance: dockerAcceptanceSection,
+    assertion:
+      assertion && typeof assertion === "object"
+        ? {
+            outcome: assertion.outcome || "",
+            overallStatus: assertion.overallStatus || "",
+            components:
+              assertion.components && typeof assertion.components === "object"
+                ? assertion.components
+                : {},
+            reportPath: assertion.reportPath || "",
+            assertionPath: assertion.assertionPath || "",
+            failureDetails: Array.isArray(assertion.failureDetails) ? assertion.failureDetails : [],
+            error: assertion.error || "",
+          }
+        : null,
   };
 }
 

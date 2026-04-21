@@ -161,15 +161,9 @@ jobs:
           PACK_TARBALL_DIR: .generated/downloaded/pack-tarball
           DOCKER_ACCEPTANCE_REPORT_PATH: .generated/downloaded/docker-acceptance/docker-acceptance-report.json
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
+          RELEASE_VERIFICATION_ASSERTION_PATH: .generated/release/release-verification-assertion.json
+          RELEASE_VERIFICATION_SUMMARY_PATH: .generated/release/release-verification-summary.md
         run: node scripts/ci/write-release-verification-report.mjs
-
-      - name: Upload release verification report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-verification-report
-          path: .generated/release/release-verification-report.json
-          if-no-files-found: error
 
       - name: Assert release verification report
         if: ${{ always() }}
@@ -186,6 +180,19 @@ jobs:
           RELEASE_VERIFICATION_SUMMARY_PATH: .generated/release/release-verification-summary.md
         run: node scripts/ci/write-release-verification-summary.mjs
 
+      - name: Rewrite release verification report with final artifact paths
+        if: ${{ always() }}
+        env:
+          PACK_VERIFICATION_PATH: .generated/downloaded/pack-verification/pack-verification.json
+          PACK_INSTALL_SMOKE_PATH: .generated/downloaded/pack-install-smoke/pack-install-smoke.json
+          PACK_TARBALL_DIR: .generated/downloaded/pack-tarball
+          DOCKER_ACCEPTANCE_REPORT_PATH: .generated/downloaded/docker-acceptance/docker-acceptance-report.json
+          RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
+          RELEASE_VERIFICATION_ASSERTION_PATH: .generated/release/release-verification-assertion.json
+          RELEASE_VERIFICATION_SUMMARY_PATH: .generated/release/release-verification-summary.md
+          RELEASE_VERIFICATION_APPEND_STEP_SUMMARY: "false"
+        run: node scripts/ci/write-release-verification-report.mjs
+
       - name: Upload release verification assertion
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -201,3 +208,11 @@ jobs:
           name: release-verification-summary
           path: .generated/release/release-verification-summary.md
           if-no-files-found: ignore
+
+      - name: Upload release verification report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-verification-report
+          path: .generated/release/release-verification-report.json
+          if-no-files-found: error

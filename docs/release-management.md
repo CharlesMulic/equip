@@ -63,7 +63,9 @@ On pushes to `main` it:
 10. appends a final `Release verification assertion` section to the GitHub job summary so the human-readable workflow output reflects the post-assert gate outcome too
 11. writes and uploads `.generated/release/release-verification-summary.md`
     so the final rollup plus assertion state also survive as one human-readable Markdown artifact
-12. uses `changesets/action` to either:
+12. rewrites `.generated/release/release-verification-report.json`
+    after the assertion/summary steps so the uploaded rollup also points at the final assertion and Markdown summary artifacts
+13. uses `changesets/action` to either:
     - open/update a `Version packages` PR when pending changesets exist, or
     - publish the already-versioned package after that PR is merged
 
