@@ -14,6 +14,9 @@ const changesetsReleaseReportPath =
 const outputPath =
   process.env.RELEASE_WORKFLOW_REPORT_PATH ||
   path.join(".generated", "release", "release-workflow-report.json");
+const assertionPath =
+  process.env.RELEASE_WORKFLOW_ASSERTION_PATH ||
+  path.join(".generated", "release", "release-workflow-assertion.json");
 const summaryPath =
   process.env.RELEASE_WORKFLOW_SUMMARY_PATH ||
   path.join(".generated", "release", "release-workflow-summary.md");
@@ -37,19 +40,23 @@ function resolveArtifactPath(filePath) {
 
 const releaseVerificationReport = readOptionalJson(releaseVerificationReportPath);
 const changesetsReleaseReport = readOptionalJson(changesetsReleaseReportPath);
+const assertionArtifact = readOptionalJson(assertionPath);
 
 const report = buildReleaseWorkflowReport({
   releaseVerificationReport,
   changesetsReleaseReport,
+  assertionArtifact,
   artifacts: {
     releaseVerificationReportPath: resolveArtifactPath(releaseVerificationReportPath),
     changesetsReleaseReportPath: resolveArtifactPath(changesetsReleaseReportPath),
+    assertionPath: resolveArtifactPath(assertionPath),
     summaryPath: resolveArtifactPath(summaryPath),
     reportPath: path.resolve(outputPath),
   },
   artifactNames: {
     releaseVerification: process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "",
     changesetsRelease: process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "",
+    assertion: process.env.RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME || "",
     summary: process.env.RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME || "",
     report: process.env.RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME || "",
   },

@@ -49,15 +49,25 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   const report = buildReleaseWorkflowReport({
     releaseVerificationReport: createReleaseVerificationReport(),
     changesetsReleaseReport: createChangesetsReleaseReport(),
+    assertionArtifact: {
+      assertion: {
+        outcome: "passed",
+        actualStatus: "published",
+        allowedStatuses: ["published", "completed"],
+        failureDetails: [],
+      },
+    },
     artifacts: {
       releaseVerificationReportPath: "/tmp/release-verification-report.json",
       changesetsReleaseReportPath: "/tmp/changesets-release-report.json",
+      assertionPath: "/tmp/release-workflow-assertion.json",
       summaryPath: "/tmp/release-workflow-summary.md",
       reportPath: "/tmp/release-workflow-report.json",
     },
     artifactNames: {
       releaseVerification: "release-verification-report",
       changesetsRelease: "changesets-release-report",
+      assertion: "release-workflow-assertion",
       summary: "release-workflow-summary",
       report: "release-workflow-report",
     },
@@ -67,6 +77,7 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   assert.equal(report.overallStatus, "published");
   assert.equal(report.releaseVerification.status, "passed");
   assert.equal(report.changesetsRelease.status, "published");
+  assert.equal(report.assertion.outcome, "passed");
   assert.equal(report.artifacts.summaryPath, "/tmp/release-workflow-summary.md");
   assert.equal(report.artifactNames.summary, "release-workflow-summary");
 });
@@ -88,9 +99,19 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
     report: buildReleaseWorkflowReport({
       releaseVerificationReport: null,
       changesetsReleaseReport: createChangesetsReleaseReport(),
+      assertionArtifact: {
+        assertion: {
+          outcome: "failed",
+          actualStatus: "failed",
+          allowedStatuses: ["published", "completed"],
+          error: "release workflow assertion failed",
+          failureDetails: ["release verification status: missing"],
+        },
+      },
       artifactNames: {
         releaseVerification: "release-verification-report",
         changesetsRelease: "changesets-release-report",
+        assertion: "release-workflow-assertion",
         summary: "release-workflow-summary",
         report: "release-workflow-report",
       },
@@ -101,6 +122,8 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /Missing inputs/i);
   assert.match(markdown, /Release verification report was missing/i);
   assert.match(markdown, /Changesets summary:/i);
+  assert.match(markdown, /Final assertion/i);
+  assert.match(markdown, /Outcome: `failed`/i);
   assert.match(markdown, /Release Verification: `release-verification-report`/i);
 });
 
@@ -109,6 +132,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   const releaseVerificationReportPath = path.join(root, "release-verification-report.json");
   const changesetsReleaseReportPath = path.join(root, "changesets-release-report.json");
   const releaseWorkflowReportPath = path.join(root, "release-workflow-report.json");
+  const releaseWorkflowAssertionPath = path.join(root, "release-workflow-assertion.json");
   const releaseWorkflowSummaryPath = path.join(root, "release-workflow-summary.md");
 
   fs.writeFileSync(
@@ -126,9 +150,39 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_VERIFICATION_REPORT_PATH: releaseVerificationReportPath,
     CHANGESETS_RELEASE_REPORT_PATH: changesetsReleaseReportPath,
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
     RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+    RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
+    RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
+    RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runScript("scripts/ci/assert-release-workflow-report.mjs", {
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
+    RELEASE_WORKFLOW_ALLOWED_STATUSES: "published,completed",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runScript("scripts/ci/write-release-workflow-summary.mjs", {
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
+    RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runScript("scripts/ci/write-release-workflow-report.mjs", {
+    RELEASE_VERIFICATION_REPORT_PATH: releaseVerificationReportPath,
+    CHANGESETS_RELEASE_REPORT_PATH: changesetsReleaseReportPath,
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
+    RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+    RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
     RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
   });
@@ -142,11 +196,50 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
   const report = JSON.parse(fs.readFileSync(releaseWorkflowReportPath, "utf8"));
+  const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
   const summary = fs.readFileSync(releaseWorkflowSummaryPath, "utf8");
   assert.equal(report.overallStatus, "published");
+  assert.equal(report.assertion.outcome, "passed");
+  assert.equal(assertion.assertion.outcome, "passed");
   assert.equal(report.artifacts.releaseVerificationReportPath, path.resolve(releaseVerificationReportPath));
+  assert.equal(report.artifacts.assertionPath, path.resolve(releaseWorkflowAssertionPath));
   assert.equal(report.artifactNames.report, "release-workflow-report");
+  assert.equal(report.artifactNames.assertion, "release-workflow-assertion");
   assert.match(summary, /Release Workflow Summary/i);
   assert.match(summary, /Overall status: `published`/i);
-  assert.match(summary, /Release workflow summary/i);
+  assert.match(summary, /Final assertion/i);
+});
+
+test("assert-release-workflow-report writes a failure artifact before exiting nonzero", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-workflow-"));
+  const releaseWorkflowReportPath = path.join(root, "release-workflow-report.json");
+  const releaseWorkflowAssertionPath = path.join(root, "release-workflow-assertion.json");
+
+  fs.writeFileSync(
+    releaseWorkflowReportPath,
+    `${JSON.stringify(
+      buildReleaseWorkflowReport({
+        releaseVerificationReport: {
+          kind: "equip-release-verification-report",
+          overallStatus: "failed",
+          summary: "release verification failed",
+        },
+        changesetsReleaseReport: createChangesetsReleaseReport(),
+      }),
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const result = runScript("scripts/ci/assert-release-workflow-report.mjs", {
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
+  });
+
+  assert.notEqual(result.status, 0);
+  const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
+  assert.equal(assertion.assertion.outcome, "failed");
+  assert.match(assertion.assertion.failureDetails.join("\n"), /release verification status: failed/i);
+  assert.match(result.stderr || result.stdout, /assertion failed/i);
 });

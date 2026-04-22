@@ -79,6 +79,7 @@ function buildOverallStatus(releaseVerificationReport, changesetsReleaseReport) 
 export function buildReleaseWorkflowReport({
   releaseVerificationReport = null,
   changesetsReleaseReport = null,
+  assertionArtifact = null,
   artifacts = {},
   artifactNames = {},
   generatedAt = new Date().toISOString(),
@@ -86,7 +87,10 @@ export function buildReleaseWorkflowReport({
   return {
     kind: "equip-release-workflow-report",
     generatedAt,
-    overallStatus: buildOverallStatus(releaseVerificationReport, changesetsReleaseReport),
+    overallStatus:
+      assertionArtifact?.assertion?.outcome === "failed"
+        ? "failed"
+        : buildOverallStatus(releaseVerificationReport, changesetsReleaseReport),
     releaseVerification: buildReleaseVerificationStatus(releaseVerificationReport),
     changesetsRelease: buildChangesetsStatus(changesetsReleaseReport),
     inputs: {
@@ -97,6 +101,19 @@ export function buildReleaseWorkflowReport({
       releaseVerification: releaseVerificationReport,
       changesetsRelease: changesetsReleaseReport,
     },
+    assertion: assertionArtifact?.assertion
+      ? {
+          outcome: assertionArtifact.assertion.outcome || "",
+          actualStatus: assertionArtifact.assertion.actualStatus || "",
+          allowedStatuses: Array.isArray(assertionArtifact.assertion.allowedStatuses)
+            ? assertionArtifact.assertion.allowedStatuses
+            : [],
+          error: assertionArtifact.assertion.error || "",
+          failureDetails: Array.isArray(assertionArtifact.assertion.failureDetails)
+            ? assertionArtifact.assertion.failureDetails
+            : [],
+        }
+      : null,
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
   };
@@ -128,6 +145,27 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
 
     if (!report.inputs?.hasChangesetsReleaseReport) {
       lines.push("- Changesets release report was missing.");
+    }
+  }
+
+  if (report.assertion) {
+    lines.push("", "## Final assertion", "");
+    lines.push(`- Outcome: \`${report.assertion.outcome || "unknown"}\``);
+    lines.push(`- Actual status: \`${report.assertion.actualStatus || "unknown"}\``);
+
+    if (Array.isArray(report.assertion.allowedStatuses) && report.assertion.allowedStatuses.length > 0) {
+      lines.push(`- Allowed statuses: \`${report.assertion.allowedStatuses.join(", ")}\``);
+    }
+
+    if (report.assertion.error) {
+      lines.push(`- Error: ${report.assertion.error}`);
+    }
+
+    if (Array.isArray(report.assertion.failureDetails) && report.assertion.failureDetails.length > 0) {
+      lines.push("- Failure details:");
+      for (const detail of report.assertion.failureDetails) {
+        lines.push(`  - ${detail}`);
+      }
     }
   }
 

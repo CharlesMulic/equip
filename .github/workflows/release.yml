@@ -282,12 +282,24 @@ jobs:
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
           CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
+          RELEASE_WORKFLOW_ASSERTION_PATH: .generated/release/release-workflow-assertion.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
           RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: release-verification-report
           CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report
+          RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: release-workflow-assertion
           RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: release-workflow-report
           RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: release-workflow-summary
         run: node scripts/ci/write-release-workflow-report.mjs
+
+      - name: Assert final release workflow report
+        if: ${{ always() }}
+        id: release-workflow-assert
+        continue-on-error: true
+        env:
+          RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
+          RELEASE_WORKFLOW_ASSERTION_PATH: .generated/release/release-workflow-assertion.json
+          RELEASE_WORKFLOW_ALLOWED_STATUSES: published,completed
+        run: node scripts/ci/assert-release-workflow-report.mjs
 
       - name: Write final release workflow summary
         if: ${{ always() }}
@@ -297,18 +309,28 @@ jobs:
           RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false"
         run: node scripts/ci/write-release-workflow-summary.mjs
 
-      - name: Rewrite final release workflow report with summary artifact path
+      - name: Rewrite final release workflow report with final artifact paths
         if: ${{ always() }}
         env:
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
           CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
+          RELEASE_WORKFLOW_ASSERTION_PATH: .generated/release/release-workflow-assertion.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
           RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: release-verification-report
           CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report
+          RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: release-workflow-assertion
           RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: release-workflow-report
           RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: release-workflow-summary
         run: node scripts/ci/write-release-workflow-report.mjs
+
+      - name: Rewrite final release workflow summary with assertion details
+        if: ${{ always() }}
+        env:
+          RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
+          RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
+          RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false"
+        run: node scripts/ci/write-release-workflow-summary.mjs
 
       - name: Upload final release workflow summary
         if: ${{ always() }}
@@ -318,6 +340,14 @@ jobs:
           path: .generated/release/release-workflow-summary.md
           if-no-files-found: ignore
 
+      - name: Upload final release workflow assertion
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-workflow-assertion
+          path: .generated/release/release-workflow-assertion.json
+          if-no-files-found: ignore
+
       - name: Upload final release workflow report
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -325,3 +355,7 @@ jobs:
           name: release-workflow-report
           path: .generated/release/release-workflow-report.json
           if-no-files-found: error
+
+      - name: Fail if final release workflow assertion failed
+        if: ${{ always() && steps.release-workflow-assert.outcome == 'failure' }}
+        run: exit 1

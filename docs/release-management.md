@@ -87,6 +87,10 @@ On pushes to `main` it:
     as the matching human-readable summary of those two rollups, including the uploaded artifact names to open next
 21. rewrites `.generated/release/release-workflow-report.json`
     after the summary step so the final machine-readable report also points at the uploaded summary artifact path
+22. asserts that workflow-level report explicitly and writes `.generated/release/release-workflow-assertion.json`
+    so the final release verdict is preserved as a machine-readable gate artifact instead of being inferred only from the report contents
+23. rewrites the workflow summary/report after that assertion step and uploads the summary, assertion, and report artifacts
+    before the job turns red, so failed final-release gates still leave behind one complete evidence bundle
 
 ## Publishing Auth
 
