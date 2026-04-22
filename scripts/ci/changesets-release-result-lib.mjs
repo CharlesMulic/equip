@@ -99,11 +99,7 @@ export function writeChangesetsReleaseResultArtifact({ result, outPath }) {
   return result;
 }
 
-export function appendChangesetsReleaseSummary({ summaryPath, result }) {
-  if (!summaryPath) {
-    return;
-  }
-
+export function buildChangesetsReleaseSummaryMarkdown({ result }) {
   const lines = [
     "## Changesets release result",
     "",
@@ -120,5 +116,13 @@ export function appendChangesetsReleaseSummary({ summaryPath, result }) {
     }
   }
 
-  fs.appendFileSync(summaryPath, `${lines.join("\n")}\n`, "utf8");
+  return `${lines.join("\n")}\n`;
+}
+
+export function appendChangesetsReleaseSummary({ summaryPath, result }) {
+  if (!summaryPath) {
+    return;
+  }
+
+  fs.appendFileSync(summaryPath, buildChangesetsReleaseSummaryMarkdown({ result }), "utf8");
 }

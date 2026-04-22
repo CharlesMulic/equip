@@ -1,6 +1,5 @@
 import path from "node:path";
 import {
-  appendChangesetsReleaseSummary,
   buildChangesetsReleaseResult,
   writeChangesetsReleaseResultArtifact,
 } from "./changesets-release-result-lib.mjs";
@@ -18,11 +17,6 @@ const result = buildChangesetsReleaseResult({
 writeChangesetsReleaseResultArtifact({
   result,
   outPath: outputPath,
-});
-
-appendChangesetsReleaseSummary({
-  summaryPath: process.env.GITHUB_STEP_SUMMARY || "",
-  result,
 });
 
 console.log(`[changesets-release] wrote ${outputPath}`);
