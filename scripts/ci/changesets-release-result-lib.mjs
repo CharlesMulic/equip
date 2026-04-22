@@ -140,7 +140,11 @@ function normalizeArtifactNames(artifacts) {
   );
 }
 
-export function buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact = null }) {
+export function buildChangesetsReleaseSummaryMarkdown({
+  result,
+  assertionArtifact = null,
+  artifactNames = {},
+}) {
   const lines = [
     "## Changesets release result",
     "",
@@ -158,6 +162,19 @@ export function buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifac
   }
 
   lines.push(...buildAssertionSummaryLines(assertionArtifact));
+
+  const normalizedArtifactNames = normalizeArtifactNames(artifactNames);
+  const artifactEntries = Object.entries(normalizedArtifactNames).filter(([, value]) => value);
+  if (artifactEntries.length > 0) {
+    lines.push("", "## Evidence artifacts", "");
+
+    for (const [key, value] of artifactEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
 
   return `${lines.join("\n")}\n`;
 }
@@ -206,12 +223,21 @@ export function buildChangesetsReleaseReport({
   };
 }
 
-export function appendChangesetsReleaseSummary({ summaryPath, result, assertionArtifact = null }) {
+export function appendChangesetsReleaseSummary({
+  summaryPath,
+  result,
+  assertionArtifact = null,
+  artifactNames = {},
+}) {
   if (!summaryPath) {
     return;
   }
 
-  fs.appendFileSync(summaryPath, buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact }), "utf8");
+  fs.appendFileSync(
+    summaryPath,
+    buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact, artifactNames }),
+    "utf8",
+  );
 }
 
 export function writeChangesetsReleaseAssertionArtifact({ result, assertion, outPath }) {

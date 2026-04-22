@@ -73,7 +73,7 @@ On pushes to `main` it:
     after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails
 15. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
     so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs
-16. writes and uploads `.generated/release/changesets-release-summary.md`
+16. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
     after that assertion step so the human-readable Markdown artifact and job-summary section reflect the true final gate state
 17. writes and uploads `.generated/release/changesets-release-report.json`
     as a single machine-readable rollup of the result, final assertion, summary/report artifact paths,

@@ -71,12 +71,19 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
         { name: "@cg3/equip", version: "0.17.8" },
       ]),
     }),
+    artifactNames: {
+      result: "changesets-release-result",
+      summary: "changesets-release-summary",
+    },
   });
 
   assert.match(markdown, /## Changesets release result/i);
   assert.match(markdown, /Outcome: `success`/i);
   assert.match(markdown, /@cg3\/equip/);
   assert.match(markdown, /0\.17\.8/);
+  assert.match(markdown, /## Evidence artifacts/i);
+  assert.match(markdown, /Result: `changesets-release-result`/i);
+  assert.match(markdown, /Summary: `changesets-release-summary`/i);
 });
 
 test("buildChangesetsReleaseSummaryMarkdown includes final assertion details when present", () => {
@@ -194,6 +201,10 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
     CHANGESETS_RELEASE_RESULT_PATH: resultPath,
     CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
     CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
+    CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
     GITHUB_STEP_SUMMARY: stepSummaryPath,
   });
 
@@ -203,9 +214,12 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(summaryArtifact, /## Changesets release result/i);
   assert.match(summaryArtifact, /@cg3\/equip/);
   assert.match(summaryArtifact, /## Final assertion/i);
+  assert.match(summaryArtifact, /## Evidence artifacts/i);
+  assert.match(summaryArtifact, /Report: `changesets-release-report`/i);
   assert.match(summaryArtifact, /Outcome: `passed`/i);
   assert.match(stepSummary, /## Changesets release result/i);
   assert.match(stepSummary, /## Final assertion/i);
+  assert.match(stepSummary, /Assertion: `changesets-release-assertion`/i);
 });
 
 test("write-changesets-release-report writes a machine-readable rollup artifact", () => {
