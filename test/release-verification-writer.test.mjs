@@ -29,6 +29,7 @@ test("write-release-verification-summary writes a markdown artifact with the fin
   const reportPath = path.join(root, "release-verification-report.json");
   const assertionPath = path.join(root, "release-verification-assertion.json");
   const summaryPath = path.join(root, "release-verification-summary.md");
+  const stepSummaryPath = path.join(root, "step-summary.md");
 
   writeJson(reportPath, {
     overallStatus: "failed",
@@ -53,6 +54,15 @@ test("write-release-verification-summary writes a markdown artifact with the fin
         reportPath: ".generated/docker-acceptance/docker-acceptance-report.json",
       },
     },
+    artifactNames: {
+      packVerification: "pack-verification",
+      packTarball: "pack-tarball",
+      packInstallSmoke: "pack-install-smoke",
+      dockerAcceptance: "docker-acceptance",
+      report: "release-verification-report",
+      assertion: "release-verification-assertion",
+      summary: "release-verification-summary",
+    },
   });
 
   writeJson(assertionPath, {
@@ -75,15 +85,22 @@ test("write-release-verification-summary writes a markdown artifact with the fin
     RELEASE_VERIFICATION_REPORT_PATH: reportPath,
     RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
     RELEASE_VERIFICATION_SUMMARY_PATH: summaryPath,
+    GITHUB_STEP_SUMMARY: stepSummaryPath,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const summary = fs.readFileSync(summaryPath, "utf8");
+  const stepSummary = fs.readFileSync(stepSummaryPath, "utf8");
   assert.match(result.stdout, /wrote summary/i);
   assert.match(summary, /## Release verification rollup/i);
+  assert.match(summary, /## Evidence artifacts/i);
+  assert.match(summary, /Pack Tarball: `pack-tarball`/i);
   assert.match(summary, /## Final assertion/i);
   assert.match(summary, /Tarball smoke failure: Installed equip --help output did not include the expected usage header\./i);
   assert.match(summary, /Error: release verification failed/i);
+  assert.match(stepSummary, /## Release verification rollup/i);
+  assert.match(stepSummary, /Summary: `release-verification-summary`/i);
+  assert.match(stepSummary, /## Final assertion/i);
 });
 
 test("write-release-verification-report can rewrite a final report without duplicating the GitHub step summary", () => {

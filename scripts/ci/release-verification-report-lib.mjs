@@ -21,6 +21,25 @@ function normalizeArtifactNames(artifacts) {
   );
 }
 
+function appendArtifactNamesSection(lines, artifactNames) {
+  const normalizedArtifactNames = normalizeArtifactNames(artifactNames);
+  const artifactEntries = Object.entries(normalizedArtifactNames).filter(([, value]) => value);
+  if (artifactEntries.length === 0) {
+    return;
+  }
+
+  lines.push("");
+  lines.push("## Evidence artifacts");
+  lines.push("");
+
+  for (const [key, value] of artifactEntries) {
+    const label = key
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/^./, (char) => char.toUpperCase());
+    lines.push(`- ${label}: \`${value}\``);
+  }
+}
+
 function resolveExistingPath(filePath, fallback = "") {
   if (filePath) {
     const candidate = path.resolve(filePath);
@@ -376,6 +395,8 @@ export function buildReleaseVerificationSummaryMarkdown({
   if (report.dockerAcceptance.artifacts?.runLogPath) {
     lines.push(`- Docker run log: \`${report.dockerAcceptance.artifacts.runLogPath}\``);
   }
+
+  appendArtifactNamesSection(lines, report.artifactNames || {});
 
   if (assertion && typeof assertion === "object") {
     lines.push("");

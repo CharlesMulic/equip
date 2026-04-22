@@ -63,6 +63,32 @@ test("assert-release-verification-report passes healthy rollups", () => {
   assert.match(summary, /dockerAcceptance: `passed`/i);
 });
 
+test("assert-release-verification-report can skip step summary output when requested", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
+  const reportPath = path.join(root, "release-verification-report.json");
+  const assertionPath = path.join(root, "release-verification-assertion.json");
+  const summaryPath = path.join(root, "step-summary.md");
+
+  writeJson(reportPath, {
+    overallStatus: "passed",
+    package: { status: "passed" },
+    tarballSmoke: { status: "passed" },
+    dockerAcceptance: { status: "passed" },
+  });
+
+  const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
+    RELEASE_VERIFICATION_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+    RELEASE_VERIFICATION_APPEND_STEP_SUMMARY: "false",
+    GITHUB_STEP_SUMMARY: summaryPath,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(summaryPath), false);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.equal(assertion.outcome, "passed");
+});
+
 test("assert-release-verification-report fails unhealthy rollups with helpful detail", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
   const reportPath = path.join(root, "release-verification-report.json");

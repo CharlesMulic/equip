@@ -190,6 +190,15 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
         runLogPath: ".generated/docker-acceptance/docker-run.log",
       },
     },
+    artifactNames: {
+      packVerification: "pack-verification",
+      packTarball: "pack-tarball",
+      packInstallSmoke: "pack-install-smoke",
+      dockerAcceptance: "docker-acceptance",
+      report: "release-verification-report",
+      assertion: "release-verification-assertion",
+      summary: "release-verification-summary",
+    },
   });
 
   appendReleaseVerificationSummary({
@@ -203,6 +212,9 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
   assert.match(summary, /Docker report: `\.generated\/docker-acceptance\/docker-acceptance-report\.json`/i);
   assert.match(summary, /Docker build log: `\.generated\/docker-acceptance\/docker-build\.log`/i);
   assert.match(summary, /Docker run log: `\.generated\/docker-acceptance\/docker-run\.log`/i);
+  assert.match(summary, /## Evidence artifacts/i);
+  assert.match(summary, /Pack Verification: `pack-verification`/i);
+  assert.match(summary, /Summary: `release-verification-summary`/i);
 });
 
 test("buildReleaseVerificationSummaryMarkdown can include the final assertion section", () => {
@@ -232,6 +244,15 @@ test("buildReleaseVerificationSummaryMarkdown can include the final assertion se
         reportPath: ".generated/docker-acceptance/docker-acceptance-report.json",
       },
     },
+    artifactNames: {
+      packVerification: "pack-verification",
+      packTarball: "pack-tarball",
+      packInstallSmoke: "pack-install-smoke",
+      dockerAcceptance: "docker-acceptance",
+      report: "release-verification-report",
+      assertion: "release-verification-assertion",
+      summary: "release-verification-summary",
+    },
   });
 
   const markdown = buildReleaseVerificationSummaryMarkdown({
@@ -255,8 +276,10 @@ test("buildReleaseVerificationSummaryMarkdown can include the final assertion se
 
   assert.match(markdown, /## Release verification rollup/i);
   assert.match(markdown, /## Final assertion/i);
+  assert.match(markdown, /## Evidence artifacts/i);
   assert.match(markdown, /Outcome: `failed`/i);
   assert.match(markdown, /tarballSmoke: `failed`/i);
+  assert.match(markdown, /Assertion: `release-verification-assertion`/i);
   assert.match(markdown, /Assertion artifact: `\.generated\/release\/release-verification-assertion\.json`/i);
   assert.match(markdown, /Failure details:/i);
   assert.match(markdown, /release verification failed/i);

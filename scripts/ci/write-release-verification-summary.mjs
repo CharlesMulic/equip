@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { buildReleaseVerificationSummaryMarkdown } from "./release-verification-report-lib.mjs";
+import {
+  appendReleaseVerificationSummary,
+  buildReleaseVerificationSummaryMarkdown,
+} from "./release-verification-report-lib.mjs";
 
 const reportPath =
   process.env.RELEASE_VERIFICATION_REPORT_PATH ||
@@ -11,6 +14,8 @@ const assertionPath =
 const outputPath =
   process.env.RELEASE_VERIFICATION_SUMMARY_PATH ||
   path.join(".generated", "release", "release-verification-summary.md");
+const appendStepSummary =
+  (process.env.RELEASE_VERIFICATION_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
 
 function readRequiredJson(filePath) {
   if (!filePath || !fs.existsSync(filePath)) {
@@ -37,5 +42,13 @@ const markdown = buildReleaseVerificationSummaryMarkdown({
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, markdown, "utf8");
+
+if (appendStepSummary) {
+  appendReleaseVerificationSummary({
+    summaryPath: process.env.GITHUB_STEP_SUMMARY || "",
+    report,
+    assertion,
+  });
+}
 
 console.log(`[release-verification] wrote summary ${outputPath}`);

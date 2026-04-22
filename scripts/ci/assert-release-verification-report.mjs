@@ -145,6 +145,8 @@ function main() {
     process.env.RELEASE_VERIFICATION_ASSERTION_PATH ||
     path.join(".generated", "release", "release-verification-assertion.json");
   const summaryPath = process.env.GITHUB_STEP_SUMMARY || "";
+  const appendStepSummary =
+    (process.env.RELEASE_VERIFICATION_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   const componentStatuses = {
     package: report?.package?.status || "unknown",
@@ -181,7 +183,9 @@ function main() {
     failureDetails: [],
   };
   writeAssertionArtifact(assertionPath, assertionResult);
-  appendAssertionSummary(summaryPath, assertionResult);
+  if (appendStepSummary) {
+    appendAssertionSummary(summaryPath, assertionResult);
+  }
 
   console.log(`[release-verification] status passed for ${reportPath}`);
   console.log(`[release-verification] components: ${componentSummary || "none"}`);
@@ -199,6 +203,8 @@ try {
   const report = fs.existsSync(reportPath)
     ? JSON.parse(fs.readFileSync(reportPath, "utf8"))
     : null;
+  const appendStepSummary =
+    (process.env.RELEASE_VERIFICATION_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
   const componentStatuses = {
     package: report?.package?.status || "unknown",
     tarballSmoke: report?.tarballSmoke?.status || "unknown",
@@ -217,7 +223,9 @@ try {
     error: error.message,
   };
   writeAssertionArtifact(assertionPath, assertionResult);
-  appendAssertionSummary(process.env.GITHUB_STEP_SUMMARY || "", assertionResult);
+  if (appendStepSummary) {
+    appendAssertionSummary(process.env.GITHUB_STEP_SUMMARY || "", assertionResult);
+  }
   console.error(`[release-verification] assertion failed: ${error.message}`);
   process.exit(1);
 }
