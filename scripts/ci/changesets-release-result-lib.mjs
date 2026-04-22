@@ -126,3 +126,21 @@ export function appendChangesetsReleaseSummary({ summaryPath, result }) {
 
   fs.appendFileSync(summaryPath, buildChangesetsReleaseSummaryMarkdown({ result }), "utf8");
 }
+
+export function writeChangesetsReleaseAssertionArtifact({ result, assertion, outPath }) {
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  const artifact = {
+    kind: "equip-changesets-release-assertion",
+    generatedAt: new Date().toISOString(),
+    result: {
+      stepOutcome: result?.stepOutcome || "",
+      status: result?.status || "",
+      published: !!result?.published,
+      summary: result?.summary || "",
+      publishedPackages: Array.isArray(result?.publishedPackages) ? result.publishedPackages : [],
+    },
+    assertion,
+  };
+  fs.writeFileSync(outPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+  return artifact;
+}

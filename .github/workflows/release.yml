@@ -223,7 +223,16 @@ jobs:
         if: ${{ always() }}
         env:
           CHANGESETS_RELEASE_RESULT_PATH: .generated/release/changesets-release-result.json
+          CHANGESETS_RELEASE_ASSERTION_PATH: .generated/release/changesets-release-assertion.json
         run: node scripts/ci/assert-changesets-release-result.mjs
+
+      - name: Upload changesets release assertion
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: changesets-release-assertion
+          path: .generated/release/changesets-release-assertion.json
+          if-no-files-found: error
 
       - name: Summarize published packages
         if: steps.changesets.outputs.published == 'true'
