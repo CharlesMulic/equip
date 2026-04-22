@@ -80,6 +80,13 @@ On pushes to `main` it:
     and the corresponding uploaded GitHub artifact names
 18. uploads the result, summary, assertion, and report artifacts before the workflow turns red
     so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
+19. writes and uploads `.generated/release/release-workflow-report.json`
+    as the final workflow-level rollup combining the release-verification report and the Changesets release report,
+    so operators have one canonical machine-readable entrypoint for the whole release run
+20. writes and uploads `.generated/release/release-workflow-summary.md`
+    as the matching human-readable summary of those two rollups, including the uploaded artifact names to open next
+21. rewrites `.generated/release/release-workflow-report.json`
+    after the summary step so the final machine-readable report also points at the uploaded summary artifact path
 
 ## Publishing Auth
 
