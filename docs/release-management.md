@@ -70,10 +70,10 @@ On pushes to `main` it:
     - publish the already-versioned package after that PR is merged
 14. writes `.generated/release/changesets-release-result.json`
     after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails
-15. writes and uploads `.generated/release/changesets-release-summary.md`
-    so that same release outcome also survives as a human-readable Markdown artifact and job-summary section
-16. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
+15. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
     so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs
+16. writes and uploads `.generated/release/changesets-release-summary.md`
+    after that assertion step so the human-readable Markdown artifact and job-summary section reflect the true final gate state
 17. uploads the result, summary, and assertion artifacts before the workflow turns red
     so release-PR/publish failures still leave behind both structured and quick-scan evidence
 

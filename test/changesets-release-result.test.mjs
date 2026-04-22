@@ -78,9 +78,35 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
   assert.match(markdown, /0\.17\.8/);
 });
 
+test("buildChangesetsReleaseSummaryMarkdown includes final assertion details when present", () => {
+  const markdown = buildChangesetsReleaseSummaryMarkdown({
+    result: buildChangesetsReleaseResult({
+      stepOutcome: "success",
+      published: "false",
+      publishedPackages: "[]",
+    }),
+    assertionArtifact: {
+      kind: "equip-changesets-release-assertion",
+      result: {
+        status: "completed",
+      },
+      assertion: {
+        outcome: "passed",
+        status: "completed",
+        published: false,
+      },
+    },
+  });
+
+  assert.match(markdown, /## Final assertion/i);
+  assert.match(markdown, /Outcome: `passed`/i);
+  assert.match(markdown, /Status: `completed`/i);
+});
+
 test("write-changesets-release-summary writes a markdown artifact and appends summary output", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
   const resultPath = path.join(root, "changesets-release-result.json");
+  const assertionPath = path.join(root, "changesets-release-assertion.json");
   const summaryPath = path.join(root, "changesets-release-summary.md");
   const stepSummaryPath = path.join(root, "step-summary.md");
 
@@ -92,9 +118,30 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
       { name: "@cg3/equip", version: "0.17.8" },
     ]),
   }), null, 2)}\n`, "utf8");
+  fs.writeFileSync(assertionPath, `${JSON.stringify({
+    kind: "equip-changesets-release-assertion",
+    result: {
+      stepOutcome: "success",
+      status: "published",
+      published: true,
+      summary: "changesets release step published 1 package: @cg3/equip@0.17.8",
+      publishedPackages: [
+        { name: "@cg3/equip", version: "0.17.8" },
+      ],
+    },
+    assertion: {
+      outcome: "passed",
+      status: "published",
+      published: true,
+      publishedPackages: [
+        { name: "@cg3/equip", version: "0.17.8" },
+      ],
+    },
+  }, null, 2)}\n`, "utf8");
 
   const result = runScript("scripts/ci/write-changesets-release-summary.mjs", {
     CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
     CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
     GITHUB_STEP_SUMMARY: stepSummaryPath,
   });
@@ -104,7 +151,10 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   const stepSummary = fs.readFileSync(stepSummaryPath, "utf8");
   assert.match(summaryArtifact, /## Changesets release result/i);
   assert.match(summaryArtifact, /@cg3\/equip/);
+  assert.match(summaryArtifact, /## Final assertion/i);
+  assert.match(summaryArtifact, /Outcome: `passed`/i);
   assert.match(stepSummary, /## Changesets release result/i);
+  assert.match(stepSummary, /## Final assertion/i);
 });
 
 test("assert-changesets-release-result fails when the changesets action failed", () => {
