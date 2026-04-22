@@ -225,6 +225,11 @@ export interface AugmentDef {
    * update flow migrates pending → approved). Survives on admin
    * rejection so the publisher can revise and re-publish.
    */
+  workingDraftEdit?: Partial<AugmentDef>;
+  submittedEdit?: Partial<AugmentDef>;
+  submittedRevisionId?: string;
+  submittedStatus?: "pending-review" | "rejected";
+  submittedRejectionReason?: string;
   pendingEdit?: Partial<AugmentDef>;
 
   /**
