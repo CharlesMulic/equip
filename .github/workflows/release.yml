@@ -219,6 +219,15 @@ jobs:
           CHANGESETS_RELEASE_SUMMARY_PATH: .generated/release/changesets-release-summary.md
         run: node scripts/ci/write-changesets-release-summary.mjs
 
+      - name: Write changesets release report
+        if: ${{ always() }}
+        env:
+          CHANGESETS_RELEASE_RESULT_PATH: .generated/release/changesets-release-result.json
+          CHANGESETS_RELEASE_ASSERTION_PATH: .generated/release/changesets-release-assertion.json
+          CHANGESETS_RELEASE_SUMMARY_PATH: .generated/release/changesets-release-summary.md
+          CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
+        run: node scripts/ci/write-changesets-release-report.mjs
+
       - name: Upload changesets release summary
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -233,6 +242,14 @@ jobs:
         with:
           name: changesets-release-assertion
           path: .generated/release/changesets-release-assertion.json
+          if-no-files-found: error
+
+      - name: Upload changesets release report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: changesets-release-report
+          path: .generated/release/changesets-release-report.json
           if-no-files-found: error
 
       - name: Summarize published packages

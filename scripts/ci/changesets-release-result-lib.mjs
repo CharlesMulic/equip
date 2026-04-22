@@ -120,6 +120,16 @@ function buildAssertionSummaryLines(assertionArtifact) {
   return lines;
 }
 
+function normalizeArtifactPaths(artifacts) {
+  if (!artifacts || typeof artifacts !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifacts).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+  );
+}
+
 export function buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact = null }) {
   const lines = [
     "## Changesets release result",
@@ -140,6 +150,48 @@ export function buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifac
   lines.push(...buildAssertionSummaryLines(assertionArtifact));
 
   return `${lines.join("\n")}\n`;
+}
+
+export function buildChangesetsReleaseReport({
+  result,
+  assertionArtifact = null,
+  artifacts = {},
+  generatedAt = new Date().toISOString(),
+}) {
+  return {
+    kind: "equip-changesets-release-report",
+    generatedAt,
+    status: assertionArtifact?.assertion?.outcome === "failed"
+      ? "failed"
+      : (assertionArtifact?.assertion?.status || result?.status || "unknown"),
+    result: {
+      stepOutcome: result?.stepOutcome || "",
+      status: result?.status || "",
+      published: !!result?.published,
+      summary: result?.summary || "",
+      publishedPackages: Array.isArray(result?.publishedPackages)
+        ? result.publishedPackages.map((pkg) => ({
+            name: pkg?.name || "",
+            version: pkg?.version || "",
+          }))
+        : [],
+    },
+    assertion: assertionArtifact?.assertion
+      ? {
+          outcome: assertionArtifact.assertion.outcome || "",
+          status: assertionArtifact.assertion.status || "",
+          published: !!assertionArtifact.assertion.published,
+          error: assertionArtifact.assertion.error || "",
+          publishedPackages: Array.isArray(assertionArtifact.assertion.publishedPackages)
+            ? assertionArtifact.assertion.publishedPackages.map((pkg) => ({
+                name: pkg?.name || "",
+                version: pkg?.version || "",
+              }))
+            : [],
+        }
+      : null,
+    artifacts: normalizeArtifactPaths(artifacts),
+  };
 }
 
 export function appendChangesetsReleaseSummary({ summaryPath, result, assertionArtifact = null }) {
@@ -166,4 +218,10 @@ export function writeChangesetsReleaseAssertionArtifact({ result, assertion, out
   };
   fs.writeFileSync(outPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
   return artifact;
+}
+
+export function writeChangesetsReleaseReportArtifact({ report, outPath }) {
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  return report;
 }

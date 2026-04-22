@@ -74,8 +74,10 @@ On pushes to `main` it:
     so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs
 16. writes and uploads `.generated/release/changesets-release-summary.md`
     after that assertion step so the human-readable Markdown artifact and job-summary section reflect the true final gate state
-17. uploads the result, summary, and assertion artifacts before the workflow turns red
-    so release-PR/publish failures still leave behind both structured and quick-scan evidence
+17. writes and uploads `.generated/release/changesets-release-report.json`
+    as a single machine-readable rollup of the result, final assertion, and summary/report artifact paths
+18. uploads the result, summary, assertion, and report artifacts before the workflow turns red
+    so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
 
 ## Publishing Auth
 

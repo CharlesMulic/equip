@@ -72,7 +72,7 @@ Maintainer workflow:
 - merge that PR to publish `@cg3/equip`
 
 The release workflow now also verifies the actual packed npm tarball before publish, smoke-installs that same tarball into a clean temp project, uploads Docker acceptance artifacts, preserves the resulting reports as workflow artifacts, and asserts the combined release-verification rollup before publish. That means public-package mistakes like missing CLI entrypoints or accidentally included source/test files fail before npm publish and leave behind the exact package plus hermetic acceptance evidence that was inspected.
-It now also preserves a machine-readable `changesets-release-result.json` artifact, a final `changesets-release-assertion.json` gate verdict, and a rewritten `changesets-release-summary.md` artifact that includes that final assertion state, so release-PR/publish failures leave behind both structured and quick-scan evidence instead of living only in workflow logs.
+It now also preserves a machine-readable `changesets-release-result.json` artifact, a final `changesets-release-assertion.json` gate verdict, a rewritten `changesets-release-summary.md` artifact that includes that final assertion state, and a canonical `changesets-release-report.json` rollup that ties the result, assertion, and artifact paths together. That means release-PR/publish failures leave behind both structured and quick-scan evidence instead of living only in workflow logs.
 
 The committed `package.json` version on `main` is the canonical release version. Tags and GitHub releases are outputs of that flow, not the mechanism that decides the version.
 
