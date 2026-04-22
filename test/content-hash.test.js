@@ -187,6 +187,7 @@ describe("computeContentHashV2 — lockstep with Kotlin", () => {
       flavorText: null,
       primaryCategory: "productivity",
       categories: ["productivity", "dev"],
+      tags: ["knowledge", "reviewed"],
       homepage: "https://example.test",
       repository: "https://github.com/example/test",
       iconUrl: null,
@@ -195,7 +196,7 @@ describe("computeContentHashV2 — lockstep with Kotlin", () => {
     // test, verified byte-identical. Never update just one side.
     assert.equal(
       hash,
-      "552479d77614e032034a904090a21629d08d7a04505295075cfc8531123081c7",
+      "2da857072aad70db34f5f7c69df5bad4824f867db8bc82e44257e07eb10668ea",
     );
   });
 
@@ -205,6 +206,7 @@ describe("computeContentHashV2 — lockstep with Kotlin", () => {
       serverUrl: null, stdioCommand: null, stdioArgs: null, transport: null,
       title: "T", description: null, subtitle: null, flavorText: null,
       primaryCategory: null, categories: ["a", "b", "c"],
+      tags: null,
       homepage: null, repository: null, iconUrl: null,
     };
     const reordered = { ...base, categories: ["c", "a", "b"] };
@@ -217,10 +219,24 @@ describe("computeContentHashV2 — lockstep with Kotlin", () => {
       serverUrl: null, stdioCommand: null, stdioArgs: null, transport: null,
       title: "Old", description: null, subtitle: null, flavorText: null,
       primaryCategory: null, categories: null,
+      tags: null,
       homepage: null, repository: null, iconUrl: null,
     };
     const mutated = { ...base, title: "New" };
     assert.notEqual(computeContentHashV2(base), computeContentHashV2(mutated));
+  });
+
+  it("tags are order-independent", () => {
+    const base = {
+      rulesContent: null, rulesMarker: null, skills: null, hooks: null,
+      serverUrl: null, stdioCommand: null, stdioArgs: null, transport: null,
+      title: "T", description: null, subtitle: null, flavorText: null,
+      primaryCategory: null, categories: null,
+      tags: ["knowledge", "reviewed", "mcp"],
+      homepage: null, repository: null, iconUrl: null,
+    };
+    const reordered = { ...base, tags: ["mcp", "knowledge", "reviewed"] };
+    assert.equal(computeContentHashV2(base), computeContentHashV2(reordered));
   });
 });
 

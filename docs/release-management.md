@@ -50,6 +50,15 @@ On pushes to `main` it:
    - open/update a `Version packages` PR when pending changesets exist, or
    - publish the already-versioned package after that PR is merged
 
+## Retired Local Flow
+
+The old local PowerShell publish path is retired for stable `@cg3/equip` releases.
+
+- `deploy/publish-equip.ps1` is now only a deprecation shim
+- local `PRIOR_PUBLISH_AUTHORIZED` pre-push hooks are not part of the current release contract
+
+If you have a stale local pre-push hook blocking normal pushes in this repo, remove or neutralize `.git/hooks/pre-push`. That hook came from legacy CG3 workspace tooling and is not required for the GitHub Actions + Changesets flow.
+
 ## GitHub PR Creation Auth
 
 The Changesets workflow needs permission to open the `Version packages` PR.

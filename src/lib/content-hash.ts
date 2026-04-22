@@ -56,6 +56,8 @@ export interface ContentManifestV2 extends ContentManifest {
   primaryCategory: string | null;
   /** Raw array; computeContentHashV2 sorts it for stable ordering. */
   categories: string[] | null;
+  /** Public discoverability metadata; included so pending/live tag changes hash distinctly. */
+  tags: string[] | null;
   homepage: string | null;
   repository: string | null;
   iconUrl: string | null;
@@ -66,6 +68,9 @@ export function computeContentHashV2(manifest: ContentManifestV2): string {
   // same, because the registry doesn't make array order semantic.
   const sortedCategories = manifest.categories
     ? [...manifest.categories].sort()
+    : null;
+  const sortedTags = manifest.tags
+    ? [...manifest.tags].sort()
     : null;
 
   const canonical = JSON.stringify([
@@ -83,6 +88,7 @@ export function computeContentHashV2(manifest: ContentManifestV2): string {
     manifest.flavorText,
     manifest.primaryCategory,
     sortedCategories,
+    sortedTags,
     manifest.homepage,
     manifest.repository,
     manifest.iconUrl,
