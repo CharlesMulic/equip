@@ -62,8 +62,8 @@ On pushes to `main` it:
 9. writes `.generated/release/release-verification-assertion.json`
    as a final machine-readable gate verdict with component statuses and failure details
 10. writes and uploads `.generated/release/release-verification-summary.md`
-    after the assertion step so the Markdown artifact and GitHub job summary both reflect the final gate outcome,
-    include the uploaded evidence artifact names, and stay aligned behind one canonical human-readable rendering
+    after the assertion step so the Markdown artifact reflects the final gate outcome,
+    includes the uploaded evidence artifact names, and stays aligned behind one canonical human-readable rendering
 11. rewrites `.generated/release/release-verification-report.json`
     after the assertion/summary steps so the uploaded rollup also points at the final assertion and Markdown summary artifacts
 12. uses `changesets/action` to either:
@@ -74,7 +74,7 @@ On pushes to `main` it:
 14. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
     so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs
 16. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
-    after that assertion step so the human-readable Markdown artifact and job-summary section reflect the true final gate state
+    after that assertion step so the human-readable Markdown artifact reflects the true final gate state
 17. writes and uploads `.generated/release/changesets-release-report.json`
     as a single machine-readable rollup of the result, final assertion, summary/report artifact paths,
     and the corresponding uploaded GitHub artifact names
@@ -84,7 +84,8 @@ On pushes to `main` it:
     as the final workflow-level rollup combining the release-verification report and the Changesets release report,
     so operators have one canonical machine-readable entrypoint for the whole release run
 20. writes and uploads `.generated/release/release-workflow-summary.md`
-    as the matching human-readable summary of those two rollups, including the uploaded artifact names to open next
+    as the matching human-readable summary of those two rollups, including the uploaded artifact names to open next,
+    and appends that final top-level rendering to the GitHub job summary
 21. rewrites `.generated/release/release-workflow-report.json`
     after the summary step so the final machine-readable report also points at the uploaded summary artifact path
 22. asserts that workflow-level report explicitly and writes `.generated/release/release-workflow-assertion.json`

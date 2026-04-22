@@ -222,6 +222,53 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(stepSummary, /Assertion: `changesets-release-assertion`/i);
 });
 
+test("write-changesets-release-summary can suppress GitHub step summary output", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
+  const resultPath = path.join(root, "changesets-release-result.json");
+  const assertionPath = path.join(root, "changesets-release-assertion.json");
+  const summaryPath = path.join(root, "changesets-release-summary.md");
+  const stepSummaryPath = path.join(root, "step-summary.md");
+
+  fs.mkdirSync(path.dirname(resultPath), { recursive: true });
+  fs.writeFileSync(resultPath, `${JSON.stringify(buildChangesetsReleaseResult({
+    stepOutcome: "success",
+    published: "false",
+    publishedPackages: "[]",
+  }), null, 2)}\n`, "utf8");
+  fs.writeFileSync(assertionPath, `${JSON.stringify({
+    kind: "equip-changesets-release-assertion",
+    result: {
+      stepOutcome: "success",
+      status: "completed",
+      published: false,
+      summary: "changesets release step completed without publishing packages",
+      publishedPackages: [],
+    },
+    assertion: {
+      outcome: "passed",
+      status: "completed",
+      published: false,
+      publishedPackages: [],
+    },
+  }, null, 2)}\n`, "utf8");
+  fs.writeFileSync(stepSummaryPath, "preexisting step summary\n", "utf8");
+
+  const result = runScript("scripts/ci/write-changesets-release-summary.mjs", {
+    CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
+    CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_APPEND_STEP_SUMMARY: "false",
+    GITHUB_STEP_SUMMARY: stepSummaryPath,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const summaryArtifact = fs.readFileSync(summaryPath, "utf8");
+  const stepSummary = fs.readFileSync(stepSummaryPath, "utf8");
+  assert.match(summaryArtifact, /## Changesets release result/i);
+  assert.match(summaryArtifact, /## Final assertion/i);
+  assert.equal(stepSummary, "preexisting step summary\n");
+});
+
 test("write-changesets-release-report writes a machine-readable rollup artifact", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
   const resultPath = path.join(root, "changesets-release-result.json");

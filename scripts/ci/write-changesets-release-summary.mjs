@@ -18,6 +18,8 @@ const resultArtifactName = process.env.CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME |
 const assertionArtifactName = process.env.CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME || "";
 const summaryArtifactName = process.env.CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME || "";
 const reportArtifactName = process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "";
+const appendStepSummary =
+  (process.env.CHANGESETS_RELEASE_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
 
 if (!fs.existsSync(resultPath)) {
   throw new Error(`Changesets release result artifact not found: ${resultPath}`);
@@ -44,7 +46,7 @@ fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, markdown, "utf8");
 
 appendChangesetsReleaseSummary({
-  summaryPath: process.env.GITHUB_STEP_SUMMARY || "",
+  summaryPath: appendStepSummary ? process.env.GITHUB_STEP_SUMMARY || "" : "",
   result,
   assertionArtifact,
   artifactNames,

@@ -136,6 +136,7 @@ jobs:
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
           RELEASE_VERIFICATION_ASSERTION_PATH: .generated/release/release-verification-assertion.json
           RELEASE_VERIFICATION_SUMMARY_PATH: .generated/release/release-verification-summary.md
+          RELEASE_VERIFICATION_APPEND_STEP_SUMMARY: "false"
         run: node scripts/ci/write-release-verification-summary.mjs
 
       - name: Rewrite release verification report with final artifact paths
@@ -237,6 +238,7 @@ jobs:
           CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: changesets-release-assertion
           CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: changesets-release-summary
           CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report
+          CHANGESETS_RELEASE_APPEND_STEP_SUMMARY: "false"
         run: node scripts/ci/write-changesets-release-summary.mjs
 
       - name: Write changesets release report
@@ -306,7 +308,7 @@ jobs:
         env:
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
-          RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false"
+          RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "true"
         run: node scripts/ci/write-release-workflow-summary.mjs
 
       - name: Rewrite final release workflow report with final artifact paths
@@ -329,7 +331,7 @@ jobs:
         env:
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
-          RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false"
+          RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "true"
         run: node scripts/ci/write-release-workflow-summary.mjs
 
       - name: Upload final release workflow summary
