@@ -64,6 +64,15 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
       assertionPath: "",
       summaryPath: "",
     },
+    artifactNames: {
+      packVerification: "pack-verification",
+      packTarball: "pack-tarball",
+      packInstallSmoke: "pack-install-smoke",
+      dockerAcceptance: "docker-acceptance",
+      report: "release-verification-report",
+      assertion: "release-verification-assertion",
+      summary: "release-verification-summary",
+    },
   });
 
   assert.equal(report.overallStatus, "passed");
@@ -75,6 +84,9 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
   assert.equal(report.tarballSmoke.steps[0].name, "npm-install");
   assert.equal(report.dockerAcceptance.steps[1].name, "docker-run");
   assert.equal(report.artifacts.reportPath, ".generated/release/release-verification-report.json");
+  assert.equal(report.artifactNames.packVerification, "pack-verification");
+  assert.equal(report.artifactNames.dockerAcceptance, "docker-acceptance");
+  assert.equal(report.artifactNames.report, "release-verification-report");
 });
 
 test("buildReleaseVerificationReport marks the rollup failed when any component gate fails", () => {
@@ -284,6 +296,15 @@ test("buildReleaseVerificationReport can embed final assertion details and artif
       assertionPath: "C:/tmp/release-verification-assertion.json",
       summaryPath: "C:/tmp/release-verification-summary.md",
     },
+    artifactNames: {
+      packVerification: "pack-verification",
+      packTarball: "pack-tarball",
+      packInstallSmoke: "pack-install-smoke",
+      dockerAcceptance: "docker-acceptance",
+      report: "release-verification-report",
+      assertion: "release-verification-assertion",
+      summary: "release-verification-summary",
+    },
   });
 
   assert.equal(report.assertion?.outcome, "passed");
@@ -291,6 +312,8 @@ test("buildReleaseVerificationReport can embed final assertion details and artif
   assert.equal(report.artifacts.reportPath, "C:/tmp/release-verification-report.json");
   assert.equal(report.artifacts.assertionPath, "C:/tmp/release-verification-assertion.json");
   assert.equal(report.artifacts.summaryPath, "C:/tmp/release-verification-summary.md");
+  assert.equal(report.artifactNames.packTarball, "pack-tarball");
+  assert.equal(report.artifactNames.summary, "release-verification-summary");
 });
 
 test("appendReleaseVerificationSummary can append both rollup and assertion details", () => {

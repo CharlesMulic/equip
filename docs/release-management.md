@@ -57,6 +57,7 @@ On pushes to `main` it:
    as a single machine-readable rollup of pack verification, tarball-install smoke, and Docker acceptance
    even if one of those upstream artifacts is missing because a verification lane failed early,
    while rebasing the per-lane log/report/tarball artifact pointers to the current verification workspace for easier debugging
+   and recording the corresponding uploaded GitHub artifact names for each verification lane
 8. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
 9. writes `.generated/release/release-verification-assertion.json`
    as a final machine-readable gate verdict with component statuses and failure details

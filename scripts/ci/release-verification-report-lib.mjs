@@ -11,6 +11,16 @@ function normalizeArtifacts(artifacts) {
   );
 }
 
+function normalizeArtifactNames(artifacts) {
+  if (!artifacts || typeof artifacts !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifacts).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+  );
+}
+
 function resolveExistingPath(filePath, fallback = "") {
   if (filePath) {
     const candidate = path.resolve(filePath);
@@ -245,6 +255,7 @@ export function buildReleaseVerificationReport({
   dockerAcceptance,
   assertion = null,
   artifacts = {},
+  artifactNames = {},
   generatedAt = new Date().toISOString(),
 }) {
   const packageSection = buildPackageSection(packVerification);
@@ -263,6 +274,7 @@ export function buildReleaseVerificationReport({
     generatedAt,
     overallStatus,
     artifacts: normalizeArtifacts(artifacts),
+    artifactNames: normalizeArtifactNames(artifactNames),
     inputs: {
       hasPackVerification: !!packVerification,
       hasTarballSmoke: !!packInstallSmoke,

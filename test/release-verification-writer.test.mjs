@@ -126,9 +126,16 @@ test("write-release-verification-report can rewrite a final report without dupli
     PACK_VERIFICATION_PATH: path.join(root, "pack-verification.json"),
     PACK_INSTALL_SMOKE_PATH: path.join(root, "pack-install-smoke.json"),
     DOCKER_ACCEPTANCE_REPORT_PATH: path.join(root, "docker-acceptance-report.json"),
+    PACK_VERIFICATION_ARTIFACT_NAME: "pack-verification",
+    PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
+    PACK_INSTALL_SMOKE_ARTIFACT_NAME: "pack-install-smoke",
+    DOCKER_ACCEPTANCE_ARTIFACT_NAME: "docker-acceptance",
     RELEASE_VERIFICATION_REPORT_PATH: reportPath,
     RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
     RELEASE_VERIFICATION_SUMMARY_PATH: summaryPath,
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
+    RELEASE_VERIFICATION_ASSERTION_ARTIFACT_NAME: "release-verification-assertion",
+    RELEASE_VERIFICATION_SUMMARY_ARTIFACT_NAME: "release-verification-summary",
     RELEASE_VERIFICATION_APPEND_STEP_SUMMARY: "false",
     GITHUB_STEP_SUMMARY: stepSummaryPath,
   });
@@ -138,6 +145,13 @@ test("write-release-verification-report can rewrite a final report without dupli
   const stepSummary = fs.readFileSync(stepSummaryPath, "utf8");
   assert.equal(report.artifacts.summaryPath, path.resolve(summaryPath));
   assert.equal(report.artifacts.assertionPath, path.resolve(assertionPath));
+  assert.equal(report.artifactNames.packVerification, "pack-verification");
+  assert.equal(report.artifactNames.packTarball, "pack-tarball");
+  assert.equal(report.artifactNames.packInstallSmoke, "pack-install-smoke");
+  assert.equal(report.artifactNames.dockerAcceptance, "docker-acceptance");
+  assert.equal(report.artifactNames.report, "release-verification-report");
+  assert.equal(report.artifactNames.assertion, "release-verification-assertion");
+  assert.equal(report.artifactNames.summary, "release-verification-summary");
   assert.equal(report.assertion?.outcome, "passed");
   assert.equal(stepSummary, "## Existing step summary\n");
 });

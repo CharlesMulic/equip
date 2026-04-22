@@ -21,6 +21,13 @@ const summaryArtifactPath =
   path.join(".generated", "release", "release-verification-summary.md");
 const appendStepSummary =
   (process.env.RELEASE_VERIFICATION_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
+const packVerificationArtifactName = process.env.PACK_VERIFICATION_ARTIFACT_NAME || "";
+const packTarballArtifactName = process.env.PACK_TARBALL_ARTIFACT_NAME || "";
+const packInstallSmokeArtifactName = process.env.PACK_INSTALL_SMOKE_ARTIFACT_NAME || "";
+const dockerAcceptanceArtifactName = process.env.DOCKER_ACCEPTANCE_ARTIFACT_NAME || "";
+const reportArtifactName = process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "";
+const assertionArtifactName = process.env.RELEASE_VERIFICATION_ASSERTION_ARTIFACT_NAME || "";
+const summaryArtifactName = process.env.RELEASE_VERIFICATION_SUMMARY_ARTIFACT_NAME || "";
 
 if (!packVerificationPath) {
   throw new Error("PACK_VERIFICATION_PATH is required.");
@@ -65,6 +72,15 @@ const report = buildReleaseVerificationReport({
     reportPath: path.resolve(outputPath),
     assertionPath: fs.existsSync(assertionPath) ? path.resolve(assertionPath) : "",
     summaryPath: fs.existsSync(summaryArtifactPath) ? path.resolve(summaryArtifactPath) : "",
+  },
+  artifactNames: {
+    packVerification: packVerificationArtifactName,
+    packTarball: packTarballArtifactName,
+    packInstallSmoke: packInstallSmokeArtifactName,
+    dockerAcceptance: dockerAcceptanceArtifactName,
+    report: reportArtifactName,
+    assertion: assertionArtifactName,
+    summary: summaryArtifactName,
   },
 });
 
