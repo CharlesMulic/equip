@@ -76,7 +76,8 @@ On pushes to `main` it:
 16. writes and uploads `.generated/release/changesets-release-summary.md`
     after that assertion step so the human-readable Markdown artifact and job-summary section reflect the true final gate state
 17. writes and uploads `.generated/release/changesets-release-report.json`
-    as a single machine-readable rollup of the result, final assertion, and summary/report artifact paths
+    as a single machine-readable rollup of the result, final assertion, summary/report artifact paths,
+    and the corresponding uploaded GitHub artifact names
 18. uploads the result, summary, assertion, and report artifacts before the workflow turns red
     so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
 

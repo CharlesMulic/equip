@@ -17,6 +17,10 @@ const summaryPath =
 const reportPath =
   process.env.CHANGESETS_RELEASE_REPORT_PATH ||
   path.join(".generated", "release", "changesets-release-report.json");
+const resultArtifactName = process.env.CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME || "";
+const assertionArtifactName = process.env.CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME || "";
+const summaryArtifactName = process.env.CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME || "";
+const reportArtifactName = process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "";
 
 function readOptionalJson(filePath) {
   if (!filePath || !fs.existsSync(filePath)) {
@@ -50,6 +54,12 @@ const report = buildChangesetsReleaseReport({
     assertionPath: resolveArtifactPath(assertionPath),
     summaryPath: resolveArtifactPath(summaryPath),
     reportPath: path.resolve(reportPath),
+  },
+  artifactNames: {
+    result: resultArtifactName,
+    assertion: assertionArtifactName,
+    summary: summaryArtifactName,
+    report: reportArtifactName,
   },
 });
 

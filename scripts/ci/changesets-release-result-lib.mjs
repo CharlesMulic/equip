@@ -130,6 +130,16 @@ function normalizeArtifactPaths(artifacts) {
   );
 }
 
+function normalizeArtifactNames(artifacts) {
+  if (!artifacts || typeof artifacts !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifacts).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+  );
+}
+
 export function buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact = null }) {
   const lines = [
     "## Changesets release result",
@@ -156,6 +166,7 @@ export function buildChangesetsReleaseReport({
   result,
   assertionArtifact = null,
   artifacts = {},
+  artifactNames = {},
   generatedAt = new Date().toISOString(),
 }) {
   return {
@@ -191,6 +202,7 @@ export function buildChangesetsReleaseReport({
         }
       : null,
     artifacts: normalizeArtifactPaths(artifacts),
+    artifactNames: normalizeArtifactNames(artifactNames),
   };
 }
 

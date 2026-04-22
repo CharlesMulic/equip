@@ -135,6 +135,12 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
       summaryPath: "/tmp/changesets-release-summary.md",
       reportPath: "/tmp/changesets-release-report.json",
     },
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
   });
 
   assert.equal(report.kind, "equip-changesets-release-report");
@@ -144,6 +150,8 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
   assert.equal(report.assertion.outcome, "passed");
   assert.equal(report.assertion.publishedPackages[0].version, "0.17.8");
   assert.equal(report.artifacts.summaryPath, "/tmp/changesets-release-summary.md");
+  assert.equal(report.artifactNames.result, "changesets-release-result");
+  assert.equal(report.artifactNames.report, "changesets-release-report");
 });
 
 test("write-changesets-release-summary writes a markdown artifact and appends summary output", () => {
@@ -242,6 +250,10 @@ test("write-changesets-release-report writes a machine-readable rollup artifact"
     CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
     CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
     CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
+    CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -253,6 +265,10 @@ test("write-changesets-release-report writes a machine-readable rollup artifact"
   assert.equal(report.artifacts.assertionPath, path.resolve(assertionPath));
   assert.equal(report.artifacts.summaryPath, path.resolve(summaryPath));
   assert.equal(report.artifacts.reportPath, path.resolve(reportPath));
+  assert.equal(report.artifactNames.result, "changesets-release-result");
+  assert.equal(report.artifactNames.assertion, "changesets-release-assertion");
+  assert.equal(report.artifactNames.summary, "changesets-release-summary");
+  assert.equal(report.artifactNames.report, "changesets-release-report");
 });
 
 test("assert-changesets-release-result fails when the changesets action failed", () => {
