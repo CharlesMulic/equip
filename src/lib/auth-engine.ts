@@ -17,7 +17,7 @@ import * as cli from "./cli";
 // ─── Types ─────────────────────────────────────────────────
 
 export interface AuthConfig {
-  type: "none" | "api_key" | "oauth" | "oauth_to_api_key" | "prior";
+  type: "none" | "api_key" | "oauth" | "oauth_to_api_key" | "oidc" | "prior";
 
   /**
    * Identity provider for this augment's OAuth flow.
@@ -92,7 +92,7 @@ export interface AuthResolveOptions {
   apiKey?: string | null;
   nonInteractive?: boolean;
   dryRun?: boolean;
-  /** Equip session for Prior Identity auth. Provided by the sidecar bridge. */
+  /** Equip session for CG3 OIDC delegated auth. Provided by the sidecar bridge. */
   session?: {
     accessToken: string;
     refreshToken: string;
@@ -434,6 +434,7 @@ function updatePlatformConfigs(toolName: string, newToken: string, logger: Equip
  */
 export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResult> {
   const { toolName, auth, logger = NOOP_LOGGER, nonInteractive = false, dryRun = false } = options;
+  const isCg3OidcAuth = auth.type === "oidc" || auth.type === "prior";
 
   if (auth.type === "none") {
     return { credential: null, method: "none" };
@@ -449,9 +450,9 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
   // 2. Stored credential
   const stored = readStoredCredential(toolName);
   if (stored?.credential) {
-    // For 'prior' type, check if the identity token is expired before reusing
-    if (auth.type === "prior" && isJwtExpired(stored.credential)) {
-      logger.info("Stored Prior identity token expired, refreshing", { toolName });
+    // For CG3 delegated auth, check if the delegated access token is expired before reusing it.
+    if (isCg3OidcAuth && isJwtExpired(stored.credential)) {
+      logger.info("Stored delegated access token expired, refreshing", { toolName });
       // Fall through to auth flow below
     } else {
       logger.info("Using stored credential", { toolName });
@@ -475,14 +476,15 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
       return resolveOAuth(toolName, auth, logger, nonInteractive, dryRun);
     case "oauth_to_api_key":
       return resolveOAuthToApiKey(toolName, auth, logger, nonInteractive, dryRun);
+    case "oidc":
     case "prior":
-      return resolvePrior(toolName, logger, nonInteractive, dryRun, options.session);
+      return resolveOidc(toolName, logger, nonInteractive, dryRun, options.session);
     default:
       return { credential: null, method: "unknown", error: `Unknown auth type: ${auth.type}` };
   }
 }
 
-// ─── Prior Identity Flow ──────────────────────────────────
+// ─── CG3 OIDC Delegated Auth Flow ─────────────────────────
 
 // Override only allowed in test mode to prevent credential redirect attacks in production.
 // Gate mirrors equip-app/sidecar/session.ts — unified test-mode signal across both files.
@@ -521,7 +523,7 @@ function isJwtExpiringSoon(token: string, withinSeconds: number): boolean {
   return false;
 }
 
-async function resolvePrior(
+async function resolveOidc(
   toolName: string,
   logger: EquipLogger,
   nonInteractive: boolean,
@@ -547,7 +549,7 @@ async function resolvePrior(
   }
 
   if (!session) {
-    return { credential: null, method: "prior", error: "Not logged into Equip. Run 'equip login' first." };
+    return { credential: null, method: "oidc", error: "Not logged into Equip. Run 'equip login' first." };
   }
 
   // If the session token is expired:
@@ -603,58 +605,84 @@ async function resolvePrior(
     }
 
     if (!refreshed) {
-      return { credential: null, method: "prior", error: "Session expired. Please log in again." };
+      return { credential: null, method: "oidc", error: "Session expired. Please log in again." };
     }
   }
 
   if (dryRun) {
-    logger.info("[dry-run] Would request Prior Identity token", { toolName });
-    return { credential: "dry-run-prior-token", method: "prior" };
+    logger.info("[dry-run] Would request delegated OIDC access token", { toolName });
+    return { credential: "dry-run-oidc-access-token", method: "oidc" };
   }
 
-  // Request identity token from Prior
-  try {
-    const res = await fetch(`${IDENTITY_TOKEN_URL}/v1/identity/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session.accessToken}`,
-      },
-      body: JSON.stringify({ augmentName: toolName }),
-      signal: AbortSignal.timeout(10_000),
-    });
+  const allowConsentAcceptance = !nonInteractive;
+  const requestDelegatedToken = async (): Promise<{ token?: string; needsConsent?: boolean; error?: string }> => {
+    try {
+      const form = new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        client_id: session!.clientId || "equip-desktop",
+        audience: toolName,
+        subject_token: session!.accessToken,
+        subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
+        scope: "identity:read",
+      });
+      if (allowConsentAcceptance) {
+        form.set("consent_action", "accept");
+      }
+      const res = await fetch(`${IDENTITY_TOKEN_URL}/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: form.toString(),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const body = await res.json() as any;
+      if (!body.access_token) {
+        const description = body.error_description || body.error || `HTTP ${res.status}`;
+        return {
+          needsConsent: description === "consent_required" || description === "grant_acceptance_required",
+          error: description,
+        };
+      }
+      return { token: body.access_token as string };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  };
 
-    const body = await res.json() as any;
-    if (!body.ok || !body.data?.token) {
-      const errMsg = body.error?.message || `HTTP ${res.status}`;
-      return { credential: null, method: "prior", error: `Failed to obtain identity token: ${errMsg}` };
+  // Request delegated access token from CG3. Interactive equip/install may atomically
+  // accept consent in the token-exchange call, but background refresh must never do so.
+  try {
+    const delegated = await requestDelegatedToken();
+    if (!delegated.token) {
+      return { credential: null, method: "oidc", error: `Failed to obtain access token: ${delegated.error || "Unknown error"}` };
     }
 
-    const identityToken = body.data.token;
+    const accessToken = delegated.token;
 
-    // Store only the identity token — NOT the session tokens.
+    // Store only the delegated access token — NOT the session tokens.
     // Session refresh tokens are sensitive and should only live in session.json.
-    // refreshPriorTokens() reads the session from disk when it needs to refresh.
+    // refreshOidcTokens() reads the session from disk when it needs to refresh.
     writeStoredCredential({
-      authType: "prior",
-      credential: identityToken,
+      authType: "oidc",
+      credential: accessToken,
       toolName,
       storedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
 
-    logger.info("Prior Identity token obtained", { toolName });
-    return { credential: identityToken, method: "prior" };
+    logger.info("Delegated OIDC access token obtained", { toolName });
+    return { credential: accessToken, method: "oidc" };
   } catch (e: any) {
-    return { credential: null, method: "prior", error: `Identity token request failed: ${e.message}` };
+    return { credential: null, method: "oidc", error: `Access token request failed: ${e.message}` };
   }
 }
 
 /**
- * Refresh all stored Prior Identity tokens that are expiring soon.
+ * Refresh all stored CG3 delegated OIDC access tokens that are expiring soon.
  * Called by the background refresh daemon (Phase 1C).
  */
-export async function refreshPriorTokens(
+export async function refreshOidcTokens(
   options: { logger?: EquipLogger; session?: AuthResolveOptions["session"] } = {},
 ): Promise<Map<string, { success: boolean; error?: string }>> {
   const logger = options.logger || NOOP_LOGGER;
@@ -669,7 +697,7 @@ export async function refreshPriorTokens(
     try {
       const raw = fs.readFileSync(path.join(credDir, file), "utf-8");
       const cred: StoredCredential = JSON.parse(raw);
-      if (cred.authType !== "prior") continue;
+      if (cred.authType !== "oidc" && cred.authType !== "prior") continue;
 
       // Check if token expires within 25 minutes
       if (!isJwtExpiringSoon(cred.credential, 25 * 60)) {
@@ -677,7 +705,7 @@ export async function refreshPriorTokens(
         continue;
       }
 
-      logger.info("Refreshing expiring Prior Identity token", { toolName: cred.toolName });
+      logger.info("Refreshing expiring delegated access token", { toolName: cred.toolName });
 
       // Read session from provided option or from disk (canonical source).
       // Credential files no longer store session tokens (security: avoid duplicating refresh tokens).
@@ -703,12 +731,12 @@ export async function refreshPriorTokens(
         continue;
       }
 
-      const authResult = await resolvePrior(cred.toolName, logger, true, false, session);
+      const authResult = await resolveOidc(cred.toolName, logger, true, false, session);
 
       if (authResult.credential) {
         // Rewrite MCP platform configs with the new token so AI platforms pick it up
         const configsUpdated = updatePlatformConfigs(cred.toolName, authResult.credential, logger);
-        logger.info("Prior Identity token refreshed", { toolName: cred.toolName, configsUpdated });
+        logger.info("Delegated OIDC access token refreshed", { toolName: cred.toolName, configsUpdated });
         results.set(cred.toolName, { success: true });
       } else {
         results.set(cred.toolName, { success: false, error: authResult.error });
@@ -720,6 +748,9 @@ export async function refreshPriorTokens(
 
   return results;
 }
+
+// Backward-compatible export while callers migrate to the OIDC vocabulary.
+export const refreshPriorTokens = refreshOidcTokens;
 
 // ─── API Key Flow ─────────────────────────────────────────��
 

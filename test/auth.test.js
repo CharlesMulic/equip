@@ -487,6 +487,73 @@ describe("refreshCredential", () => {
 
 // ─── listStoredCredentials ─────────────────────────────────
 
+describe("prior delegated auth", () => {
+  let originalFetch;
+
+  before(setupTempHome);
+  after(() => {
+    if (originalFetch === undefined) {
+      delete global.fetch;
+    } else {
+      global.fetch = originalFetch;
+    }
+    teardownTempHome();
+  });
+
+  it("requests atomic consent acceptance during interactive token exchange", async () => {
+    const name = testToolName();
+    originalFetch = global.fetch;
+
+    let tokenCalls = 0;
+    let requestBody = "";
+
+    global.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+
+      if (url === "https://api.cg3.io/token") {
+        tokenCalls += 1;
+        requestBody = init?.body || "";
+
+        return new Response(JSON.stringify({
+          access_token: "delegated-token-123",
+          token_type: "Bearer",
+          expires_in: 900,
+          scope: "identity:read",
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const result = await resolveAuth({
+      toolName: name,
+      auth: { type: "oidc" },
+      session: {
+        accessToken: "session-access-token",
+        refreshToken: "session-refresh-token",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        tokenUrl: "https://api.cg3.io/token",
+        clientId: "equip-desktop",
+      },
+    });
+
+    assert.equal(result.credential, "delegated-token-123");
+    assert.equal(result.method, "oidc");
+    assert.equal(tokenCalls, 1);
+    assert.match(requestBody, /consent_action=accept/);
+
+    const stored = readStoredCredential(name);
+    assert.ok(stored);
+    assert.equal(stored.authType, "oidc");
+    assert.equal(stored.credential, "delegated-token-123");
+
+    deleteStoredCredential(name);
+  });
+});
+
 describe("listStoredCredentials", () => {
   it("lists stored credential tool names", () => {
     const name1 = testToolName();
