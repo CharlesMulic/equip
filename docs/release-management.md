@@ -88,7 +88,8 @@ On pushes to `main` it:
     after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails,
     and blocked publish attempts are marked `skipped` with the upstream verification status instead of being flattened into a generic failure
 13. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
-    so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs
+    so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs,
+    and that assertion artifact now also carries the actual/effective status split plus the summary/report evidence paths and artifact names
 14. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
     after that assertion step so the human-readable Markdown artifact reflects the true final gate state
 15. writes and uploads `.generated/release/changesets-release-report.json`

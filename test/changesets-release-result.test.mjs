@@ -499,6 +499,8 @@ test("assert-changesets-release-result reports skipped runs with the upstream ga
 test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
   const assertionPath = path.join(root, "changesets-release-assertion.json");
+  const summaryPath = path.join(root, "changesets-release-summary.md");
+  const reportPath = path.join(root, "changesets-release-report.json");
 
   const artifact = writeChangesetsReleaseAssertionArtifact({
     result: buildChangesetsReleaseResult({
@@ -506,6 +508,18 @@ test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict"
       published: "false",
       publishedPackages: "[]",
     }),
+    artifacts: {
+      resultPath: "/tmp/changesets-release-result.json",
+      assertionPath: "/tmp/changesets-release-assertion.json",
+      summaryPath,
+      reportPath,
+    },
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
     assertion: {
       outcome: "passed",
       resultPath: "/tmp/changesets-release-result.json",
@@ -518,15 +532,23 @@ test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict"
   });
 
   assert.equal(artifact.kind, "equip-changesets-release-assertion");
+  assert.equal(artifact.status, "completed");
+  assert.equal(artifact.effectiveStatus, "completed");
+  assert.equal(artifact.artifacts.summaryPath, summaryPath);
+  assert.equal(artifact.artifactNames.report, "changesets-release-report");
   const persisted = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
   assert.equal(persisted.assertion.outcome, "passed");
   assert.equal(persisted.result.status, "completed");
+  assert.equal(persisted.effectiveStatus, "completed");
+  assert.equal(persisted.artifactNames.summary, "changesets-release-summary");
 });
 
 test("assert-changesets-release-result writes a passing assertion artifact", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
   const resultPath = path.join(root, "changesets-release-result.json");
   const assertionPath = path.join(root, "changesets-release-assertion.json");
+  const summaryPath = path.join(root, "changesets-release-summary.md");
+  const reportPath = path.join(root, "changesets-release-report.json");
 
   fs.mkdirSync(path.dirname(resultPath), { recursive: true });
   fs.writeFileSync(resultPath, `${JSON.stringify(buildChangesetsReleaseResult({
@@ -540,11 +562,58 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
   const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
     CHANGESETS_RELEASE_RESULT_PATH: resultPath,
     CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
+    CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
+    CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
   assert.equal(assertion.assertion.outcome, "passed");
+  assert.equal(assertion.status, "published");
+  assert.equal(assertion.effectiveStatus, "published");
   assert.equal(assertion.assertion.published, true);
   assert.equal(assertion.assertion.publishedPackages[0].name, "@cg3/equip");
+  assert.equal(assertion.artifacts.summaryPath, path.resolve(summaryPath));
+  assert.equal(assertion.artifactNames.report, "changesets-release-report");
+});
+
+test("assert-changesets-release-result preserves self-contained evidence pointers when it fails", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
+  const resultPath = path.join(root, "changesets-release-result.json");
+  const assertionPath = path.join(root, "changesets-release-assertion.json");
+  const summaryPath = path.join(root, "changesets-release-summary.md");
+  const reportPath = path.join(root, "changesets-release-report.json");
+
+  fs.mkdirSync(path.dirname(resultPath), { recursive: true });
+  fs.writeFileSync(resultPath, `${JSON.stringify({
+    kind: "equip-changesets-release-result",
+    stepOutcome: "failure",
+    status: "failed",
+    published: false,
+    publishedPackages: [],
+    summary: "changesets release step failed; inspect workflow logs for the underlying error",
+  }, null, 2)}\n`, "utf8");
+
+  const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
+    CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
+    CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
+    CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+  });
+
+  assert.notEqual(result.status, 0);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.status, "failed");
+  assert.equal(assertion.effectiveStatus, "failed");
+  assert.equal(assertion.artifacts.reportPath, path.resolve(reportPath));
+  assert.equal(assertion.artifactNames.summary, "changesets-release-summary");
 });

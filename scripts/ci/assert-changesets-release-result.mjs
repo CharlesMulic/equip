@@ -8,6 +8,24 @@ const resultPath =
 const assertionPath =
   process.env.CHANGESETS_RELEASE_ASSERTION_PATH ||
   path.join(".generated", "release", "changesets-release-assertion.json");
+const summaryPath =
+  process.env.CHANGESETS_RELEASE_SUMMARY_PATH ||
+  path.join(".generated", "release", "changesets-release-summary.md");
+const reportPath =
+  process.env.CHANGESETS_RELEASE_REPORT_PATH ||
+  path.join(".generated", "release", "changesets-release-report.json");
+const artifacts = {
+  resultPath: path.resolve(resultPath),
+  assertionPath: path.resolve(assertionPath),
+  summaryPath: path.resolve(summaryPath),
+  reportPath: path.resolve(reportPath),
+};
+const artifactNames = {
+  result: process.env.CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME || "",
+  assertion: process.env.CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME || "",
+  summary: process.env.CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME || "",
+  report: process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "",
+};
 
 if (!fs.existsSync(resultPath)) {
   throw new Error(`Changesets release result artifact not found: ${resultPath}`);
@@ -28,6 +46,8 @@ try {
 
   writeChangesetsReleaseAssertionArtifact({
     result,
+    artifacts,
+    artifactNames,
     assertion: {
       outcome: "passed",
       resultPath: path.resolve(resultPath),
@@ -44,6 +64,8 @@ try {
 } catch (error) {
   writeChangesetsReleaseAssertionArtifact({
     result,
+    artifacts,
+    artifactNames,
     assertion: {
       outcome: "failed",
       resultPath: path.resolve(resultPath),

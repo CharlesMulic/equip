@@ -271,11 +271,22 @@ export function appendChangesetsReleaseSummary({
   );
 }
 
-export function writeChangesetsReleaseAssertionArtifact({ result, assertion, outPath }) {
+export function writeChangesetsReleaseAssertionArtifact({
+  result,
+  assertion,
+  artifacts = {},
+  artifactNames = {},
+  outPath,
+}) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const artifact = {
     kind: "equip-changesets-release-assertion",
     generatedAt: new Date().toISOString(),
+    status: result?.status || "",
+    effectiveStatus:
+      assertion?.outcome === "failed"
+        ? "failed"
+        : (assertion?.status || result?.status || ""),
     result: {
       stepOutcome: result?.stepOutcome || "",
       status: result?.status || "",
@@ -288,6 +299,8 @@ export function writeChangesetsReleaseAssertionArtifact({ result, assertion, out
           : {},
       publishedPackages: Array.isArray(result?.publishedPackages) ? result.publishedPackages : [],
     },
+    artifacts: normalizeArtifactPaths(artifacts),
+    artifactNames: normalizeArtifactNames(artifactNames),
     assertion,
   };
   fs.writeFileSync(outPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");

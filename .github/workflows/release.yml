@@ -271,6 +271,12 @@ jobs:
         env:
           CHANGESETS_RELEASE_RESULT_PATH: .generated/release/changesets-release-result.json
           CHANGESETS_RELEASE_ASSERTION_PATH: .generated/release/changesets-release-assertion.json
+          CHANGESETS_RELEASE_SUMMARY_PATH: .generated/release/changesets-release-summary.md
+          CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
+          CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: changesets-release-result
+          CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: changesets-release-assertion
+          CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: changesets-release-summary
+          CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report
         run: node scripts/ci/assert-changesets-release-result.mjs
 
       - name: Write changesets release summary
