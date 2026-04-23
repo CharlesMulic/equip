@@ -156,14 +156,39 @@ test("buildReleaseWorkflowReport marks preflight skipped when bootstrap failed f
       summary: "dependency install failed (exit 2)",
     },
     releasePreflightResult: null,
-    releaseVerificationReport: createReleaseVerificationReport(),
-    changesetsReleaseReport: createChangesetsReleaseReport(),
+    releaseVerificationReport: null,
+    changesetsReleaseReport: null,
   });
 
   assert.equal(report.overallStatus, "failed");
   assert.equal(report.releaseBootstrap.status, "failed");
   assert.equal(report.releasePreflight.status, "skipped");
+  assert.equal(report.releaseVerification.status, "skipped");
+  assert.equal(report.changesetsRelease.status, "skipped");
   assert.match(report.releasePreflight.summary, /bootstrap did not pass/i);
+  assert.match(report.releaseVerification.summary, /bootstrap did not pass/i);
+  assert.match(report.changesetsRelease.summary, /bootstrap did not pass/i);
+});
+
+test("buildReleaseWorkflowReport marks downstream lanes skipped when preflight failed", () => {
+  const report = buildReleaseWorkflowReport({
+    releaseBootstrapResult: createReleaseBootstrapResult(),
+    releasePreflightResult: {
+      kind: "equip-release-preflight-result",
+      overallStatus: "failed",
+      summary: "build failed; test skipped",
+    },
+    releaseVerificationReport: null,
+    changesetsReleaseReport: null,
+  });
+
+  assert.equal(report.overallStatus, "failed");
+  assert.equal(report.releaseBootstrap.status, "passed");
+  assert.equal(report.releasePreflight.status, "failed");
+  assert.equal(report.releaseVerification.status, "skipped");
+  assert.equal(report.changesetsRelease.status, "skipped");
+  assert.match(report.releaseVerification.summary, /preflight did not pass/i);
+  assert.match(report.changesetsRelease.summary, /preflight did not pass/i);
 });
 
 test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inputs", () => {
@@ -216,15 +241,21 @@ test("buildReleaseWorkflowSummaryMarkdown does not call skipped preflight missin
         summary: "dependency install failed (exit 2)",
       },
       releasePreflightResult: null,
-      releaseVerificationReport: createReleaseVerificationReport(),
-      changesetsReleaseReport: createChangesetsReleaseReport(),
+      releaseVerificationReport: null,
+      changesetsReleaseReport: null,
     }),
   });
 
   assert.match(markdown, /Release bootstrap: `failed`/i);
   assert.match(markdown, /Release preflight: `skipped`/i);
+  assert.match(markdown, /Release verification: `skipped`/i);
+  assert.match(markdown, /Changesets release: `skipped`/i);
   assert.match(markdown, /Release preflight summary: release preflight skipped because release bootstrap did not pass/i);
+  assert.match(markdown, /Release verification summary: release verification skipped because release bootstrap did not pass/i);
+  assert.match(markdown, /Changesets summary: changesets release skipped because release bootstrap did not pass/i);
   assert.doesNotMatch(markdown, /Release preflight result was missing/i);
+  assert.doesNotMatch(markdown, /Release verification report was missing/i);
+  assert.doesNotMatch(markdown, /Changesets release report was missing/i);
 });
 
 test("workflow report and summary scripts write final rollup artifacts", () => {

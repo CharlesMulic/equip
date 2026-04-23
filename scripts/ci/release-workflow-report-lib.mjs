@@ -21,8 +21,23 @@ function normalizeArtifactNames(artifactNames) {
   );
 }
 
-function buildReleaseVerificationStatus(report) {
+function buildSkippedStatus(summary) {
+  return {
+    status: "skipped",
+    summary,
+  };
+}
+
+function buildReleaseVerificationStatus(report, releaseBootstrapResult, releasePreflightResult) {
   if (!report) {
+    if (releaseBootstrapResult && releaseBootstrapResult.overallStatus !== "passed") {
+      return buildSkippedStatus("release verification skipped because release bootstrap did not pass");
+    }
+
+    if (releasePreflightResult && releasePreflightResult.overallStatus !== "passed") {
+      return buildSkippedStatus("release verification skipped because release preflight did not pass");
+    }
+
     return {
       status: "missing",
       summary: "release verification report missing",
@@ -70,8 +85,25 @@ function buildReleasePreflightStatus(result, releaseBootstrapResult) {
   };
 }
 
-function buildChangesetsStatus(report) {
+function buildChangesetsStatus(
+  report,
+  releaseBootstrapResult,
+  releasePreflightResult,
+  releaseVerificationReport,
+) {
   if (!report) {
+    if (releaseBootstrapResult && releaseBootstrapResult.overallStatus !== "passed") {
+      return buildSkippedStatus("changesets release skipped because release bootstrap did not pass");
+    }
+
+    if (releasePreflightResult && releasePreflightResult.overallStatus !== "passed") {
+      return buildSkippedStatus("changesets release skipped because release preflight did not pass");
+    }
+
+    if (releaseVerificationReport && releaseVerificationReport.overallStatus !== "passed") {
+      return buildSkippedStatus("changesets release skipped because release verification did not pass");
+    }
+
     return {
       status: "missing",
       summary: "changesets release report missing",
@@ -150,8 +182,17 @@ export function buildReleaseWorkflowReport({
           ),
     releaseBootstrap: buildReleaseBootstrapStatus(releaseBootstrapResult),
     releasePreflight: buildReleasePreflightStatus(releasePreflightResult, releaseBootstrapResult),
-    releaseVerification: buildReleaseVerificationStatus(releaseVerificationReport),
-    changesetsRelease: buildChangesetsStatus(changesetsReleaseReport),
+    releaseVerification: buildReleaseVerificationStatus(
+      releaseVerificationReport,
+      releaseBootstrapResult,
+      releasePreflightResult,
+    ),
+    changesetsRelease: buildChangesetsStatus(
+      changesetsReleaseReport,
+      releaseBootstrapResult,
+      releasePreflightResult,
+      releaseVerificationReport,
+    ),
     inputs: {
       hasReleaseBootstrapResult: !!releaseBootstrapResult,
       hasReleasePreflightResult: !!releasePreflightResult,
@@ -225,11 +266,11 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
       lines.push("- Release preflight result was missing.");
     }
 
-    if (!report.inputs?.hasReleaseVerificationReport) {
+    if (!report.inputs?.hasReleaseVerificationReport && report.releaseVerification?.status !== "skipped") {
       lines.push("- Release verification report was missing.");
     }
 
-    if (!report.inputs?.hasChangesetsReleaseReport) {
+    if (!report.inputs?.hasChangesetsReleaseReport && report.changesetsRelease?.status !== "skipped") {
       lines.push("- Changesets release report was missing.");
     }
   }

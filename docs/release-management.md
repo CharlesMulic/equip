@@ -99,7 +99,8 @@ On pushes to `main` it:
     so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
 17. writes and uploads `.generated/release/release-workflow-report.json`
     as the final workflow-level rollup combining the release-bootstrap result, the release-preflight result, the release-verification report, and the Changesets release report,
-    so operators have one canonical machine-readable entrypoint for the whole release run
+    so operators have one canonical machine-readable entrypoint for the whole release run,
+    while marking verification and Changesets as `skipped` instead of `missing` when an earlier release stage prevented them from running
 18. writes and uploads `.generated/release/release-workflow-summary.md`
     as the matching human-readable summary of the full workflow rollup, including the uploaded artifact names to open next,
     and appends that final top-level rendering to the GitHub job summary
