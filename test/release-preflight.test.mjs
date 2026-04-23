@@ -1,0 +1,160 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import {
+  buildReleasePreflightResult,
+  buildReleasePreflightSummaryMarkdown,
+} from "../scripts/ci/release-preflight-lib.mjs";
+
+const workspaceRoot = path.resolve(import.meta.dirname, "..");
+
+function runScript(env) {
+  return spawnSync(process.execPath, [path.join(workspaceRoot, "scripts/ci/run-release-preflight.mjs")], {
+    cwd: workspaceRoot,
+    env: { ...process.env, ...env },
+    encoding: "utf8",
+  });
+}
+
+test("buildReleasePreflightResult marks passing phases as passed", () => {
+  const result = buildReleasePreflightResult({
+    buildPhase: {
+      status: "passed",
+      exitCode: 0,
+      command: "npm run build",
+      summary: "build completed successfully",
+    },
+    testPhase: {
+      status: "passed",
+      exitCode: 0,
+      command: "npm test",
+      summary: "test completed successfully",
+    },
+    artifacts: {
+      resultPath: "/tmp/release-preflight-result.json",
+      summaryPath: "/tmp/release-preflight-summary.md",
+    },
+  });
+
+  assert.equal(result.kind, "equip-release-preflight-result");
+  assert.equal(result.overallStatus, "passed");
+  assert.equal(result.phases.build.status, "passed");
+  assert.equal(result.phases.test.status, "passed");
+  assert.match(result.summary, /build passed; test passed/i);
+});
+
+test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
+  const markdown = buildReleasePreflightSummaryMarkdown({
+    result: buildReleasePreflightResult({
+      buildPhase: {
+        status: "failed",
+        exitCode: 2,
+        command: "npm run build",
+        summary: "build failed with exit code 2",
+      },
+      testPhase: {
+        status: "skipped",
+        exitCode: null,
+        command: "npm test",
+        summary: "test skipped because build preflight failed",
+      },
+      artifacts: {
+        buildLogPath: "/tmp/release-preflight-build.log",
+        testLogPath: "/tmp/release-preflight-test.log",
+      },
+    }),
+  });
+
+  assert.match(markdown, /Overall status: `failed`/i);
+  assert.match(markdown, /## Build/i);
+  assert.match(markdown, /Exit code: `2`/i);
+  assert.match(markdown, /## Test/i);
+  assert.match(markdown, /test skipped because build preflight failed/i);
+  assert.match(markdown, /buildLogPath:/i);
+});
+
+test("run-release-preflight writes passing artifacts for synthetic success commands", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-preflight-"));
+  const buildScriptPath = path.join(root, "build-success.mjs");
+  const testScriptPath = path.join(root, "test-success.mjs");
+  const resultPath = path.join(root, "release-preflight-result.json");
+  const summaryPath = path.join(root, "release-preflight-summary.md");
+  const buildLogPath = path.join(root, "release-preflight-build.log");
+  const testLogPath = path.join(root, "release-preflight-test.log");
+
+  fs.writeFileSync(buildScriptPath, "console.log('synthetic build ok');\n", "utf8");
+  fs.writeFileSync(testScriptPath, "console.log('synthetic test ok');\n", "utf8");
+
+  const result = runScript({
+    RELEASE_PREFLIGHT_RESULT_PATH: resultPath,
+    RELEASE_PREFLIGHT_SUMMARY_PATH: summaryPath,
+    RELEASE_PREFLIGHT_BUILD_LOG_PATH: buildLogPath,
+    RELEASE_PREFLIGHT_TEST_LOG_PATH: testLogPath,
+    RELEASE_PREFLIGHT_BUILD_EXECUTABLE: process.execPath,
+    RELEASE_PREFLIGHT_BUILD_ARGS_JSON: JSON.stringify([buildScriptPath]),
+    RELEASE_PREFLIGHT_TEST_EXECUTABLE: process.execPath,
+    RELEASE_PREFLIGHT_TEST_ARGS_JSON: JSON.stringify([testScriptPath]),
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+  const summary = fs.readFileSync(summaryPath, "utf8");
+  const buildLog = fs.readFileSync(buildLogPath, "utf8");
+  const testLog = fs.readFileSync(testLogPath, "utf8");
+
+  assert.equal(artifact.overallStatus, "passed");
+  assert.equal(artifact.phases.build.status, "passed");
+  assert.equal(artifact.phases.test.status, "passed");
+  assert.match(summary, /Overall status: `passed`/i);
+  assert.match(buildLog, /synthetic build ok/i);
+  assert.match(testLog, /synthetic test ok/i);
+});
+
+test("run-release-preflight preserves failure artifacts and skips tests after build failure", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-preflight-"));
+  const buildScriptPath = path.join(root, "build-fail.mjs");
+  const testScriptPath = path.join(root, "test-should-not-run.mjs");
+  const resultPath = path.join(root, "release-preflight-result.json");
+  const summaryPath = path.join(root, "release-preflight-summary.md");
+  const buildLogPath = path.join(root, "release-preflight-build.log");
+  const testLogPath = path.join(root, "release-preflight-test.log");
+
+  fs.writeFileSync(
+    buildScriptPath,
+    "console.error('synthetic build failed');\nprocess.exit(2);\n",
+    "utf8",
+  );
+  fs.writeFileSync(
+    testScriptPath,
+    "console.error('synthetic test should not run');\nprocess.exit(3);\n",
+    "utf8",
+  );
+
+  const result = runScript({
+    RELEASE_PREFLIGHT_RESULT_PATH: resultPath,
+    RELEASE_PREFLIGHT_SUMMARY_PATH: summaryPath,
+    RELEASE_PREFLIGHT_BUILD_LOG_PATH: buildLogPath,
+    RELEASE_PREFLIGHT_TEST_LOG_PATH: testLogPath,
+    RELEASE_PREFLIGHT_BUILD_EXECUTABLE: process.execPath,
+    RELEASE_PREFLIGHT_BUILD_ARGS_JSON: JSON.stringify([buildScriptPath]),
+    RELEASE_PREFLIGHT_TEST_EXECUTABLE: process.execPath,
+    RELEASE_PREFLIGHT_TEST_ARGS_JSON: JSON.stringify([testScriptPath]),
+  });
+
+  assert.notEqual(result.status, 0);
+  const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+  const summary = fs.readFileSync(summaryPath, "utf8");
+  const buildLog = fs.readFileSync(buildLogPath, "utf8");
+  const testLog = fs.readFileSync(testLogPath, "utf8");
+
+  assert.equal(artifact.overallStatus, "failed");
+  assert.equal(artifact.phases.build.status, "failed");
+  assert.equal(artifact.phases.build.exitCode, 2);
+  assert.equal(artifact.phases.test.status, "skipped");
+  assert.match(summary, /Overall status: `failed`/i);
+  assert.match(buildLog, /synthetic build failed/i);
+  assert.match(testLog, /test skipped because build preflight failed/i);
+});

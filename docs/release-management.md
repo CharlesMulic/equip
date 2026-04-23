@@ -43,54 +43,62 @@ The release workflow lives in `.github/workflows/release.yml`.
 On pushes to `main` it:
 
 1. installs dependencies
-2. builds
-3. runs `npm test`
-4. runs `npm run test:docker:acceptance`
+2. runs `node scripts/ci/run-release-preflight.mjs`
+   which captures the release workflow's `build` and `npm test` phases into:
+   - `.generated/release/release-preflight-result.json`
+   - `.generated/release/release-preflight-summary.md`
+   - `.generated/release/release-preflight-build.log`
+   - `.generated/release/release-preflight-test.log`
+   and uploads them as the `release-preflight` evidence bundle even when one of those early phases fails
+3. runs `npm run test:docker:acceptance`
    and uploads the machine-readable Docker acceptance report plus raw build/run logs
-5. runs `npm run test:pack`
+   but only if the preflight lane passed
+4. runs `npm run test:pack`
    and uploads a machine-readable pack verification artifact, a raw `pack-verification.log`, and the actual packed `.tgz` for debugging / inspection
    even when `npm pack` itself fails before normal verification can complete
-6. runs `npm run test:pack:smoke`
+   and only after the preflight lane passed
+5. runs `npm run test:pack:smoke`
    to install the produced tarball into a clean temp project and prove the packaged CLI + exports still work from the npm package boundary
    while still preserving a machine-readable failure artifact plus raw `pack-install-smoke.log` output if the smoke dies before it can pass
-7. writes `.generated/release/release-verification-report.json`
+   and only after the preflight lane passed
+6. writes `.generated/release/release-verification-report.json`
    as a single machine-readable rollup of pack verification, tarball-install smoke, and Docker acceptance
    even if one of those upstream artifacts is missing because a verification lane failed early,
    while rebasing the per-lane log/report/tarball artifact pointers to the current verification workspace for easier debugging
    and recording the corresponding uploaded GitHub artifact names for each verification lane
-8. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
-9. writes `.generated/release/release-verification-assertion.json`
+7. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
+8. writes `.generated/release/release-verification-assertion.json`
    as a final machine-readable gate verdict with component statuses and failure details
-10. writes and uploads `.generated/release/release-verification-summary.md`
+9. writes and uploads `.generated/release/release-verification-summary.md`
     after the assertion step so the Markdown artifact reflects the final gate outcome,
     includes the uploaded evidence artifact names, and stays aligned behind one canonical human-readable rendering
-11. rewrites `.generated/release/release-verification-report.json`
+10. rewrites `.generated/release/release-verification-report.json`
     after the assertion/summary steps so the uploaded rollup also points at the final assertion and Markdown summary artifacts
-12. uses `changesets/action` to either:
+11. uses `changesets/action` to either:
     - open/update a `Version packages` PR when pending changesets exist, or
     - publish the already-versioned package after that PR is merged
-13. writes `.generated/release/changesets-release-result.json`
+12. writes `.generated/release/changesets-release-result.json`
     after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails
-14. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
+13. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
     so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs
-16. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
+14. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
     after that assertion step so the human-readable Markdown artifact reflects the true final gate state
-17. writes and uploads `.generated/release/changesets-release-report.json`
+15. writes and uploads `.generated/release/changesets-release-report.json`
     as a single machine-readable rollup of the result, final assertion, summary/report artifact paths,
     and the corresponding uploaded GitHub artifact names
-18. uploads the result, summary, assertion, and report artifacts before the workflow turns red
+16. uploads the result, summary, assertion, and report artifacts before the workflow turns red
     so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
-19. writes and uploads `.generated/release/release-workflow-report.json`
-    as the final workflow-level rollup combining the release-verification report and the Changesets release report,
+17. writes and uploads `.generated/release/release-workflow-report.json`
+    as the final workflow-level rollup combining the release-preflight result, the release-verification report, and the Changesets release report,
     so operators have one canonical machine-readable entrypoint for the whole release run
-20. writes and uploads `.generated/release/release-workflow-summary.md`
-    as the matching human-readable summary of those two rollups, including the uploaded artifact names to open next,
+18. writes and uploads `.generated/release/release-workflow-summary.md`
+    as the matching human-readable summary of the full workflow rollup, including the uploaded artifact names to open next,
     and appends that final top-level rendering to the GitHub job summary
-21. rewrites `.generated/release/release-workflow-report.json`
+19. rewrites `.generated/release/release-workflow-report.json`
     after the summary step so the final machine-readable report also points at the uploaded summary artifact path
-22. asserts that workflow-level report explicitly and writes `.generated/release/release-workflow-assertion.json`
+20. asserts that workflow-level report explicitly and writes `.generated/release/release-workflow-assertion.json`
     so the final release verdict is preserved as a machine-readable gate artifact instead of being inferred only from the report contents
-23. rewrites the workflow summary/report after that assertion step and uploads the summary, assertion, and report artifacts
+21. rewrites the workflow summary/report after that assertion step and uploads the summary, assertion, and report artifacts
     before the job turns red, so failed final-release gates still leave behind one complete evidence bundle
 
 ## Publishing Auth

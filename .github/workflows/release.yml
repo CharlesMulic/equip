@@ -34,13 +34,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Run release preflight
+        id: release-preflight
+        continue-on-error: true
+        env:
+          RELEASE_PREFLIGHT_RESULT_PATH: .generated/release/release-preflight-result.json
+          RELEASE_PREFLIGHT_SUMMARY_PATH: .generated/release/release-preflight-summary.md
+          RELEASE_PREFLIGHT_BUILD_LOG_PATH: .generated/release/release-preflight-build.log
+          RELEASE_PREFLIGHT_TEST_LOG_PATH: .generated/release/release-preflight-test.log
+        run: node scripts/ci/run-release-preflight.mjs
 
-      - name: Test
-        run: npm test
+      - name: Upload release preflight artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-preflight
+          path: |
+            .generated/release/release-preflight-result.json
+            .generated/release/release-preflight-summary.md
+            .generated/release/release-preflight-build.log
+            .generated/release/release-preflight-test.log
+          if-no-files-found: error
 
       - name: Run hermetic Docker acceptance
+        if: ${{ steps.release-preflight.outcome == 'success' }}
         id: docker-acceptance
         continue-on-error: true
         env:
@@ -53,9 +70,10 @@ jobs:
         with:
           name: docker-acceptance
           path: .generated/docker-acceptance/*
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Verify packed npm artifact
+        if: ${{ steps.release-preflight.outcome == 'success' }}
         id: pack-verification
         continue-on-error: true
         env:
@@ -66,7 +84,7 @@ jobs:
 
       - name: Smoke install packed npm tarball
         id: pack-install-smoke
-        if: ${{ always() }}
+        if: ${{ always() && steps.release-preflight.outcome == 'success' }}
         continue-on-error: true
         env:
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
@@ -281,11 +299,13 @@ jobs:
       - name: Write final release workflow report
         if: ${{ always() }}
         env:
+          RELEASE_PREFLIGHT_RESULT_PATH: .generated/release/release-preflight-result.json
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
           CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
           RELEASE_WORKFLOW_ASSERTION_PATH: .generated/release/release-workflow-assertion.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
+          RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: release-preflight
           RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: release-verification-report
           CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report
           RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: release-workflow-assertion
@@ -314,11 +334,13 @@ jobs:
       - name: Rewrite final release workflow report with final artifact paths
         if: ${{ always() }}
         env:
+          RELEASE_PREFLIGHT_RESULT_PATH: .generated/release/release-preflight-result.json
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
           CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
           RELEASE_WORKFLOW_ASSERTION_PATH: .generated/release/release-workflow-assertion.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
+          RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: release-preflight
           RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: release-verification-report
           CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report
           RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: release-workflow-assertion
