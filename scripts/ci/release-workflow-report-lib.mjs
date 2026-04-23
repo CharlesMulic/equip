@@ -49,8 +49,15 @@ function buildReleaseBootstrapStatus(result) {
   };
 }
 
-function buildReleasePreflightStatus(result) {
+function buildReleasePreflightStatus(result, releaseBootstrapResult) {
   if (!result) {
+    if (releaseBootstrapResult && releaseBootstrapResult.overallStatus !== "passed") {
+      return {
+        status: "skipped",
+        summary: "release preflight skipped because release bootstrap did not pass",
+      };
+    }
+
     return {
       status: "missing",
       summary: "release preflight result missing",
@@ -142,7 +149,7 @@ export function buildReleaseWorkflowReport({
             changesetsReleaseReport,
           ),
     releaseBootstrap: buildReleaseBootstrapStatus(releaseBootstrapResult),
-    releasePreflight: buildReleasePreflightStatus(releasePreflightResult),
+    releasePreflight: buildReleasePreflightStatus(releasePreflightResult, releaseBootstrapResult),
     releaseVerification: buildReleaseVerificationStatus(releaseVerificationReport),
     changesetsRelease: buildChangesetsStatus(changesetsReleaseReport),
     inputs: {
@@ -214,7 +221,7 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
       lines.push("- Release bootstrap result was missing.");
     }
 
-    if (!report.inputs?.hasReleasePreflightResult) {
+    if (!report.inputs?.hasReleasePreflightResult && report.releasePreflight?.status !== "skipped") {
       lines.push("- Release preflight result was missing.");
     }
 

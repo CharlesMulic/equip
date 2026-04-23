@@ -148,6 +148,24 @@ test("buildReleaseWorkflowReport marks missing reports explicitly", () => {
   assert.equal(report.changesetsRelease.status, "published");
 });
 
+test("buildReleaseWorkflowReport marks preflight skipped when bootstrap failed first", () => {
+  const report = buildReleaseWorkflowReport({
+    releaseBootstrapResult: {
+      kind: "equip-release-bootstrap-result",
+      overallStatus: "failed",
+      summary: "dependency install failed (exit 2)",
+    },
+    releasePreflightResult: null,
+    releaseVerificationReport: createReleaseVerificationReport(),
+    changesetsReleaseReport: createChangesetsReleaseReport(),
+  });
+
+  assert.equal(report.overallStatus, "failed");
+  assert.equal(report.releaseBootstrap.status, "failed");
+  assert.equal(report.releasePreflight.status, "skipped");
+  assert.match(report.releasePreflight.summary, /bootstrap did not pass/i);
+});
+
 test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inputs", () => {
   const markdown = buildReleaseWorkflowSummaryMarkdown({
     report: buildReleaseWorkflowReport({
@@ -187,6 +205,26 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /Final assertion/i);
   assert.match(markdown, /Outcome: `failed`/i);
   assert.match(markdown, /Release Verification: `release-verification-report`/i);
+});
+
+test("buildReleaseWorkflowSummaryMarkdown does not call skipped preflight missing", () => {
+  const markdown = buildReleaseWorkflowSummaryMarkdown({
+    report: buildReleaseWorkflowReport({
+      releaseBootstrapResult: {
+        kind: "equip-release-bootstrap-result",
+        overallStatus: "failed",
+        summary: "dependency install failed (exit 2)",
+      },
+      releasePreflightResult: null,
+      releaseVerificationReport: createReleaseVerificationReport(),
+      changesetsReleaseReport: createChangesetsReleaseReport(),
+    }),
+  });
+
+  assert.match(markdown, /Release bootstrap: `failed`/i);
+  assert.match(markdown, /Release preflight: `skipped`/i);
+  assert.match(markdown, /Release preflight summary: release preflight skipped because release bootstrap did not pass/i);
+  assert.doesNotMatch(markdown, /Release preflight result was missing/i);
 });
 
 test("workflow report and summary scripts write final rollup artifacts", () => {
