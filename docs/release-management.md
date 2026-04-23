@@ -75,7 +75,8 @@ On pushes to `main` it:
    and recording the corresponding uploaded GitHub artifact names for each verification lane
 7. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
 8. writes `.generated/release/release-verification-assertion.json`
-   as a final machine-readable gate verdict with component statuses and failure details
+   as a final machine-readable gate verdict with component statuses and failure details,
+   and that assertion artifact now also carries the bootstrap/preflight summaries plus the verification-lane evidence paths and artifact names
 9. writes and uploads `.generated/release/release-verification-summary.md`
     after the assertion step so the Markdown artifact reflects the final gate outcome,
     includes the uploaded evidence artifact names, and stays aligned behind one canonical human-readable rendering

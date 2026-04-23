@@ -7,6 +7,16 @@ function formatStatusMap(statusMap) {
     .join(", ");
 }
 
+function normalizeArtifacts(artifacts) {
+  if (!artifacts || typeof artifacts !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifacts).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+  );
+}
+
 function buildFailureDetails(report) {
   const details = [];
   const formatArtifactDetails = (prefix, artifacts) => {
@@ -146,6 +156,69 @@ function appendAssertionSummary(summaryPath, result) {
   fs.appendFileSync(summaryPath, `${lines.join("\n")}\n`, "utf8");
 }
 
+function buildAssertionResult({
+  reportPath,
+  assertionPath,
+  report,
+  outcome,
+  failureDetails = [],
+  error = "",
+}) {
+  const componentStatuses = {
+    package: report?.package?.status || "unknown",
+    tarballSmoke: report?.tarballSmoke?.status || "unknown",
+    dockerAcceptance: report?.dockerAcceptance?.status || "unknown",
+  };
+
+  return {
+    kind: "equip-release-verification-assertion",
+    evaluatedAt: new Date().toISOString(),
+    outcome,
+    reportPath: path.resolve(reportPath),
+    assertionPath: path.resolve(assertionPath),
+    overallStatus: report?.overallStatus || "unknown",
+    components: componentStatuses,
+    releaseBootstrap: report?.releaseBootstrap || null,
+    releasePreflight: report?.releasePreflight || null,
+    package: report?.package
+      ? {
+          status: report.package.status || "",
+          tarballFileName: report.package.tarballFileName || "",
+          tarballPath: report.package.tarballPath || "",
+          failureMessage: report.package.failureMessage || "",
+          missingReason: report.package.missingReason || "",
+          skippedReason: report.package.skippedReason || "",
+          artifacts: normalizeArtifacts(report.package.artifacts),
+        }
+      : null,
+    tarballSmoke: report?.tarballSmoke
+      ? {
+          status: report.tarballSmoke.status || "",
+          tarballFileName: report.tarballSmoke.tarballFileName || "",
+          tarballPath: report.tarballSmoke.tarballPath || "",
+          failureMessage: report.tarballSmoke.failureMessage || "",
+          missingReason: report.tarballSmoke.missingReason || "",
+          skippedReason: report.tarballSmoke.skippedReason || "",
+          artifacts: normalizeArtifacts(report.tarballSmoke.artifacts),
+        }
+      : null,
+    dockerAcceptance: report?.dockerAcceptance
+      ? {
+          status: report.dockerAcceptance.status || "",
+          totalDurationMs: report.dockerAcceptance.totalDurationMs ?? 0,
+          failureMessage: report.dockerAcceptance.failureMessage || "",
+          missingReason: report.dockerAcceptance.missingReason || "",
+          skippedReason: report.dockerAcceptance.skippedReason || "",
+          artifacts: normalizeArtifacts(report.dockerAcceptance.artifacts),
+        }
+      : null,
+    artifacts: normalizeArtifacts(report?.artifacts),
+    artifactNames: normalizeArtifacts(report?.artifactNames),
+    failureDetails,
+    error,
+  };
+}
+
 function main() {
   const reportPath =
     process.env.RELEASE_VERIFICATION_REPORT_PATH ||
@@ -181,16 +254,12 @@ function main() {
     );
   }
 
-  const assertionResult = {
-    kind: "equip-release-verification-assertion",
-    evaluatedAt: new Date().toISOString(),
+  const assertionResult = buildAssertionResult({
+    reportPath,
+    assertionPath,
+    report,
     outcome: "passed",
-    reportPath: path.resolve(reportPath),
-    assertionPath: path.resolve(assertionPath),
-    overallStatus: report.overallStatus,
-    components: componentStatuses,
-    failureDetails: [],
-  };
+  });
   writeAssertionArtifact(assertionPath, assertionResult);
   if (appendStepSummary) {
     appendAssertionSummary(summaryPath, assertionResult);
@@ -214,23 +283,15 @@ try {
     : null;
   const appendStepSummary =
     (process.env.RELEASE_VERIFICATION_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
-  const componentStatuses = {
-    package: report?.package?.status || "unknown",
-    tarballSmoke: report?.tarballSmoke?.status || "unknown",
-    dockerAcceptance: report?.dockerAcceptance?.status || "unknown",
-  };
   const failureDetails = report ? buildFailureDetails(report) : [];
-  const assertionResult = {
-    kind: "equip-release-verification-assertion",
-    evaluatedAt: new Date().toISOString(),
+  const assertionResult = buildAssertionResult({
+    reportPath,
+    assertionPath,
+    report,
     outcome: "failed",
-    reportPath: path.resolve(reportPath),
-    assertionPath: path.resolve(assertionPath),
-    overallStatus: report?.overallStatus || "unknown",
-    components: componentStatuses,
     failureDetails,
     error: error.message,
-  };
+  });
   writeAssertionArtifact(assertionPath, assertionResult);
   if (appendStepSummary) {
     appendAssertionSummary(process.env.GITHUB_STEP_SUMMARY || "", assertionResult);

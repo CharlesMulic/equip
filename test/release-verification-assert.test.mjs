@@ -32,9 +32,50 @@ test("assert-release-verification-report passes healthy rollups", () => {
 
   writeJson(reportPath, {
     overallStatus: "passed",
-    package: { status: "passed" },
-    tarballSmoke: { status: "passed" },
-    dockerAcceptance: { status: "passed" },
+    releaseBootstrap: {
+      status: "passed",
+      summary: "dependency install passed",
+    },
+    releasePreflight: {
+      status: "passed",
+      summary: "build and tests passed",
+    },
+    package: {
+      status: "passed",
+      tarballFileName: "cg3-equip-0.17.7.tgz",
+      tarballPath: "/tmp/cg3-equip-0.17.7.tgz",
+      artifacts: {
+        logPath: ".generated/release/pack-verification.log",
+      },
+    },
+    tarballSmoke: {
+      status: "passed",
+      tarballFileName: "cg3-equip-0.17.7.tgz",
+      tarballPath: "/tmp/cg3-equip-0.17.7.tgz",
+      artifacts: {
+        logPath: ".generated/release/pack-install-smoke.log",
+      },
+    },
+    dockerAcceptance: {
+      status: "passed",
+      totalDurationMs: 6789,
+      artifacts: {
+        reportPath: ".generated/docker-acceptance/docker-acceptance-report.json",
+      },
+    },
+    artifacts: {
+      reportPath,
+      assertionPath,
+      summaryPath,
+    },
+    artifactNames: {
+      packVerification: "pack-verification",
+      packInstallSmoke: "pack-install-smoke",
+      dockerAcceptance: "docker-acceptance",
+      report: "release-verification-report",
+      assertion: "release-verification-assertion",
+      summary: "release-verification-summary",
+    },
   });
 
   const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
@@ -56,6 +97,17 @@ test("assert-release-verification-report passes healthy rollups", () => {
     tarballSmoke: "passed",
     dockerAcceptance: "passed",
   });
+  assert.equal(assertion.releaseBootstrap.status, "passed");
+  assert.equal(assertion.releasePreflight.status, "passed");
+  assert.equal(assertion.package.tarballFileName, "cg3-equip-0.17.7.tgz");
+  assert.equal(assertion.package.artifacts.logPath, ".generated/release/pack-verification.log");
+  assert.equal(assertion.tarballSmoke.artifacts.logPath, ".generated/release/pack-install-smoke.log");
+  assert.equal(
+    assertion.dockerAcceptance.artifacts.reportPath,
+    ".generated/docker-acceptance/docker-acceptance-report.json",
+  );
+  assert.equal(assertion.artifacts.summaryPath, summaryPath);
+  assert.equal(assertion.artifactNames.report, "release-verification-report");
   assert.deepEqual(assertion.failureDetails, []);
   assert.match(summary, /## Release verification assertion/i);
   assert.match(summary, /Outcome: `passed`/i);
@@ -152,6 +204,16 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.equal(assertion.kind, "equip-release-verification-assertion");
   assert.equal(assertion.outcome, "failed");
   assert.equal(assertion.overallStatus, "failed");
+  assert.equal(assertion.package.failureMessage, "npm pack verification failed");
+  assert.equal(assertion.package.artifacts.logPath, ".generated/release/pack-verification.log");
+  assert.equal(
+    assertion.tarballSmoke.artifacts.logPath,
+    ".generated/release/pack-install-smoke.log",
+  );
+  assert.equal(
+    assertion.dockerAcceptance.artifacts.reportPath,
+    ".generated/docker-acceptance/docker-acceptance-report.json",
+  );
   assert.match(assertion.error, /Failed components: package, tarballSmoke, dockerAcceptance\./i);
   assert.deepEqual(assertion.components, {
     package: "failed",
@@ -206,6 +268,8 @@ test("assert-release-verification-report reports missing component artifacts cle
     tarballSmoke: "passed",
     dockerAcceptance: "missing",
   });
+  assert.equal(assertion.package.missingReason, "pack verification artifact missing");
+  assert.equal(assertion.dockerAcceptance.missingReason, "docker acceptance artifact missing");
   assert.ok(assertion.failureDetails.some((detail) => /package missing:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance missing:/i.test(detail)));
 });
@@ -248,6 +312,9 @@ test("assert-release-verification-report reports skipped component artifacts cle
     tarballSmoke: "skipped",
     dockerAcceptance: "skipped",
   });
+  assert.match(assertion.package.skippedReason, /release preflight did not pass/i);
+  assert.match(assertion.tarballSmoke.skippedReason, /release preflight did not pass/i);
+  assert.match(assertion.dockerAcceptance.skippedReason, /release preflight did not pass/i);
   assert.ok(assertion.failureDetails.some((detail) => /package skipped:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance skipped:/i.test(detail)));
 });
