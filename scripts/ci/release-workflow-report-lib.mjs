@@ -21,6 +21,40 @@ function normalizeArtifactNames(artifactNames) {
   );
 }
 
+function prefixArtifactEntries(prefix, artifacts) {
+  const normalizedArtifacts = normalizeArtifacts(artifacts);
+  const entries = Object.entries(normalizedArtifacts).filter(([, value]) => value);
+  if (entries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    entries.map(([key, value]) => [
+      `${prefix}${key[0].toUpperCase()}${key.slice(1)}`,
+      value,
+    ]),
+  );
+}
+
+function buildEvidenceFiles({
+  releaseBootstrapResult = null,
+  releasePreflightResult = null,
+  releaseVerificationReport = null,
+  changesetsReleaseReport = null,
+  artifacts = {},
+}) {
+  return {
+    ...prefixArtifactEntries("releaseBootstrap", releaseBootstrapResult?.artifacts),
+    ...prefixArtifactEntries("releasePreflight", releasePreflightResult?.artifacts),
+    ...prefixArtifactEntries("releaseVerification", releaseVerificationReport?.artifacts),
+    ...prefixArtifactEntries("package", releaseVerificationReport?.package?.artifacts),
+    ...prefixArtifactEntries("tarballSmoke", releaseVerificationReport?.tarballSmoke?.artifacts),
+    ...prefixArtifactEntries("dockerAcceptance", releaseVerificationReport?.dockerAcceptance?.artifacts),
+    ...prefixArtifactEntries("changesetsRelease", changesetsReleaseReport?.artifacts),
+    ...prefixArtifactEntries("releaseWorkflow", artifacts),
+  };
+}
+
 function buildSkippedStatus(summary) {
   return {
     status: "skipped",
@@ -223,6 +257,13 @@ export function buildReleaseWorkflowReport({
       : null,
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceFiles: buildEvidenceFiles({
+      releaseBootstrapResult,
+      releasePreflightResult,
+      releaseVerificationReport,
+      changesetsReleaseReport,
+      artifacts,
+    }),
   };
 }
 
@@ -305,6 +346,17 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
   if (artifactEntries.length > 0) {
     lines.push("", "## Evidence artifacts", "");
     for (const [key, value] of artifactEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
+
+  const evidenceEntries = Object.entries(report.evidenceFiles || {}).filter(([, value]) => value);
+  if (evidenceEntries.length > 0) {
+    lines.push("", "## Evidence files", "");
+    for (const [key, value] of evidenceEntries) {
       const label = key
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/^./, (char) => char.toUpperCase());

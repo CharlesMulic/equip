@@ -24,6 +24,28 @@ function createReleaseVerificationReport() {
     kind: "equip-release-verification-report",
     overallStatus: "passed",
     summary: "all release verification checks passed",
+    artifacts: {
+      reportPath: "/tmp/release-verification-report.json",
+      assertionPath: "/tmp/release-verification-assertion.json",
+      summaryPath: "/tmp/release-verification-summary.md",
+    },
+    package: {
+      artifacts: {
+        logPath: "/tmp/pack-verification.log",
+      },
+    },
+    tarballSmoke: {
+      artifacts: {
+        logPath: "/tmp/pack-install-smoke.log",
+      },
+    },
+    dockerAcceptance: {
+      artifacts: {
+        reportPath: "/tmp/docker-acceptance-report.json",
+        buildLogPath: "/tmp/docker-build.log",
+        runLogPath: "/tmp/docker-run.log",
+      },
+    },
     artifactNames: {
       report: "release-verification-report",
       summary: "release-verification-summary",
@@ -35,6 +57,12 @@ function createChangesetsReleaseReport() {
   return {
     kind: "equip-changesets-release-report",
     status: "published",
+    artifacts: {
+      resultPath: "/tmp/changesets-release-result.json",
+      assertionPath: "/tmp/changesets-release-assertion.json",
+      summaryPath: "/tmp/changesets-release-summary.md",
+      reportPath: "/tmp/changesets-release-report.json",
+    },
     result: {
       summary: "changesets release step published 1 package: @cg3/equip@0.17.8",
     },
@@ -130,6 +158,14 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   assert.equal(report.assertion.outcome, "passed");
   assert.equal(report.artifacts.summaryPath, "/tmp/release-workflow-summary.md");
   assert.equal(report.artifactNames.summary, "release-workflow-summary");
+  assert.equal(report.evidenceFiles.releaseBootstrapResultPath, "/tmp/release-bootstrap-result.json");
+  assert.equal(report.evidenceFiles.releasePreflightSummaryPath, "/tmp/release-preflight-summary.md");
+  assert.equal(report.evidenceFiles.releaseVerificationReportPath, "/tmp/release-verification-report.json");
+  assert.equal(report.evidenceFiles.packageLogPath, "/tmp/pack-verification.log");
+  assert.equal(report.evidenceFiles.tarballSmokeLogPath, "/tmp/pack-install-smoke.log");
+  assert.equal(report.evidenceFiles.dockerAcceptanceRunLogPath, "/tmp/docker-run.log");
+  assert.equal(report.evidenceFiles.changesetsReleaseReportPath, "/tmp/changesets-release-report.json");
+  assert.equal(report.evidenceFiles.releaseWorkflowSummaryPath, "/tmp/release-workflow-summary.md");
 });
 
 test("buildReleaseWorkflowReport marks missing reports explicitly", () => {
@@ -240,6 +276,9 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /Final assertion/i);
   assert.match(markdown, /Outcome: `failed`/i);
   assert.match(markdown, /Release Verification: `release-verification-report`/i);
+  assert.match(markdown, /## Evidence files/i);
+  assert.match(markdown, /Changesets Release Summary Path: `\/tmp\/changesets-release-summary\.md`/i);
+  assert.match(markdown, /Changesets Release Report Path: `\/tmp\/changesets-release-report\.json`/i);
 });
 
 test("buildReleaseWorkflowSummaryMarkdown does not call skipped preflight missing", () => {
@@ -376,6 +415,9 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(report.artifactNames.releasePreflight, "release-preflight-result");
   assert.equal(report.artifactNames.report, "release-workflow-report");
   assert.equal(report.artifactNames.assertion, "release-workflow-assertion");
+  assert.equal(report.evidenceFiles.releaseWorkflowReportPath, path.resolve(releaseWorkflowReportPath));
+  assert.equal(report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
+  assert.equal(report.evidenceFiles.changesetsReleaseSummaryPath, "/tmp/changesets-release-summary.md");
   assert.match(summary, /Release Workflow Summary/i);
   assert.match(summary, /Release bootstrap: `passed`/i);
   assert.match(summary, /Release preflight: `passed`/i);
@@ -383,6 +425,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Actual status: `published`/i);
   assert.match(summary, /Effective status: `published`/i);
   assert.match(summary, /Final assertion/i);
+  assert.match(summary, /## Evidence files/i);
+  assert.match(summary, /Release Workflow Report Path:/i);
 });
 
 test("assert-release-workflow-report writes a failure artifact before exiting nonzero", () => {
