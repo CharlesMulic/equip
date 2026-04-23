@@ -23,6 +23,8 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
     generatedAt: new Date().toISOString(),
     report: {
       overallStatus: report?.overallStatus || "",
+      actualStatus: report?.actualStatus || report?.overallStatus || "",
+      effectiveStatus: report?.effectiveStatus || report?.overallStatus || "",
       releaseBootstrap: report?.releaseBootstrap || null,
       releasePreflight: report?.releasePreflight || null,
       releaseVerification: report?.releaseVerification || null,
@@ -40,7 +42,7 @@ if (!fs.existsSync(reportPath)) {
 
 const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const allowedStatuses = parseAllowedStatuses(process.env.RELEASE_WORKFLOW_ALLOWED_STATUSES);
-const actualStatus = report?.overallStatus || "unknown";
+const actualStatus = report?.actualStatus || report?.overallStatus || "unknown";
 const failureDetails = [];
 
 if (!allowedStatuses.includes(actualStatus)) {

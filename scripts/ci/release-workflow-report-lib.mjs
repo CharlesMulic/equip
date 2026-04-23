@@ -168,18 +168,21 @@ export function buildReleaseWorkflowReport({
   artifactNames = {},
   generatedAt = new Date().toISOString(),
 }) {
+  const actualStatus = buildOverallStatus(
+    releaseBootstrapResult,
+    releasePreflightResult,
+    releaseVerificationReport,
+    changesetsReleaseReport,
+  );
+  const effectiveStatus =
+    assertionArtifact?.assertion?.outcome === "failed" ? "failed" : actualStatus;
+
   return {
     kind: "equip-release-workflow-report",
     generatedAt,
-    overallStatus:
-      assertionArtifact?.assertion?.outcome === "failed"
-        ? "failed"
-        : buildOverallStatus(
-            releaseBootstrapResult,
-            releasePreflightResult,
-            releaseVerificationReport,
-            changesetsReleaseReport,
-          ),
+    overallStatus: effectiveStatus,
+    actualStatus,
+    effectiveStatus,
     releaseBootstrap: buildReleaseBootstrapStatus(releaseBootstrapResult),
     releasePreflight: buildReleasePreflightStatus(releasePreflightResult, releaseBootstrapResult),
     releaseVerification: buildReleaseVerificationStatus(
@@ -227,7 +230,9 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
   const lines = [
     "# Release Workflow Summary",
     "",
-    `- Overall status: \`${report.overallStatus || "unknown"}\``,
+    `- Overall status: \`${report.overallStatus || report.effectiveStatus || "unknown"}\``,
+    `- Actual status: \`${report.actualStatus || report.overallStatus || "unknown"}\``,
+    `- Effective status: \`${report.effectiveStatus || report.overallStatus || "unknown"}\``,
     `- Release bootstrap: \`${report.releaseBootstrap?.status || "unknown"}\``,
     `- Release preflight: \`${report.releasePreflight?.status || "unknown"}\``,
     `- Release verification: \`${report.releaseVerification?.status || "unknown"}\``,
