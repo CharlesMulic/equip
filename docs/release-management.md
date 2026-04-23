@@ -112,7 +112,8 @@ On pushes to `main` it:
 19. rewrites `.generated/release/release-workflow-report.json`
     after the summary step so the final machine-readable report also points at the uploaded summary artifact path
 20. asserts that workflow-level report explicitly and writes `.generated/release/release-workflow-assertion.json`
-    so the final release verdict is preserved as a machine-readable gate artifact instead of being inferred only from the report contents
+    so the final release verdict is preserved as a machine-readable gate artifact instead of being inferred only from the report contents,
+    and that assertion artifact now also carries the top-level artifact-name plus flattened evidence-file / evidence-artifact maps from the workflow report
 21. rewrites the workflow summary/report after that assertion step and uploads the summary, assertion, and report artifacts
     before the job turns red, so failed final-release gates still leave behind one complete evidence bundle
 

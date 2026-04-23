@@ -421,6 +421,10 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(assertion.assertion.outcome, "passed");
   assert.equal(assertion.report.actualStatus, "published");
   assert.equal(assertion.report.effectiveStatus, "published");
+  assert.equal(assertion.report.artifactNames.report, "release-workflow-report");
+  assert.equal(assertion.report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
+  assert.equal(assertion.report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
+  assert.equal(assertion.report.evidenceFiles.changesetsReleaseSummaryPath, "/tmp/changesets-release-summary.md");
   assert.equal(report.artifacts.releaseBootstrapResultPath, path.resolve(releaseBootstrapResultPath));
   assert.equal(report.artifacts.releasePreflightResultPath, path.resolve(releasePreflightResultPath));
   assert.equal(report.artifacts.releaseVerificationReportPath, path.resolve(releaseVerificationReportPath));
@@ -488,6 +492,11 @@ test("assert-release-workflow-report writes a failure artifact before exiting no
   assert.notEqual(result.status, 0);
   const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
   assert.equal(assertion.assertion.outcome, "failed");
+  assert.deepEqual(assertion.report.artifactNames, {});
+  assert.equal(assertion.report.evidenceArtifactNames.changesetsReleaseResult, "changesets-release-result");
+  assert.equal(assertion.report.evidenceArtifactNames.changesetsReleaseAssertion, "changesets-release-assertion");
+  assert.equal(assertion.report.evidenceFiles.changesetsReleaseResultPath, "/tmp/changesets-release-result.json");
+  assert.equal(assertion.report.evidenceFiles.changesetsReleaseReportPath, "/tmp/changesets-release-report.json");
   assert.match(assertion.assertion.failureDetails.join("\n"), /release bootstrap status: failed/i);
   assert.match(assertion.assertion.failureDetails.join("\n"), /release preflight status: failed/i);
   assert.match(assertion.assertion.failureDetails.join("\n"), /release verification status: failed/i);

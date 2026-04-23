@@ -29,6 +29,14 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
       releasePreflight: report?.releasePreflight || null,
       releaseVerification: report?.releaseVerification || null,
       changesetsRelease: report?.changesetsRelease || null,
+      artifactNames:
+        report?.artifactNames && typeof report.artifactNames === "object" ? report.artifactNames : {},
+      evidenceArtifactNames:
+        report?.evidenceArtifactNames && typeof report.evidenceArtifactNames === "object"
+          ? report.evidenceArtifactNames
+          : {},
+      evidenceFiles:
+        report?.evidenceFiles && typeof report.evidenceFiles === "object" ? report.evidenceFiles : {},
     },
     assertion,
   };
