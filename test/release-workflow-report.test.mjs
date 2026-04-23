@@ -47,7 +47,12 @@ function createReleaseVerificationReport() {
       },
     },
     artifactNames: {
+      packVerification: "pack-verification",
+      packTarball: "pack-tarball",
+      packInstallSmoke: "pack-install-smoke",
+      dockerAcceptance: "docker-acceptance",
       report: "release-verification-report",
+      assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
   };
@@ -67,6 +72,8 @@ function createChangesetsReleaseReport() {
       summary: "changesets release step published 1 package: @cg3/equip@0.17.8",
     },
     artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
       report: "changesets-release-report",
       summary: "changesets-release-summary",
     },
@@ -166,6 +173,11 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   assert.equal(report.evidenceFiles.dockerAcceptanceRunLogPath, "/tmp/docker-run.log");
   assert.equal(report.evidenceFiles.changesetsReleaseReportPath, "/tmp/changesets-release-report.json");
   assert.equal(report.evidenceFiles.releaseWorkflowSummaryPath, "/tmp/release-workflow-summary.md");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationDockerAcceptance, "docker-acceptance");
+  assert.equal(report.evidenceArtifactNames.changesetsReleaseResult, "changesets-release-result");
+  assert.equal(report.evidenceArtifactNames.changesetsReleaseAssertion, "changesets-release-assertion");
 });
 
 test("buildReleaseWorkflowReport marks missing reports explicitly", () => {
@@ -276,6 +288,8 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /Final assertion/i);
   assert.match(markdown, /Outcome: `failed`/i);
   assert.match(markdown, /Release Verification: `release-verification-report`/i);
+  assert.match(markdown, /## Nested evidence artifacts/i);
+  assert.match(markdown, /Changesets Release Result: `changesets-release-result`/i);
   assert.match(markdown, /## Evidence files/i);
   assert.match(markdown, /Changesets Release Summary Path: `\/tmp\/changesets-release-summary\.md`/i);
   assert.match(markdown, /Changesets Release Report Path: `\/tmp\/changesets-release-report\.json`/i);
@@ -415,6 +429,9 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(report.artifactNames.releasePreflight, "release-preflight-result");
   assert.equal(report.artifactNames.report, "release-workflow-report");
   assert.equal(report.artifactNames.assertion, "release-workflow-assertion");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationAssertion, "release-verification-assertion");
+  assert.equal(report.evidenceArtifactNames.changesetsReleaseSummary, "changesets-release-summary");
   assert.equal(report.evidenceFiles.releaseWorkflowReportPath, path.resolve(releaseWorkflowReportPath));
   assert.equal(report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
   assert.equal(report.evidenceFiles.changesetsReleaseSummaryPath, "/tmp/changesets-release-summary.md");
@@ -425,6 +442,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Actual status: `published`/i);
   assert.match(summary, /Effective status: `published`/i);
   assert.match(summary, /Final assertion/i);
+  assert.match(summary, /## Nested evidence artifacts/i);
+  assert.match(summary, /Release Verification Pack Tarball: `pack-tarball`/i);
   assert.match(summary, /## Evidence files/i);
   assert.match(summary, /Release Workflow Report Path:/i);
 });

@@ -36,6 +36,21 @@ function prefixArtifactEntries(prefix, artifacts) {
   );
 }
 
+function prefixArtifactNameEntries(prefix, artifactNames) {
+  const normalizedArtifactNames = normalizeArtifactNames(artifactNames);
+  const entries = Object.entries(normalizedArtifactNames).filter(([, value]) => value);
+  if (entries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    entries.map(([key, value]) => [
+      `${prefix}${key[0].toUpperCase()}${key.slice(1)}`,
+      value,
+    ]),
+  );
+}
+
 function buildEvidenceFiles({
   releaseBootstrapResult = null,
   releasePreflightResult = null,
@@ -52,6 +67,16 @@ function buildEvidenceFiles({
     ...prefixArtifactEntries("dockerAcceptance", releaseVerificationReport?.dockerAcceptance?.artifacts),
     ...prefixArtifactEntries("changesetsRelease", changesetsReleaseReport?.artifacts),
     ...prefixArtifactEntries("releaseWorkflow", artifacts),
+  };
+}
+
+function buildEvidenceArtifactNames({
+  releaseVerificationReport = null,
+  changesetsReleaseReport = null,
+}) {
+  return {
+    ...prefixArtifactNameEntries("releaseVerification", releaseVerificationReport?.artifactNames),
+    ...prefixArtifactNameEntries("changesetsRelease", changesetsReleaseReport?.artifactNames),
   };
 }
 
@@ -257,6 +282,10 @@ export function buildReleaseWorkflowReport({
       : null,
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceArtifactNames: buildEvidenceArtifactNames({
+      releaseVerificationReport,
+      changesetsReleaseReport,
+    }),
     evidenceFiles: buildEvidenceFiles({
       releaseBootstrapResult,
       releasePreflightResult,
@@ -346,6 +375,17 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
   if (artifactEntries.length > 0) {
     lines.push("", "## Evidence artifacts", "");
     for (const [key, value] of artifactEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
+
+  const evidenceArtifactEntries = Object.entries(report.evidenceArtifactNames || {}).filter(([, value]) => value);
+  if (evidenceArtifactEntries.length > 0) {
+    lines.push("", "## Nested evidence artifacts", "");
+    for (const [key, value] of evidenceArtifactEntries) {
       const label = key
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/^./, (char) => char.toUpperCase());

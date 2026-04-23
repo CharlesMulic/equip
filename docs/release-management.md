@@ -102,10 +102,12 @@ On pushes to `main` it:
     so operators have one canonical machine-readable entrypoint for the whole release run,
     while preserving both the actual workflow status and the assertion-adjusted effective status,
     while also flattening the key nested log/report artifact paths into one `evidenceFiles` view for easier debugging,
+    while also flattening the nested release-verification and Changesets uploaded artifact names into one `evidenceArtifactNames` view,
     while marking verification and Changesets as `skipped` instead of `missing` when an earlier release stage prevented them from running
 18. writes and uploads `.generated/release/release-workflow-summary.md`
     as the matching human-readable summary of the full workflow rollup, including the uploaded artifact names to open next
     plus the flattened evidence-file paths for the nested bootstrap/preflight/verification/changesets bundles,
+    plus the flattened nested verification/Changesets artifact names from those bundles,
     and appends that final top-level rendering to the GitHub job summary
 19. rewrites `.generated/release/release-workflow-report.json`
     after the summary step so the final machine-readable report also points at the uploaded summary artifact path
