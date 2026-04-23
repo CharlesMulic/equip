@@ -219,6 +219,7 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
 
   assert.equal(report.kind, "equip-changesets-release-report");
   assert.equal(report.status, "published");
+  assert.equal(report.effectiveStatus, "published");
   assert.equal(report.result.status, "published");
   assert.equal(report.result.publishedPackages[0].name, "@cg3/equip");
   assert.equal(report.assertion.outcome, "passed");
@@ -226,6 +227,41 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
   assert.equal(report.artifacts.summaryPath, "/tmp/changesets-release-summary.md");
   assert.equal(report.artifactNames.result, "changesets-release-result");
   assert.equal(report.artifactNames.report, "changesets-release-report");
+});
+
+test("buildChangesetsReleaseReport preserves skipped lane status when assertion fails upstream", () => {
+  const result = buildChangesetsReleaseResult({
+    stepOutcome: "skipped",
+    status: "skipped",
+    summary: "changesets release step skipped because release verification was failed",
+    skipReason: "changesets release step skipped because release verification was failed",
+    prerequisites: {
+      releaseVerificationStatus: "failed",
+    },
+  });
+
+  const report = buildChangesetsReleaseReport({
+    result,
+    assertionArtifact: {
+      kind: "equip-changesets-release-assertion",
+      result: {
+        status: "skipped",
+      },
+      assertion: {
+        outcome: "failed",
+        status: "skipped",
+        published: false,
+        error: "Changesets release step finished with outcome 'skipped'. changesets release step skipped because release verification was failed",
+        publishedPackages: [],
+      },
+    },
+  });
+
+  assert.equal(report.status, "skipped");
+  assert.equal(report.effectiveStatus, "failed");
+  assert.equal(report.result.status, "skipped");
+  assert.equal(report.assertion.outcome, "failed");
+  assert.equal(report.assertion.status, "skipped");
 });
 
 test("write-changesets-release-summary writes a markdown artifact and appends summary output", () => {
@@ -387,6 +423,7 @@ test("write-changesets-release-report writes a machine-readable rollup artifact"
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   assert.equal(report.status, "published");
+  assert.equal(report.effectiveStatus, "published");
   assert.equal(report.result.summary, "changesets release step published 1 package: @cg3/equip@0.17.8");
   assert.equal(report.assertion.outcome, "passed");
   assert.equal(report.artifacts.resultPath, path.resolve(resultPath));

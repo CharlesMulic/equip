@@ -93,7 +93,8 @@ On pushes to `main` it:
     after that assertion step so the human-readable Markdown artifact reflects the true final gate state
 15. writes and uploads `.generated/release/changesets-release-report.json`
     as a single machine-readable rollup of the result, final assertion, summary/report artifact paths,
-    and the corresponding uploaded GitHub artifact names
+    and the corresponding uploaded GitHub artifact names,
+    while preserving both the actual lane `status` and the assertion-adjusted `effectiveStatus`
 16. uploads the result, summary, assertion, and report artifacts before the workflow turns red
     so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
 17. writes and uploads `.generated/release/release-workflow-report.json`

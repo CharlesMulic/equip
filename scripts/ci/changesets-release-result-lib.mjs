@@ -208,15 +208,19 @@ export function buildChangesetsReleaseReport({
   artifactNames = {},
   generatedAt = new Date().toISOString(),
 }) {
+  const resultStatus = result?.status || "unknown";
+  const assertionStatus = assertionArtifact?.assertion?.status || "";
+
   return {
     kind: "equip-changesets-release-report",
     generatedAt,
-    status: assertionArtifact?.assertion?.outcome === "failed"
+    status: resultStatus,
+    effectiveStatus: assertionArtifact?.assertion?.outcome === "failed"
       ? "failed"
-      : (assertionArtifact?.assertion?.status || result?.status || "unknown"),
+      : (assertionStatus || resultStatus),
     result: {
       stepOutcome: result?.stepOutcome || "",
-      status: result?.status || "",
+      status: resultStatus,
       published: !!result?.published,
       summary: result?.summary || "",
       skipReason: result?.skipReason || "",
@@ -234,7 +238,7 @@ export function buildChangesetsReleaseReport({
     assertion: assertionArtifact?.assertion
       ? {
           outcome: assertionArtifact.assertion.outcome || "",
-          status: assertionArtifact.assertion.status || "",
+          status: assertionStatus,
           published: !!assertionArtifact.assertion.published,
           error: assertionArtifact.assertion.error || "",
           publishedPackages: Array.isArray(assertionArtifact.assertion.publishedPackages)
