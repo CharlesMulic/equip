@@ -43,6 +43,25 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
   assert.match(result.summary, /published 1 package/i);
 });
 
+test("buildChangesetsReleaseResult marks skipped runs explicitly when verification blocked publish", () => {
+  const result = buildChangesetsReleaseResult({
+    stepOutcome: "skipped",
+    published: "false",
+    publishedPackages: "[]",
+    releaseVerificationReport: {
+      overallStatus: "failed",
+      summary: "release verification failed",
+    },
+  });
+
+  assert.equal(result.stepOutcome, "skipped");
+  assert.equal(result.status, "skipped");
+  assert.equal(result.published, false);
+  assert.equal(result.prerequisites.releaseVerificationStatus, "failed");
+  assert.match(result.summary, /skipped because release verification was failed/i);
+  assert.equal(result.skipReason, result.summary);
+});
+
 test("write-changesets-release-result writes an artifact and appends summary output", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
   const resultPath = path.join(root, "changesets-release-result.json");
@@ -60,6 +79,36 @@ test("write-changesets-release-result writes an artifact and appends summary out
   const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
   assert.equal(artifact.status, "published");
   assert.equal(artifact.publishedPackages[0].version, "0.17.8");
+});
+
+test("write-changesets-release-result records verification-blocked skips", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
+  const resultPath = path.join(root, "changesets-release-result.json");
+  const verificationReportPath = path.join(root, "release-verification-report.json");
+
+  fs.writeFileSync(
+    verificationReportPath,
+    `${JSON.stringify({
+      kind: "equip-release-verification-report",
+      overallStatus: "failed",
+      summary: "release verification failed",
+    }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const result = runScript("scripts/ci/write-changesets-release-result.mjs", {
+    CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_STEP_OUTCOME: "skipped",
+    CHANGESETS_PUBLISHED: "false",
+    CHANGESETS_PUBLISHED_PACKAGES: "[]",
+    RELEASE_VERIFICATION_REPORT_PATH: verificationReportPath,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+  assert.equal(artifact.status, "skipped");
+  assert.equal(artifact.prerequisites.releaseVerificationStatus, "failed");
+  assert.match(artifact.summary, /skipped because release verification was failed/i);
 });
 
 test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly", () => {
@@ -109,6 +158,24 @@ test("buildChangesetsReleaseSummaryMarkdown includes final assertion details whe
   assert.match(markdown, /## Final assertion/i);
   assert.match(markdown, /Outcome: `passed`/i);
   assert.match(markdown, /Status: `completed`/i);
+});
+
+test("buildChangesetsReleaseSummaryMarkdown includes skipped-release detail cleanly", () => {
+  const markdown = buildChangesetsReleaseSummaryMarkdown({
+    result: buildChangesetsReleaseResult({
+      stepOutcome: "skipped",
+      published: "false",
+      publishedPackages: "[]",
+      releaseVerificationReport: {
+        overallStatus: "failed",
+        summary: "release verification failed",
+      },
+    }),
+  });
+
+  assert.match(markdown, /Outcome: `skipped`/i);
+  assert.match(markdown, /Status: `skipped`/i);
+  assert.match(markdown, /skipped because release verification was failed/i);
 });
 
 test("buildChangesetsReleaseReport combines result, assertion, and artifact paths", () => {
@@ -357,6 +424,39 @@ test("assert-changesets-release-result fails when the changesets action failed",
   const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
   assert.equal(assertion.assertion.outcome, "failed");
   assert.match(assertion.assertion.error, /outcome 'failure'/i);
+});
+
+test("assert-changesets-release-result reports skipped runs with the upstream gate reason", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
+  const resultPath = path.join(root, "changesets-release-result.json");
+  const assertionPath = path.join(root, "changesets-release-assertion.json");
+
+  fs.mkdirSync(path.dirname(resultPath), { recursive: true });
+  fs.writeFileSync(resultPath, `${JSON.stringify({
+    kind: "equip-changesets-release-result",
+    stepOutcome: "skipped",
+    status: "skipped",
+    published: false,
+    publishedPackages: [],
+    summary: "changesets release step skipped because release verification was failed",
+    skipReason: "changesets release step skipped because release verification was failed",
+    prerequisites: {
+      releaseVerificationStatus: "failed",
+    },
+  }, null, 2)}\n`, "utf8");
+
+  const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
+    CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr || result.stdout, /outcome 'skipped'/i);
+  assert.match(result.stderr || result.stdout, /release verification was failed/i);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.assertion.status, "skipped");
+  assert.match(assertion.assertion.error, /release verification was failed/i);
 });
 
 test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict", () => {

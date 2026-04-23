@@ -62,34 +62,56 @@ function buildSummary({ stepOutcome, published, publishedPackages }) {
   return "changesets release step completed without publishing packages";
 }
 
+function buildSkipSummary({ releaseVerificationReport }) {
+  if (releaseVerificationReport?.overallStatus) {
+    return `changesets release step skipped because release verification was ${releaseVerificationReport.overallStatus}`;
+  }
+
+  return "changesets release step skipped before execution";
+}
+
 export function buildChangesetsReleaseResult({
   stepOutcome = "",
   published = false,
   publishedPackages = [],
+  releaseVerificationReport = null,
 }) {
   const normalizedPublished = parseBoolean(published) === true;
   const normalizedPackages = parsePublishedPackages(publishedPackages);
   const normalizedOutcome = typeof stepOutcome === "string" ? stepOutcome : "";
+  const normalizedVerificationStatus = releaseVerificationReport?.overallStatus || "";
+  const isSkipped = normalizedOutcome === "skipped";
+  const status =
+    normalizedOutcome === "success"
+      ? normalizedPublished
+        ? "published"
+        : "completed"
+      : isSkipped
+        ? "skipped"
+        : "failed";
+  const summary = isSkipped
+    ? buildSkipSummary({ releaseVerificationReport })
+    : buildSummary({
+        stepOutcome: normalizedOutcome,
+        published: normalizedPublished,
+        publishedPackages: normalizedPackages,
+      });
 
   return {
     kind: "equip-changesets-release-result",
     generatedAt: new Date().toISOString(),
     stepOutcome: normalizedOutcome || "unknown",
-    status: normalizedOutcome === "success"
-      ? normalizedPublished
-        ? "published"
-        : "completed"
-      : "failed",
+    status,
     published: normalizedPublished,
     publishedPackages: normalizedPackages.map((pkg) => ({
       name: pkg?.name || "",
       version: pkg?.version || "",
     })),
-    summary: buildSummary({
-      stepOutcome: normalizedOutcome,
-      published: normalizedPublished,
-      publishedPackages: normalizedPackages,
-    }),
+    summary,
+    skipReason: status === "skipped" ? summary : "",
+    prerequisites: {
+      releaseVerificationStatus: normalizedVerificationStatus,
+    },
   };
 }
 
@@ -197,6 +219,11 @@ export function buildChangesetsReleaseReport({
       status: result?.status || "",
       published: !!result?.published,
       summary: result?.summary || "",
+      skipReason: result?.skipReason || "",
+      prerequisites:
+        result?.prerequisites && typeof result.prerequisites === "object"
+          ? result.prerequisites
+          : {},
       publishedPackages: Array.isArray(result?.publishedPackages)
         ? result.publishedPackages.map((pkg) => ({
             name: pkg?.name || "",
@@ -250,6 +277,11 @@ export function writeChangesetsReleaseAssertionArtifact({ result, assertion, out
       status: result?.status || "",
       published: !!result?.published,
       summary: result?.summary || "",
+      skipReason: result?.skipReason || "",
+      prerequisites:
+        result?.prerequisites && typeof result.prerequisites === "object"
+          ? result.prerequisites
+          : {},
       publishedPackages: Array.isArray(result?.publishedPackages) ? result.publishedPackages : [],
     },
     assertion,

@@ -17,8 +17,12 @@ const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
 
 try {
   if (result.stepOutcome !== "success") {
+    const detail =
+      result.status === "skipped" && result.skipReason
+        ? result.skipReason
+        : (result.summary || "Inspect workflow logs for details.");
     throw new Error(
-      `Changesets release step finished with outcome '${result.stepOutcome}'. ${result.summary || "Inspect workflow logs for details."}`,
+      `Changesets release step finished with outcome '${result.stepOutcome}'. ${detail}`,
     );
   }
 

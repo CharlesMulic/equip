@@ -255,6 +255,7 @@ jobs:
           CHANGESETS_STEP_OUTCOME: ${{ steps.changesets.outcome }}
           CHANGESETS_PUBLISHED: ${{ steps.changesets.outputs.published }}
           CHANGESETS_PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+          RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
         run: node scripts/ci/write-changesets-release-result.mjs
 
       - name: Upload changesets release result

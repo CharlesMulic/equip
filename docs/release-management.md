@@ -85,7 +85,8 @@ On pushes to `main` it:
     - open/update a `Version packages` PR when pending changesets exist, or
     - publish the already-versioned package after that PR is merged
 12. writes `.generated/release/changesets-release-result.json`
-    after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails
+    after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails,
+    and blocked publish attempts are marked `skipped` with the upstream verification status instead of being flattened into a generic failure
 13. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
     so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs
 14. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
