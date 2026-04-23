@@ -302,12 +302,12 @@ export function registryDefToConfig(def: RegistryDef, options?: { logger?: Equip
 
   if (def.stdioCommand) {
     // For CG3 OIDC delegated-auth augments, default the env var name to the
-    // platform-standard `PRIOR_IDENTITY_TOKEN`. Publishers can override by
+    // platform-standard `PRIOR_ACCESS_TOKEN`. Publishers can override by
     // setting envKey explicitly. Convention is documented in
     // demos/FULLSTACK_TESTING.md and demos/SECURITY_MCP_ENV_INJECTION.md;
     // the demos themselves read from this env var name.
-    const defaultEnvKeyForAuth = def.auth?.type === "oidc" || def.auth?.type === "prior"
-      ? "PRIOR_IDENTITY_TOKEN"
+    const defaultEnvKeyForAuth = def.auth?.type === "oidc"
+      ? "PRIOR_ACCESS_TOKEN"
       : "";
     config.stdio = {
       command: def.stdioCommand,

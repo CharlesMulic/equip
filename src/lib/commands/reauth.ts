@@ -24,7 +24,7 @@ export async function runReauth(parsedArgs: ParsedArgs): Promise<void> {
     process.exit(1);
   }
 
-  const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "api_key" as const } : null);
+  const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "oidc" as const } : null);
   if (!authConfig || authConfig.type === "none") {
     cli.fail(`${toolName} does not require authentication`);
     process.exit(1);

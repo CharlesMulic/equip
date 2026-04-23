@@ -183,6 +183,7 @@ The `auth` block in your registry definition declares what authentication your a
 | `"api_key"` | User has a key | Prompt or `--api-key` flag |
 | `"oauth"` | OAuth 2.1 browser flow | PKCE flow, token in config |
 | `"oauth_to_api_key"` | OAuth + key exchange | Browser flow, exchange for long-lived key |
+| `"oidc"` | CG3 delegated user auth | Reuse Equip's CG3 session, exchange it for a short-lived delegated access token |
 
 For `api_key`:
 ```json
@@ -216,6 +217,17 @@ For `oauth_to_api_key` (like Prior):
   }
 }
 ```
+
+For `oidc` delegated auth:
+```json
+{
+  "auth": {
+    "type": "oidc"
+  }
+}
+```
+
+Equip resolves `oidc` auth by exchanging the signed-in user's Equip session for a short-lived delegated access token and injects that token into MCP config, typically via `PRIOR_ACCESS_TOKEN`.
 
 Equip handles the full OAuth PKCE flow, key exchange, credential storage (`~/.equip/credentials/`), and automatic token refresh.
 

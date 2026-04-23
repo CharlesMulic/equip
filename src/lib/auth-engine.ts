@@ -17,7 +17,7 @@ import * as cli from "./cli";
 // ─── Types ─────────────────────────────────────────────────
 
 export interface AuthConfig {
-  type: "none" | "api_key" | "oauth" | "oauth_to_api_key" | "oidc" | "prior";
+  type: "none" | "api_key" | "oauth" | "oauth_to_api_key" | "oidc";
 
   /**
    * Identity provider for this augment's OAuth flow.
@@ -434,7 +434,7 @@ function updatePlatformConfigs(toolName: string, newToken: string, logger: Equip
  */
 export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResult> {
   const { toolName, auth, logger = NOOP_LOGGER, nonInteractive = false, dryRun = false } = options;
-  const isCg3OidcAuth = auth.type === "oidc" || auth.type === "prior";
+  const isCg3OidcAuth = auth.type === "oidc";
 
   if (auth.type === "none") {
     return { credential: null, method: "none" };
@@ -477,7 +477,6 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
     case "oauth_to_api_key":
       return resolveOAuthToApiKey(toolName, auth, logger, nonInteractive, dryRun);
     case "oidc":
-    case "prior":
       return resolveOidc(toolName, logger, nonInteractive, dryRun, options.session);
     default:
       return { credential: null, method: "unknown", error: `Unknown auth type: ${auth.type}` };
@@ -697,7 +696,7 @@ export async function refreshOidcTokens(
     try {
       const raw = fs.readFileSync(path.join(credDir, file), "utf-8");
       const cred: StoredCredential = JSON.parse(raw);
-      if (cred.authType !== "oidc" && cred.authType !== "prior") continue;
+      if (cred.authType !== "oidc") continue;
 
       // Check if token expires within 25 minutes
       if (!isJwtExpiringSoon(cred.credential, 25 * 60)) {
@@ -748,9 +747,6 @@ export async function refreshOidcTokens(
 
   return results;
 }
-
-// Backward-compatible export while callers migrate to the OIDC vocabulary.
-export const refreshPriorTokens = refreshOidcTokens;
 
 // ─── API Key Flow ─────────────────────────────────────────��
 
