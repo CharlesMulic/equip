@@ -141,10 +141,14 @@ jobs:
       - name: Write release verification report
         if: ${{ always() }}
         env:
+          RELEASE_BOOTSTRAP_RESULT_PATH: .generated/release/release-bootstrap-result.json
+          RELEASE_PREFLIGHT_RESULT_PATH: .generated/release/release-preflight-result.json
           PACK_VERIFICATION_PATH: .generated/pack/pack-verification.json
           PACK_INSTALL_SMOKE_PATH: .generated/pack/pack-install-smoke.json
           PACK_TARBALL_DIR: .generated/pack/tarball
           DOCKER_ACCEPTANCE_REPORT_PATH: .generated/docker-acceptance/docker-acceptance-report.json
+          RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME: release-bootstrap
+          RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: release-preflight
           PACK_VERIFICATION_ARTIFACT_NAME: pack-verification
           PACK_TARBALL_ARTIFACT_NAME: pack-tarball
           PACK_INSTALL_SMOKE_ARTIFACT_NAME: pack-install-smoke
@@ -178,10 +182,14 @@ jobs:
       - name: Rewrite release verification report with final artifact paths
         if: ${{ always() }}
         env:
+          RELEASE_BOOTSTRAP_RESULT_PATH: .generated/release/release-bootstrap-result.json
+          RELEASE_PREFLIGHT_RESULT_PATH: .generated/release/release-preflight-result.json
           PACK_VERIFICATION_PATH: .generated/pack/pack-verification.json
           PACK_INSTALL_SMOKE_PATH: .generated/pack/pack-install-smoke.json
           PACK_TARBALL_DIR: .generated/pack/tarball
           DOCKER_ACCEPTANCE_REPORT_PATH: .generated/docker-acceptance/docker-acceptance-report.json
+          RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME: release-bootstrap
+          RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: release-preflight
           PACK_VERIFICATION_ARTIFACT_NAME: pack-verification
           PACK_TARBALL_ARTIFACT_NAME: pack-tarball
           PACK_INSTALL_SMOKE_ARTIFACT_NAME: pack-install-smoke

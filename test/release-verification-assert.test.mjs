@@ -209,3 +209,45 @@ test("assert-release-verification-report reports missing component artifacts cle
   assert.ok(assertion.failureDetails.some((detail) => /package missing:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance missing:/i.test(detail)));
 });
+
+test("assert-release-verification-report reports skipped component artifacts clearly", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
+  const reportPath = path.join(root, "release-verification-report.json");
+  const assertionPath = path.join(root, "release-verification-assertion.json");
+
+  writeJson(reportPath, {
+    overallStatus: "failed",
+    package: {
+      status: "skipped",
+      skippedReason: "pack verification skipped because release preflight did not pass",
+    },
+    tarballSmoke: {
+      status: "skipped",
+      skippedReason: "tarball smoke skipped because release preflight did not pass",
+    },
+    dockerAcceptance: {
+      status: "skipped",
+      skippedReason: "docker acceptance skipped because release preflight did not pass",
+    },
+  });
+
+  const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
+    RELEASE_VERIFICATION_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+  });
+
+  assert.notEqual(result.status, 0);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.match(result.stderr, /Components: package=skipped, tarballSmoke=skipped, dockerAcceptance=skipped\./i);
+  assert.match(result.stderr, /package skipped: pack verification skipped because release preflight did not pass/i);
+  assert.match(result.stderr, /tarball smoke skipped: tarball smoke skipped because release preflight did not pass/i);
+  assert.match(result.stderr, /docker acceptance skipped: docker acceptance skipped because release preflight did not pass/i);
+  assert.equal(assertion.outcome, "failed");
+  assert.deepEqual(assertion.components, {
+    package: "skipped",
+    tarballSmoke: "skipped",
+    dockerAcceptance: "skipped",
+  });
+  assert.ok(assertion.failureDetails.some((detail) => /package skipped:/i.test(detail)));
+  assert.ok(assertion.failureDetails.some((detail) => /docker acceptance skipped:/i.test(detail)));
+});

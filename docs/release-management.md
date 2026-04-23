@@ -70,6 +70,7 @@ On pushes to `main` it:
 6. writes `.generated/release/release-verification-report.json`
    as a single machine-readable rollup of pack verification, tarball-install smoke, and Docker acceptance
    even if one of those upstream artifacts is missing because a verification lane failed early,
+   while also carrying the bootstrap/preflight prerequisite state so intentionally blocked downstream lanes are marked `skipped` instead of being mislabeled `missing`,
    while rebasing the per-lane log/report/tarball artifact pointers to the current verification workspace for easier debugging
    and recording the corresponding uploaded GitHub artifact names for each verification lane
 7. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging

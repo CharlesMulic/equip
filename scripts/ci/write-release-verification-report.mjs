@@ -9,6 +9,8 @@ import {
 const packVerificationPath = process.env.PACK_VERIFICATION_PATH;
 const packInstallSmokePath = process.env.PACK_INSTALL_SMOKE_PATH;
 const dockerAcceptanceReportPath = process.env.DOCKER_ACCEPTANCE_REPORT_PATH;
+const releaseBootstrapResultPath = process.env.RELEASE_BOOTSTRAP_RESULT_PATH || "";
+const releasePreflightResultPath = process.env.RELEASE_PREFLIGHT_RESULT_PATH || "";
 const packTarballDir = process.env.PACK_TARBALL_DIR || "";
 const outputPath =
   process.env.RELEASE_VERIFICATION_REPORT_PATH ||
@@ -52,6 +54,8 @@ function readOptionalJson(filePath) {
 const packVerification = readOptionalJson(packVerificationPath);
 const packInstallSmoke = readOptionalJson(packInstallSmokePath);
 const dockerAcceptance = readOptionalJson(dockerAcceptanceReportPath);
+const releaseBootstrapResult = readOptionalJson(releaseBootstrapResultPath);
+const releasePreflightResult = readOptionalJson(releasePreflightResultPath);
 const assertion = readOptionalJson(assertionPath);
 const rebasedInputs = rebaseReleaseVerificationInputs({
   packVerification,
@@ -64,6 +68,8 @@ const rebasedInputs = rebaseReleaseVerificationInputs({
 });
 
 const report = buildReleaseVerificationReport({
+  releaseBootstrapResult,
+  releasePreflightResult,
   packVerification: rebasedInputs.packVerification,
   packInstallSmoke: rebasedInputs.packInstallSmoke,
   dockerAcceptance: rebasedInputs.dockerAcceptance,
@@ -74,6 +80,8 @@ const report = buildReleaseVerificationReport({
     summaryPath: fs.existsSync(summaryArtifactPath) ? path.resolve(summaryArtifactPath) : "",
   },
   artifactNames: {
+    releaseBootstrap: process.env.RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME || "",
+    releasePreflight: process.env.RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME || "",
     packVerification: packVerificationArtifactName,
     packTarball: packTarballArtifactName,
     packInstallSmoke: packInstallSmokeArtifactName,

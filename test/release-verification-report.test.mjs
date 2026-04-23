@@ -153,6 +153,60 @@ test("buildReleaseVerificationReport marks missing component artifacts explicitl
   assert.equal(report.dockerAcceptance.missingReason, "docker acceptance artifact missing");
 });
 
+test("buildReleaseVerificationReport marks downstream lanes skipped when preflight failed", () => {
+  const report = buildReleaseVerificationReport({
+    releaseBootstrapResult: {
+      kind: "equip-release-bootstrap-result",
+      overallStatus: "passed",
+      summary: "dependency install passed",
+    },
+    releasePreflightResult: {
+      kind: "equip-release-preflight-result",
+      overallStatus: "failed",
+      summary: "build failed (exit 2); test skipped",
+    },
+    packVerification: null,
+    packInstallSmoke: null,
+    dockerAcceptance: null,
+    artifactNames: {
+      releaseBootstrap: "release-bootstrap",
+      releasePreflight: "release-preflight",
+      report: "release-verification-report",
+    },
+  });
+
+  assert.equal(report.overallStatus, "failed");
+  assert.equal(report.releaseBootstrap.status, "passed");
+  assert.equal(report.releasePreflight.status, "failed");
+  assert.equal(report.package.status, "skipped");
+  assert.equal(report.tarballSmoke.status, "skipped");
+  assert.equal(report.dockerAcceptance.status, "skipped");
+  assert.match(report.package.skippedReason, /release preflight did not pass/i);
+  assert.match(report.tarballSmoke.skippedReason, /release preflight did not pass/i);
+  assert.match(report.dockerAcceptance.skippedReason, /release preflight did not pass/i);
+});
+
+test("buildReleaseVerificationReport marks downstream lanes skipped when bootstrap failed first", () => {
+  const report = buildReleaseVerificationReport({
+    releaseBootstrapResult: {
+      kind: "equip-release-bootstrap-result",
+      overallStatus: "failed",
+      summary: "dependency install failed (exit 2)",
+    },
+    releasePreflightResult: null,
+    packVerification: null,
+    packInstallSmoke: null,
+    dockerAcceptance: null,
+  });
+
+  assert.equal(report.overallStatus, "failed");
+  assert.equal(report.releaseBootstrap.status, "failed");
+  assert.equal(report.releasePreflight.status, "skipped");
+  assert.match(report.releasePreflight.summary, /bootstrap did not pass/i);
+  assert.equal(report.package.status, "skipped");
+  assert.match(report.package.skippedReason, /release bootstrap did not pass/i);
+});
+
 test("appendReleaseVerificationSummary includes artifact pointers for each verification lane", () => {
   const summaryDir = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-summary-"));
   const summaryPath = path.join(summaryDir, "summary.md");
@@ -215,6 +269,28 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /Pack Verification: `pack-verification`/i);
   assert.match(summary, /Summary: `release-verification-summary`/i);
+});
+
+test("buildReleaseVerificationSummaryMarkdown includes skipped prerequisite details", () => {
+  const report = buildReleaseVerificationReport({
+    releaseBootstrapResult: {
+      kind: "equip-release-bootstrap-result",
+      overallStatus: "failed",
+      summary: "dependency install failed (exit 2)",
+    },
+    releasePreflightResult: null,
+    packVerification: null,
+    packInstallSmoke: null,
+    dockerAcceptance: null,
+  });
+
+  const markdown = buildReleaseVerificationSummaryMarkdown({ report });
+  assert.match(markdown, /Release bootstrap: `failed`/i);
+  assert.match(markdown, /Release preflight: `skipped`/i);
+  assert.match(markdown, /Pack verification: `skipped`/i);
+  assert.match(markdown, /Pack verification detail: pack verification skipped because release bootstrap did not pass/i);
+  assert.match(markdown, /Tarball smoke detail: tarball smoke skipped because release bootstrap did not pass/i);
+  assert.match(markdown, /Docker acceptance detail: docker acceptance skipped because release bootstrap did not pass/i);
 });
 
 test("buildReleaseVerificationSummaryMarkdown can include the final assertion section", () => {

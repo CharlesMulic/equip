@@ -34,6 +34,9 @@ function buildFailureDetails(report) {
   if (report?.package?.status === "missing" && report?.package?.missingReason) {
     details.push(`package missing: ${report.package.missingReason}`);
   }
+  if (report?.package?.status === "skipped" && report?.package?.skippedReason) {
+    details.push(`package skipped: ${report.package.skippedReason}`);
+  }
 
   if (report?.tarballSmoke?.status === "failed") {
     if (report?.tarballSmoke?.failureMessage) {
@@ -51,6 +54,9 @@ function buildFailureDetails(report) {
   }
   if (report?.tarballSmoke?.status === "missing" && report?.tarballSmoke?.missingReason) {
     details.push(`tarball smoke missing: ${report.tarballSmoke.missingReason}`);
+  }
+  if (report?.tarballSmoke?.status === "skipped" && report?.tarballSmoke?.skippedReason) {
+    details.push(`tarball smoke skipped: ${report.tarballSmoke.skippedReason}`);
   }
 
   if (report?.dockerAcceptance?.status === "failed") {
@@ -77,6 +83,9 @@ function buildFailureDetails(report) {
   }
   if (report?.dockerAcceptance?.status === "missing" && report?.dockerAcceptance?.missingReason) {
     details.push(`docker acceptance missing: ${report.dockerAcceptance.missingReason}`);
+  }
+  if (report?.dockerAcceptance?.status === "skipped" && report?.dockerAcceptance?.skippedReason) {
+    details.push(`docker acceptance skipped: ${report.dockerAcceptance.skippedReason}`);
   }
 
   return details;

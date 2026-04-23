@@ -141,8 +141,84 @@ export function rebaseReleaseVerificationInputs({
   };
 }
 
-function buildPackageSection(packVerification) {
+function buildReleaseBootstrapStatus(result) {
+  if (!result) {
+    return {
+      status: "missing",
+      summary: "release bootstrap result missing",
+    };
+  }
+
+  return {
+    status: result.overallStatus || "unknown",
+    summary: result.summary || "",
+  };
+}
+
+function buildReleasePreflightStatus(result, releaseBootstrapResult) {
+  if (!result) {
+    if (releaseBootstrapResult && releaseBootstrapResult.overallStatus !== "passed") {
+      return {
+        status: "skipped",
+        summary: "release preflight skipped because release bootstrap did not pass",
+      };
+    }
+
+    return {
+      status: "missing",
+      summary: "release preflight result missing",
+    };
+  }
+
+  return {
+    status: result.overallStatus || "unknown",
+    summary: result.summary || "",
+  };
+}
+
+function deriveSkippedReason(label, releaseBootstrapResult, releasePreflightResult) {
+  if (releasePreflightResult && releasePreflightResult.overallStatus !== "passed") {
+    return `${label} skipped because release preflight did not pass`;
+  }
+
+  if (!releasePreflightResult && releaseBootstrapResult && releaseBootstrapResult.overallStatus !== "passed") {
+    return `${label} skipped because release bootstrap did not pass`;
+  }
+
+  return "";
+}
+
+function buildPackageSection(packVerification, releaseBootstrapResult, releasePreflightResult) {
   if (!packVerification) {
+    const skippedReason = deriveSkippedReason(
+      "pack verification",
+      releaseBootstrapResult,
+      releasePreflightResult,
+    );
+
+    if (skippedReason) {
+      return {
+        status: "skipped",
+        packageName: "",
+        version: "",
+        tarballFileName: "",
+        tarballPath: "",
+        entryCount: 0,
+        unpackedSize: 0,
+        packageSizeBytes: 0,
+        shasum: "",
+        integrity: "",
+        requiredFilesChecked: [],
+        forbiddenPrefixesChecked: [],
+        hasFailures: false,
+        problems: [],
+        artifacts: {},
+        failureMessage: "",
+        missingReason: "",
+        skippedReason,
+      };
+    }
+
     return {
       status: "missing",
       packageName: "",
@@ -161,6 +237,7 @@ function buildPackageSection(packVerification) {
       artifacts: {},
       failureMessage: "pack verification artifact missing",
       missingReason: "pack verification artifact missing",
+      skippedReason: "",
     };
   }
 
@@ -187,11 +264,36 @@ function buildPackageSection(packVerification) {
     artifacts: normalizeArtifacts(packVerification?.artifacts),
     failureMessage: packVerification?.failureMessage || "",
     missingReason: "",
+    skippedReason: "",
   };
 }
 
-function buildTarballSmokeSection(packInstallSmoke) {
+function buildTarballSmokeSection(packInstallSmoke, releaseBootstrapResult, releasePreflightResult) {
   if (!packInstallSmoke) {
+    const skippedReason = deriveSkippedReason(
+      "tarball smoke",
+      releaseBootstrapResult,
+      releasePreflightResult,
+    );
+
+    if (skippedReason) {
+      return {
+        status: "skipped",
+        tarballFileName: "",
+        tarballPath: "",
+        installedVersion: "",
+        equipVersion: "",
+        unequipVersion: "",
+        helpIncludesUsage: false,
+        exportsCheck: "",
+        steps: [],
+        artifacts: {},
+        failureMessage: "",
+        missingReason: "",
+        skippedReason,
+      };
+    }
+
     return {
       status: "missing",
       tarballFileName: "",
@@ -205,6 +307,7 @@ function buildTarballSmokeSection(packInstallSmoke) {
       artifacts: {},
       failureMessage: "tarball smoke artifact missing",
       missingReason: "tarball smoke artifact missing",
+      skippedReason: "",
     };
   }
 
@@ -232,11 +335,32 @@ function buildTarballSmokeSection(packInstallSmoke) {
     artifacts: normalizeArtifacts(packInstallSmoke?.artifacts),
     failureMessage: packInstallSmoke?.failureMessage || "",
     missingReason: "",
+    skippedReason: "",
   };
 }
 
-function buildDockerAcceptanceSection(dockerAcceptance) {
+function buildDockerAcceptanceSection(dockerAcceptance, releaseBootstrapResult, releasePreflightResult) {
   if (!dockerAcceptance) {
+    const skippedReason = deriveSkippedReason(
+      "docker acceptance",
+      releaseBootstrapResult,
+      releasePreflightResult,
+    );
+
+    if (skippedReason) {
+      return {
+        status: "skipped",
+        dockerBin: "",
+        imageTag: "",
+        totalDurationMs: 0,
+        steps: [],
+        artifacts: {},
+        failureMessage: "",
+        missingReason: "",
+        skippedReason,
+      };
+    }
+
     return {
       status: "missing",
       dockerBin: "",
@@ -246,6 +370,7 @@ function buildDockerAcceptanceSection(dockerAcceptance) {
       artifacts: {},
       failureMessage: "docker acceptance artifact missing",
       missingReason: "docker acceptance artifact missing",
+      skippedReason: "",
     };
   }
 
@@ -265,10 +390,13 @@ function buildDockerAcceptanceSection(dockerAcceptance) {
     artifacts: dockerAcceptance?.artifacts || {},
     failureMessage: dockerAcceptance?.failureMessage || "",
     missingReason: "",
+    skippedReason: "",
   };
 }
 
 export function buildReleaseVerificationReport({
+  releaseBootstrapResult = null,
+  releasePreflightResult = null,
   packVerification,
   packInstallSmoke,
   dockerAcceptance,
@@ -277,9 +405,21 @@ export function buildReleaseVerificationReport({
   artifactNames = {},
   generatedAt = new Date().toISOString(),
 }) {
-  const packageSection = buildPackageSection(packVerification);
-  const tarballSmokeSection = buildTarballSmokeSection(packInstallSmoke);
-  const dockerAcceptanceSection = buildDockerAcceptanceSection(dockerAcceptance);
+  const packageSection = buildPackageSection(
+    packVerification,
+    releaseBootstrapResult,
+    releasePreflightResult,
+  );
+  const tarballSmokeSection = buildTarballSmokeSection(
+    packInstallSmoke,
+    releaseBootstrapResult,
+    releasePreflightResult,
+  );
+  const dockerAcceptanceSection = buildDockerAcceptanceSection(
+    dockerAcceptance,
+    releaseBootstrapResult,
+    releasePreflightResult,
+  );
   const packStatus = packageSection.status;
   const packSmokeStatus = tarballSmokeSection.status;
   const dockerStatus = dockerAcceptanceSection.status;
@@ -295,10 +435,14 @@ export function buildReleaseVerificationReport({
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
     inputs: {
+      hasReleaseBootstrapResult: !!releaseBootstrapResult,
+      hasReleasePreflightResult: !!releasePreflightResult,
       hasPackVerification: !!packVerification,
       hasTarballSmoke: !!packInstallSmoke,
       hasDockerAcceptance: !!dockerAcceptance,
     },
+    releaseBootstrap: buildReleaseBootstrapStatus(releaseBootstrapResult),
+    releasePreflight: buildReleasePreflightStatus(releasePreflightResult, releaseBootstrapResult),
     package: packageSection,
     tarballSmoke: tarballSmokeSection,
     dockerAcceptance: dockerAcceptanceSection,
@@ -347,13 +491,24 @@ export function buildReleaseVerificationSummaryMarkdown({
     "## Release verification rollup",
     "",
     `- Overall status: \`${report.overallStatus}\``,
+    `- Release bootstrap: \`${report.releaseBootstrap?.status || "unknown"}\``,
+    `- Release preflight: \`${report.releasePreflight?.status || "unknown"}\``,
     `- Pack verification: \`${report.package.status}\``,
     `- Tarball smoke: \`${report.tarballSmoke.status}\``,
     `- Docker acceptance: \`${report.dockerAcceptance.status}\``,
   ];
 
+  if (report.releaseBootstrap?.summary) {
+    lines.push(`- Release bootstrap summary: ${report.releaseBootstrap.summary}`);
+  }
+  if (report.releasePreflight?.summary) {
+    lines.push(`- Release preflight summary: ${report.releasePreflight.summary}`);
+  }
   if (report.package.missingReason) {
     lines.push(`- Pack verification detail: ${report.package.missingReason}`);
+  }
+  if (report.package.skippedReason) {
+    lines.push(`- Pack verification detail: ${report.package.skippedReason}`);
   }
   if (report.package.failureMessage) {
     lines.push(`- Pack verification failure: ${report.package.failureMessage}`);
@@ -365,6 +520,9 @@ export function buildReleaseVerificationSummaryMarkdown({
   if (report.tarballSmoke.missingReason) {
     lines.push(`- Tarball smoke detail: ${report.tarballSmoke.missingReason}`);
   }
+  if (report.tarballSmoke.skippedReason) {
+    lines.push(`- Tarball smoke detail: ${report.tarballSmoke.skippedReason}`);
+  }
   if (report.tarballSmoke.failureMessage) {
     lines.push(`- Tarball smoke failure: ${report.tarballSmoke.failureMessage}`);
   }
@@ -374,6 +532,9 @@ export function buildReleaseVerificationSummaryMarkdown({
 
   if (report.dockerAcceptance.missingReason) {
     lines.push(`- Docker acceptance detail: ${report.dockerAcceptance.missingReason}`);
+  }
+  if (report.dockerAcceptance.skippedReason) {
+    lines.push(`- Docker acceptance detail: ${report.dockerAcceptance.skippedReason}`);
   }
   if (report.dockerAcceptance.failureMessage) {
     lines.push(`- Docker acceptance failure: ${report.dockerAcceptance.failureMessage}`);
