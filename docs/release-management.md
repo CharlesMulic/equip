@@ -42,7 +42,12 @@ The release workflow lives in `.github/workflows/release.yml`.
 
 On pushes to `main` it:
 
-1. installs dependencies
+1. runs `node scripts/ci/run-release-bootstrap.mjs`
+   which captures the release workflow's `npm ci` dependency-install phase into:
+   - `.generated/release/release-bootstrap-result.json`
+   - `.generated/release/release-bootstrap-summary.md`
+   - `.generated/release/release-bootstrap.log`
+   and uploads them as the `release-bootstrap` evidence bundle even when dependency install fails
 2. runs `node scripts/ci/run-release-preflight.mjs`
    which captures the release workflow's `build` and `npm test` phases into:
    - `.generated/release/release-preflight-result.json`
@@ -50,6 +55,7 @@ On pushes to `main` it:
    - `.generated/release/release-preflight-build.log`
    - `.generated/release/release-preflight-test.log`
    and uploads them as the `release-preflight` evidence bundle even when one of those early phases fails
+   but only if the bootstrap lane passed
 3. runs `npm run test:docker:acceptance`
    and uploads the machine-readable Docker acceptance report plus raw build/run logs
    but only if the preflight lane passed
@@ -89,7 +95,7 @@ On pushes to `main` it:
 16. uploads the result, summary, assertion, and report artifacts before the workflow turns red
     so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
 17. writes and uploads `.generated/release/release-workflow-report.json`
-    as the final workflow-level rollup combining the release-preflight result, the release-verification report, and the Changesets release report,
+    as the final workflow-level rollup combining the release-bootstrap result, the release-preflight result, the release-verification report, and the Changesets release report,
     so operators have one canonical machine-readable entrypoint for the whole release run
 18. writes and uploads `.generated/release/release-workflow-summary.md`
     as the matching human-readable summary of the full workflow rollup, including the uploaded artifact names to open next,

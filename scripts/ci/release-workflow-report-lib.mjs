@@ -35,6 +35,20 @@ function buildReleaseVerificationStatus(report) {
   };
 }
 
+function buildReleaseBootstrapStatus(result) {
+  if (!result) {
+    return {
+      status: "missing",
+      summary: "release bootstrap result missing",
+    };
+  }
+
+  return {
+    status: result.overallStatus || "unknown",
+    summary: result.summary || "",
+  };
+}
+
 function buildReleasePreflightStatus(result) {
   if (!result) {
     return {
@@ -63,14 +77,24 @@ function buildChangesetsStatus(report) {
   };
 }
 
-function buildOverallStatus(releasePreflightResult, releaseVerificationReport, changesetsReleaseReport) {
-  if (!releasePreflightResult || !releaseVerificationReport || !changesetsReleaseReport) {
+function buildOverallStatus(
+  releaseBootstrapResult,
+  releasePreflightResult,
+  releaseVerificationReport,
+  changesetsReleaseReport,
+) {
+  if (!releaseBootstrapResult || !releasePreflightResult || !releaseVerificationReport || !changesetsReleaseReport) {
     return "failed";
   }
 
+  const releaseBootstrapStatus = releaseBootstrapResult.overallStatus || "unknown";
   const releasePreflightStatus = releasePreflightResult.overallStatus || "unknown";
   const releaseVerificationStatus = releaseVerificationReport.overallStatus || "unknown";
   const changesetsStatus = changesetsReleaseReport.status || "unknown";
+
+  if (releaseBootstrapStatus !== "passed") {
+    return "failed";
+  }
 
   if (releasePreflightStatus !== "passed") {
     return "failed";
@@ -96,6 +120,7 @@ function buildOverallStatus(releasePreflightResult, releaseVerificationReport, c
 }
 
 export function buildReleaseWorkflowReport({
+  releaseBootstrapResult = null,
   releasePreflightResult = null,
   releaseVerificationReport = null,
   changesetsReleaseReport = null,
@@ -110,16 +135,24 @@ export function buildReleaseWorkflowReport({
     overallStatus:
       assertionArtifact?.assertion?.outcome === "failed"
         ? "failed"
-        : buildOverallStatus(releasePreflightResult, releaseVerificationReport, changesetsReleaseReport),
+        : buildOverallStatus(
+            releaseBootstrapResult,
+            releasePreflightResult,
+            releaseVerificationReport,
+            changesetsReleaseReport,
+          ),
+    releaseBootstrap: buildReleaseBootstrapStatus(releaseBootstrapResult),
     releasePreflight: buildReleasePreflightStatus(releasePreflightResult),
     releaseVerification: buildReleaseVerificationStatus(releaseVerificationReport),
     changesetsRelease: buildChangesetsStatus(changesetsReleaseReport),
     inputs: {
+      hasReleaseBootstrapResult: !!releaseBootstrapResult,
       hasReleasePreflightResult: !!releasePreflightResult,
       hasReleaseVerificationReport: !!releaseVerificationReport,
       hasChangesetsReleaseReport: !!changesetsReleaseReport,
     },
     reports: {
+      releaseBootstrap: releaseBootstrapResult,
       releasePreflight: releasePreflightResult,
       releaseVerification: releaseVerificationReport,
       changesetsRelease: changesetsReleaseReport,
@@ -147,10 +180,15 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
     "# Release Workflow Summary",
     "",
     `- Overall status: \`${report.overallStatus || "unknown"}\``,
+    `- Release bootstrap: \`${report.releaseBootstrap?.status || "unknown"}\``,
     `- Release preflight: \`${report.releasePreflight?.status || "unknown"}\``,
     `- Release verification: \`${report.releaseVerification?.status || "unknown"}\``,
     `- Changesets release: \`${report.changesetsRelease?.status || "unknown"}\``,
   ];
+
+  if (report.releaseBootstrap?.summary) {
+    lines.push(`- Release bootstrap summary: ${report.releaseBootstrap.summary}`);
+  }
 
   if (report.releasePreflight?.summary) {
     lines.push(`- Release preflight summary: ${report.releasePreflight.summary}`);
@@ -165,11 +203,16 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
   }
 
   if (
+    !report.inputs?.hasReleaseBootstrapResult ||
     !report.inputs?.hasReleasePreflightResult ||
     !report.inputs?.hasReleaseVerificationReport ||
     !report.inputs?.hasChangesetsReleaseReport
   ) {
     lines.push("", "## Missing inputs", "");
+
+    if (!report.inputs?.hasReleaseBootstrapResult) {
+      lines.push("- Release bootstrap result was missing.");
+    }
 
     if (!report.inputs?.hasReleasePreflightResult) {
       lines.push("- Release preflight result was missing.");

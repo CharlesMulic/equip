@@ -23,6 +23,7 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
     generatedAt: new Date().toISOString(),
     report: {
       overallStatus: report?.overallStatus || "",
+      releaseBootstrap: report?.releaseBootstrap || null,
       releasePreflight: report?.releasePreflight || null,
       releaseVerification: report?.releaseVerification || null,
       changesetsRelease: report?.changesetsRelease || null,
@@ -46,6 +47,10 @@ if (!allowedStatuses.includes(actualStatus)) {
   failureDetails.push(
     `expected release workflow status to be one of [${allowedStatuses.join(", ")}], got ${actualStatus}`,
   );
+}
+
+if (report?.releaseBootstrap?.status && report.releaseBootstrap.status !== "passed") {
+  failureDetails.push(`release bootstrap status: ${report.releaseBootstrap.status}`);
 }
 
 if (report?.releasePreflight?.status && report.releasePreflight.status !== "passed") {

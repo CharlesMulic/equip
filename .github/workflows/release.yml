@@ -31,10 +31,28 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Run release bootstrap
+        id: release-bootstrap
+        continue-on-error: true
+        env:
+          RELEASE_BOOTSTRAP_RESULT_PATH: .generated/release/release-bootstrap-result.json
+          RELEASE_BOOTSTRAP_SUMMARY_PATH: .generated/release/release-bootstrap-summary.md
+          RELEASE_BOOTSTRAP_LOG_PATH: .generated/release/release-bootstrap.log
+        run: node scripts/ci/run-release-bootstrap.mjs
+
+      - name: Upload release bootstrap artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bootstrap
+          path: |
+            .generated/release/release-bootstrap-result.json
+            .generated/release/release-bootstrap-summary.md
+            .generated/release/release-bootstrap.log
+          if-no-files-found: error
 
       - name: Run release preflight
+        if: ${{ steps.release-bootstrap.outcome == 'success' }}
         id: release-preflight
         continue-on-error: true
         env:
@@ -54,7 +72,7 @@ jobs:
             .generated/release/release-preflight-summary.md
             .generated/release/release-preflight-build.log
             .generated/release/release-preflight-test.log
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Run hermetic Docker acceptance
         if: ${{ steps.release-preflight.outcome == 'success' }}
@@ -299,12 +317,14 @@ jobs:
       - name: Write final release workflow report
         if: ${{ always() }}
         env:
+          RELEASE_BOOTSTRAP_RESULT_PATH: .generated/release/release-bootstrap-result.json
           RELEASE_PREFLIGHT_RESULT_PATH: .generated/release/release-preflight-result.json
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
           CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
           RELEASE_WORKFLOW_ASSERTION_PATH: .generated/release/release-workflow-assertion.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
+          RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME: release-bootstrap
           RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: release-preflight
           RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: release-verification-report
           CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report
@@ -334,12 +354,14 @@ jobs:
       - name: Rewrite final release workflow report with final artifact paths
         if: ${{ always() }}
         env:
+          RELEASE_BOOTSTRAP_RESULT_PATH: .generated/release/release-bootstrap-result.json
           RELEASE_PREFLIGHT_RESULT_PATH: .generated/release/release-preflight-result.json
           RELEASE_VERIFICATION_REPORT_PATH: .generated/release/release-verification-report.json
           CHANGESETS_RELEASE_REPORT_PATH: .generated/release/changesets-release-report.json
           RELEASE_WORKFLOW_REPORT_PATH: .generated/release/release-workflow-report.json
           RELEASE_WORKFLOW_ASSERTION_PATH: .generated/release/release-workflow-assertion.json
           RELEASE_WORKFLOW_SUMMARY_PATH: .generated/release/release-workflow-summary.md
+          RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME: release-bootstrap
           RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: release-preflight
           RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: release-verification-report
           CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: changesets-release-report

@@ -8,6 +8,9 @@ import {
 const releaseVerificationReportPath =
   process.env.RELEASE_VERIFICATION_REPORT_PATH ||
   path.join(".generated", "release", "release-verification-report.json");
+const releaseBootstrapResultPath =
+  process.env.RELEASE_BOOTSTRAP_RESULT_PATH ||
+  path.join(".generated", "release", "release-bootstrap-result.json");
 const releasePreflightResultPath =
   process.env.RELEASE_PREFLIGHT_RESULT_PATH ||
   path.join(".generated", "release", "release-preflight-result.json");
@@ -41,17 +44,20 @@ function resolveArtifactPath(filePath) {
   return fs.existsSync(absolutePath) ? absolutePath : "";
 }
 
+const releaseBootstrapResult = readOptionalJson(releaseBootstrapResultPath);
 const releasePreflightResult = readOptionalJson(releasePreflightResultPath);
 const releaseVerificationReport = readOptionalJson(releaseVerificationReportPath);
 const changesetsReleaseReport = readOptionalJson(changesetsReleaseReportPath);
 const assertionArtifact = readOptionalJson(assertionPath);
 
 const report = buildReleaseWorkflowReport({
+  releaseBootstrapResult,
   releasePreflightResult,
   releaseVerificationReport,
   changesetsReleaseReport,
   assertionArtifact,
   artifacts: {
+    releaseBootstrapResultPath: resolveArtifactPath(releaseBootstrapResultPath),
     releasePreflightResultPath: resolveArtifactPath(releasePreflightResultPath),
     releaseVerificationReportPath: resolveArtifactPath(releaseVerificationReportPath),
     changesetsReleaseReportPath: resolveArtifactPath(changesetsReleaseReportPath),
@@ -60,6 +66,7 @@ const report = buildReleaseWorkflowReport({
     reportPath: path.resolve(outputPath),
   },
   artifactNames: {
+    releaseBootstrap: process.env.RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME || "",
     releasePreflight: process.env.RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME || "",
     releaseVerification: process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "",
     changesetsRelease: process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "",
