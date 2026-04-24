@@ -17,6 +17,26 @@ function normalizeArtifacts(artifacts) {
   );
 }
 
+function normalizeInputs(inputs) {
+  if (!inputs || typeof inputs !== "object") {
+    return {
+      hasReleaseBootstrapResult: false,
+      hasReleasePreflightResult: false,
+      hasPackVerification: false,
+      hasTarballSmoke: false,
+      hasDockerAcceptance: false,
+    };
+  }
+
+  return {
+    hasReleaseBootstrapResult: !!inputs.hasReleaseBootstrapResult,
+    hasReleasePreflightResult: !!inputs.hasReleasePreflightResult,
+    hasPackVerification: !!inputs.hasPackVerification,
+    hasTarballSmoke: !!inputs.hasTarballSmoke,
+    hasDockerAcceptance: !!inputs.hasDockerAcceptance,
+  };
+}
+
 function buildFailureDetails(report) {
   const details = [];
   const formatArtifactDetails = (prefix, artifacts) => {
@@ -178,6 +198,7 @@ function buildAssertionResult({
     assertionPath: path.resolve(assertionPath),
     overallStatus: report?.overallStatus || "unknown",
     components: componentStatuses,
+    inputs: normalizeInputs(report?.inputs),
     releaseBootstrap: report?.releaseBootstrap || null,
     releasePreflight: report?.releasePreflight || null,
     package: report?.package

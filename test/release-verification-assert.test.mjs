@@ -32,6 +32,13 @@ test("assert-release-verification-report passes healthy rollups", () => {
 
   writeJson(reportPath, {
     overallStatus: "passed",
+    inputs: {
+      hasReleaseBootstrapResult: true,
+      hasReleasePreflightResult: true,
+      hasPackVerification: true,
+      hasTarballSmoke: true,
+      hasDockerAcceptance: true,
+    },
     releaseBootstrap: {
       status: "passed",
       summary: "dependency install passed",
@@ -97,6 +104,13 @@ test("assert-release-verification-report passes healthy rollups", () => {
     tarballSmoke: "passed",
     dockerAcceptance: "passed",
   });
+  assert.deepEqual(assertion.inputs, {
+    hasReleaseBootstrapResult: true,
+    hasReleasePreflightResult: true,
+    hasPackVerification: true,
+    hasTarballSmoke: true,
+    hasDockerAcceptance: true,
+  });
   assert.equal(assertion.releaseBootstrap.status, "passed");
   assert.equal(assertion.releasePreflight.status, "passed");
   assert.equal(assertion.package.tarballFileName, "cg3-equip-0.17.7.tgz");
@@ -149,6 +163,13 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
 
   writeJson(reportPath, {
     overallStatus: "failed",
+    inputs: {
+      hasReleaseBootstrapResult: false,
+      hasReleasePreflightResult: false,
+      hasPackVerification: false,
+      hasTarballSmoke: true,
+      hasDockerAcceptance: false,
+    },
     package: {
       status: "failed",
       problems: ["missing bin/equip.js", "unexpected src/ fixture"],
@@ -204,6 +225,13 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.equal(assertion.kind, "equip-release-verification-assertion");
   assert.equal(assertion.outcome, "failed");
   assert.equal(assertion.overallStatus, "failed");
+  assert.deepEqual(assertion.inputs, {
+    hasReleaseBootstrapResult: false,
+    hasReleasePreflightResult: false,
+    hasPackVerification: false,
+    hasTarballSmoke: true,
+    hasDockerAcceptance: false,
+  });
   assert.equal(assertion.package.failureMessage, "npm pack verification failed");
   assert.equal(assertion.package.artifacts.logPath, ".generated/release/pack-verification.log");
   assert.equal(
@@ -268,6 +296,13 @@ test("assert-release-verification-report reports missing component artifacts cle
     tarballSmoke: "passed",
     dockerAcceptance: "missing",
   });
+  assert.deepEqual(assertion.inputs, {
+    hasReleaseBootstrapResult: false,
+    hasReleasePreflightResult: false,
+    hasPackVerification: false,
+    hasTarballSmoke: false,
+    hasDockerAcceptance: false,
+  });
   assert.equal(assertion.package.missingReason, "pack verification artifact missing");
   assert.equal(assertion.dockerAcceptance.missingReason, "docker acceptance artifact missing");
   assert.ok(assertion.failureDetails.some((detail) => /package missing:/i.test(detail)));
@@ -312,9 +347,50 @@ test("assert-release-verification-report reports skipped component artifacts cle
     tarballSmoke: "skipped",
     dockerAcceptance: "skipped",
   });
+  assert.deepEqual(assertion.inputs, {
+    hasReleaseBootstrapResult: false,
+    hasReleasePreflightResult: false,
+    hasPackVerification: false,
+    hasTarballSmoke: false,
+    hasDockerAcceptance: false,
+  });
   assert.match(assertion.package.skippedReason, /release preflight did not pass/i);
   assert.match(assertion.tarballSmoke.skippedReason, /release preflight did not pass/i);
   assert.match(assertion.dockerAcceptance.skippedReason, /release preflight did not pass/i);
   assert.ok(assertion.failureDetails.some((detail) => /package skipped:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance skipped:/i.test(detail)));
+});
+
+test("assert-release-verification-report defaults missing input state to false", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
+  const reportPath = path.join(root, "release-verification-report.json");
+  const assertionPath = path.join(root, "release-verification-assertion.json");
+
+  writeJson(reportPath, {
+    overallStatus: "passed",
+    package: {
+      status: "passed",
+    },
+    tarballSmoke: {
+      status: "passed",
+    },
+    dockerAcceptance: {
+      status: "passed",
+    },
+  });
+
+  const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
+    RELEASE_VERIFICATION_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.deepEqual(assertion.inputs, {
+    hasReleaseBootstrapResult: false,
+    hasReleasePreflightResult: false,
+    hasPackVerification: false,
+    hasTarballSmoke: false,
+    hasDockerAcceptance: false,
+  });
 });
