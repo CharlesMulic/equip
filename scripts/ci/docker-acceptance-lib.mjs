@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { appendGitHubWorkflowContextSection } from "./workflow-context-lib.mjs";
 
 export function resolveDockerAcceptanceArtifacts({
   outputDir = "",
@@ -96,6 +97,7 @@ export function appendDockerAcceptanceSummary({
     lines.push(`- Run log: \`${report.artifacts.runLogPath}\``);
   }
 
+  appendGitHubWorkflowContextSection(lines, report.workflowContext);
   lines.push("");
   fs.appendFileSync(summaryPath, `${lines.join("\n")}\n`, "utf8");
 }

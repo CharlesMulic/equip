@@ -2,6 +2,10 @@ import { execSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { verifyPackMetadata } from "./pack-verification-lib.mjs";
+import {
+  appendGitHubWorkflowContextSection,
+  readGitHubWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 const outputPath = process.env.PACK_VERIFICATION_OUTPUT_PATH || null;
 const logPath =
@@ -9,6 +13,7 @@ const logPath =
   (outputPath ? path.join(path.dirname(path.resolve(outputPath)), "pack-verification.log") : null);
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || null;
 const tarballOutputDir = process.env.PACK_TARBALL_OUTPUT_DIR || "";
+const workflowContext = readGitHubWorkflowContext(process.env);
 
 function writeVerificationArtifact(verification) {
   if (!outputPath) {
@@ -33,30 +38,30 @@ function appendSummary(verification) {
     return;
   }
 
-  appendFileSync(
-    stepSummaryPath,
-    [
-      "## npm pack verification",
-      "",
-      verification.packageName && verification.version
-        ? `- Package: \`${verification.packageName}@${verification.version}\``
-        : "- Package: unavailable",
-      `- Status: \`${verification.hasFailures ? "failed" : "passed"}\``,
-      `- Tarball: ${verification.tarballFileName || "dry-run only"}`,
-      verification.packageSizeBytes
-        ? `- Tarball size: ${verification.packageSizeBytes} bytes`
-        : null,
-      `- Entries: ${verification.entryCount}`,
-      `- Unpacked size: ${verification.unpackedSize} bytes`,
-      `- Required files checked: ${verification.requiredFilesChecked.length}`,
-      `- Forbidden prefixes checked: ${verification.forbiddenPrefixesChecked.join(", ") || "(none)"}`,
-      verification.shasum ? `- Tarball shasum: \`${verification.shasum}\`` : null,
-      verification.problems.length > 0 ? `- Problems: ${verification.problems.join("; ")}` : null,
-      verification.artifacts?.logPath ? `- Log: \`${verification.artifacts.logPath}\`` : null,
-      "",
-    ].filter(Boolean).join("\n"),
-    "utf8",
-  );
+  const lines = [
+    "## npm pack verification",
+    "",
+    verification.packageName && verification.version
+      ? `- Package: \`${verification.packageName}@${verification.version}\``
+      : "- Package: unavailable",
+    `- Status: \`${verification.hasFailures ? "failed" : "passed"}\``,
+    `- Tarball: ${verification.tarballFileName || "dry-run only"}`,
+    verification.packageSizeBytes
+      ? `- Tarball size: ${verification.packageSizeBytes} bytes`
+      : null,
+    `- Entries: ${verification.entryCount}`,
+    `- Unpacked size: ${verification.unpackedSize} bytes`,
+    `- Required files checked: ${verification.requiredFilesChecked.length}`,
+    `- Forbidden prefixes checked: ${verification.forbiddenPrefixesChecked.join(", ") || "(none)"}`,
+    verification.shasum ? `- Tarball shasum: \`${verification.shasum}\`` : null,
+    verification.problems.length > 0 ? `- Problems: ${verification.problems.join("; ")}` : null,
+    verification.artifacts?.logPath ? `- Log: \`${verification.artifacts.logPath}\`` : null,
+  ].filter(Boolean);
+
+  appendGitHubWorkflowContextSection(lines, verification.workflowContext);
+  lines.push("");
+
+  appendFileSync(stepSummaryPath, lines.join("\n"), "utf8");
 }
 
 let verification;
@@ -94,6 +99,7 @@ try {
     status: verification.hasFailures ? "failed" : "passed",
     failureMessage: verification.hasFailures ? verification.problems.join("; ") : "",
     tarballPath: tarballPath && existsSync(tarballPath) ? tarballPath : "",
+    workflowContext,
     artifacts: {
       logPath: logPath ? path.resolve(logPath) : "",
     },
@@ -127,6 +133,7 @@ try {
     hasFailures: true,
     problems: [error instanceof Error ? error.message : String(error)],
     failureMessage: error instanceof Error ? error.message : String(error),
+    workflowContext,
     artifacts: {
       logPath: logPath ? path.resolve(logPath) : "",
     },

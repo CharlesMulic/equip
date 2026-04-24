@@ -7,11 +7,13 @@ import {
   resolveDockerAcceptanceArtifacts,
   writeDockerAcceptanceArtifacts,
 } from "./docker-acceptance-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const dockerfile = path.join(repoRoot, "test", "docker", "Dockerfile");
 const imageTag = process.env.EQUIP_DOCKER_ACCEPTANCE_TAG || "cg3-equip-acceptance:local";
+const workflowContext = readGitHubWorkflowContext(process.env);
 const artifactConfig = resolveDockerAcceptanceArtifacts({
   outputDir: process.env.EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR || "",
   reportPath: process.env.EQUIP_DOCKER_ACCEPTANCE_REPORT_PATH || "",
@@ -128,6 +130,7 @@ try {
     dockerBin,
     imageTag,
     dockerfile,
+    workflowContext,
     totalDurationMs: Date.now() - startedAt,
     steps: [buildStep, runStep]
       .filter(Boolean)

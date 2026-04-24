@@ -35,6 +35,13 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
     report: {
       kind: "equip-docker-acceptance-report",
       status: "passed",
+      workflowContext: {
+        repository: "CharlesMulic/equip",
+        workflow: "Release",
+        runId: "789",
+        sha: "abc123",
+        serverUrl: "https://github.com",
+      },
       steps: [
         { name: "docker-build", durationMs: 123, exitCode: 0 },
         { name: "docker-run", durationMs: 456, exitCode: 0 },
@@ -47,6 +54,7 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   assert.equal(report.kind, "equip-docker-acceptance-report");
   assert.equal(report.steps[1].name, "docker-run");
+  assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
 });
 
 test("appendDockerAcceptanceSummary writes a concise step summary block", () => {
@@ -69,6 +77,13 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
         buildLogPath: ".generated/docker/docker-build.log",
         runLogPath: ".generated/docker/docker-run.log",
       },
+      workflowContext: {
+        repository: "CharlesMulic/equip",
+        workflow: "Release",
+        runId: "789",
+        sha: "abc123",
+        serverUrl: "https://github.com",
+      },
     },
   });
 
@@ -77,4 +92,6 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
   assert.match(summary, /Status: `passed`/);
   assert.match(summary, /Build duration: `123 ms`/);
   assert.match(summary, /Run log: `.generated\/docker\/docker-run\.log`/);
+  assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/789`/i);
 });

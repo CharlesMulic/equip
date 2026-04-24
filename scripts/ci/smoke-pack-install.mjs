@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  appendGitHubWorkflowContextSection,
+  readGitHubWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -16,6 +20,7 @@ const explicitTarballPath = process.env.PACK_TARBALL_PATH || "";
 const tarballOutputDir = process.env.PACK_TARBALL_OUTPUT_DIR || "";
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const stepLogs = [];
+const workflowContext = readGitHubWorkflowContext(process.env);
 const result = {
   kind: "equip-pack-install-smoke",
   generatedAt: new Date().toISOString(),
@@ -30,6 +35,7 @@ const result = {
   helpIncludesUsage: false,
   exportsCheck: "",
   steps: [],
+  workflowContext,
   artifacts: {
     logPath: logPath ? path.resolve(logPath) : "",
   },
@@ -150,23 +156,23 @@ function appendSummary() {
     return;
   }
 
-  appendFileSync(
-    stepSummaryPath,
-    [
-      "## npm tarball install smoke",
-      "",
-      `- Status: \`${result.status}\``,
-      `- Tarball: \`${result.tarballFileName || "unavailable"}\``,
-      `- Installed version: \`${result.installedVersion || "unknown"}\``,
-      `- equip --version: \`${result.equipVersion || "unknown"}\``,
-      `- unequip --version: \`${result.unequipVersion || "unknown"}\``,
-      `- Help check: ${result.helpIncludesUsage ? "passed" : "failed"}`,
-      result.failureMessage ? `- Failure: ${result.failureMessage}` : null,
-      result.artifacts?.logPath ? `- Log: \`${result.artifacts.logPath}\`` : null,
-      "",
-    ].filter(Boolean).join("\n"),
-    "utf8",
-  );
+  const lines = [
+    "## npm tarball install smoke",
+    "",
+    `- Status: \`${result.status}\``,
+    `- Tarball: \`${result.tarballFileName || "unavailable"}\``,
+    `- Installed version: \`${result.installedVersion || "unknown"}\``,
+    `- equip --version: \`${result.equipVersion || "unknown"}\``,
+    `- unequip --version: \`${result.unequipVersion || "unknown"}\``,
+    `- Help check: ${result.helpIncludesUsage ? "passed" : "failed"}`,
+    result.failureMessage ? `- Failure: ${result.failureMessage}` : null,
+    result.artifacts?.logPath ? `- Log: \`${result.artifacts.logPath}\`` : null,
+  ].filter(Boolean);
+
+  appendGitHubWorkflowContextSection(lines, result.workflowContext);
+  lines.push("");
+
+  appendFileSync(stepSummaryPath, lines.join("\n"), "utf8");
 }
 
 try {

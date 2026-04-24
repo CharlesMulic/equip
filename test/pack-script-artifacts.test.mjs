@@ -30,6 +30,15 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
     PACK_VERIFICATION_OUTPUT_PATH: outputPath,
     PACK_VERIFICATION_LOG_PATH: logPath,
     PATH: emptyPathDir,
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "123",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef123456",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
 
   assert.notEqual(result.status, 0);
@@ -46,6 +55,12 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   assert.equal(typeof artifact.failureMessage, "string");
   assert.ok(artifact.failureMessage.length > 0);
   assert.equal(artifact.artifacts.logPath, path.resolve(logPath));
+  assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(artifact.workflowContext.workflow, "Release");
+  assert.equal(
+    artifact.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/123",
+  );
   assert.match(log, /\$ npm pack/i);
 });
 
@@ -59,6 +74,15 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
     PACK_TARBALL_PATH: missingTarballPath,
     PACK_INSTALL_SMOKE_OUTPUT_PATH: outputPath,
     PACK_INSTALL_SMOKE_LOG_PATH: logPath,
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "456",
+    GITHUB_RUN_ATTEMPT: "3",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "fedcba654321",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
 
   assert.notEqual(result.status, 0);
@@ -72,6 +96,12 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.equal(artifact.tarballPath, "");
   assert.match(artifact.failureMessage, /PACK_TARBALL_PATH does not exist or is not a file/i);
   assert.equal(artifact.artifacts.logPath, path.resolve(logPath));
+  assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(artifact.workflowContext.runAttempt, "3");
+  assert.equal(
+    artifact.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/fedcba654321",
+  );
   assert.deepEqual(artifact.steps, []);
   assert.match(log, /PACK_TARBALL_PATH does not exist or is not a file/i);
 });
