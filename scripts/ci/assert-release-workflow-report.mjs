@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { buildReleaseWorkflowReport } from "./release-workflow-report-lib.mjs";
 
 const reportPath =
   process.env.RELEASE_WORKFLOW_REPORT_PATH ||
@@ -32,12 +33,14 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
       inputs:
         report?.inputs && typeof report.inputs === "object"
           ? {
+              hasReleaseWorkflowReport: !!report.inputs.hasReleaseWorkflowReport,
               hasReleaseBootstrapResult: !!report.inputs.hasReleaseBootstrapResult,
               hasReleasePreflightResult: !!report.inputs.hasReleasePreflightResult,
               hasReleaseVerificationReport: !!report.inputs.hasReleaseVerificationReport,
               hasChangesetsReleaseReport: !!report.inputs.hasChangesetsReleaseReport,
             }
           : {
+              hasReleaseWorkflowReport: false,
               hasReleaseBootstrapResult: false,
               hasReleasePreflightResult: false,
               hasReleaseVerificationReport: false,
@@ -58,14 +61,25 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
   return artifact;
 }
 
-if (!fs.existsSync(reportPath)) {
-  throw new Error(`Release workflow report artifact not found: ${reportPath}`);
-}
-
-const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+const report = fs.existsSync(reportPath)
+  ? JSON.parse(fs.readFileSync(reportPath, "utf8"))
+  : (() => {
+      const syntheticReport = buildReleaseWorkflowReport({
+        artifacts: {
+          reportPath: path.resolve(reportPath),
+          assertionPath: path.resolve(assertionPath),
+        },
+      });
+      syntheticReport.inputs.hasReleaseWorkflowReport = false;
+      return syntheticReport;
+    })();
 const allowedStatuses = parseAllowedStatuses(process.env.RELEASE_WORKFLOW_ALLOWED_STATUSES);
 const actualStatus = report?.actualStatus || report?.overallStatus || "unknown";
 const failureDetails = [];
+
+if (!report.inputs?.hasReleaseWorkflowReport) {
+  failureDetails.push(`release workflow report artifact not found: ${reportPath}`);
+}
 
 if (!allowedStatuses.includes(actualStatus)) {
   failureDetails.push(

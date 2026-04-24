@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  buildReleaseWorkflowReport,
   buildReleaseWorkflowSummaryMarkdown,
 } from "./release-workflow-report-lib.mjs";
 
@@ -13,11 +14,18 @@ const summaryPath =
 const appendStepSummary =
   (process.env.RELEASE_WORKFLOW_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
 
-if (!fs.existsSync(reportPath)) {
-  throw new Error(`Release workflow report artifact not found: ${reportPath}`);
-}
-
-const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+const report = fs.existsSync(reportPath)
+  ? JSON.parse(fs.readFileSync(reportPath, "utf8"))
+  : (() => {
+      const syntheticReport = buildReleaseWorkflowReport({
+        artifacts: {
+          reportPath: path.resolve(reportPath),
+          summaryPath: path.resolve(summaryPath),
+        },
+      });
+      syntheticReport.inputs.hasReleaseWorkflowReport = false;
+      return syntheticReport;
+    })();
 const markdown = buildReleaseWorkflowSummaryMarkdown({ report });
 
 fs.mkdirSync(path.dirname(summaryPath), { recursive: true });

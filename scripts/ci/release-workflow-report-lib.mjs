@@ -256,6 +256,7 @@ export function buildReleaseWorkflowReport({
       releaseVerificationReport,
     ),
     inputs: {
+      hasReleaseWorkflowReport: true,
       hasReleaseBootstrapResult: !!releaseBootstrapResult,
       hasReleasePreflightResult: !!releasePreflightResult,
       hasReleaseVerificationReport: !!releaseVerificationReport,
@@ -326,12 +327,17 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
   }
 
   if (
+    !report.inputs?.hasReleaseWorkflowReport ||
     !report.inputs?.hasReleaseBootstrapResult ||
     !report.inputs?.hasReleasePreflightResult ||
     !report.inputs?.hasReleaseVerificationReport ||
     !report.inputs?.hasChangesetsReleaseReport
   ) {
     lines.push("", "## Missing inputs", "");
+
+    if (!report.inputs?.hasReleaseWorkflowReport) {
+      lines.push("- Release workflow report artifact was missing.");
+    }
 
     if (!report.inputs?.hasReleaseBootstrapResult) {
       lines.push("- Release bootstrap result was missing.");

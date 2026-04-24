@@ -421,6 +421,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(assertion.assertion.outcome, "passed");
   assert.equal(assertion.report.actualStatus, "published");
   assert.equal(assertion.report.effectiveStatus, "published");
+  assert.equal(assertion.report.inputs.hasReleaseWorkflowReport, true);
   assert.equal(assertion.report.inputs.hasReleaseBootstrapResult, true);
   assert.equal(assertion.report.inputs.hasReleasePreflightResult, true);
   assert.equal(assertion.report.inputs.hasReleaseVerificationReport, true);
@@ -496,6 +497,7 @@ test("assert-release-workflow-report writes a failure artifact before exiting no
   assert.notEqual(result.status, 0);
   const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
   assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.report.inputs.hasReleaseWorkflowReport, true);
   assert.equal(assertion.report.inputs.hasReleaseBootstrapResult, true);
   assert.equal(assertion.report.inputs.hasReleasePreflightResult, true);
   assert.equal(assertion.report.inputs.hasReleaseVerificationReport, true);
@@ -539,6 +541,7 @@ test("assert-release-workflow-report preserves missing input state in the assert
   assert.notEqual(result.status, 0);
   const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
   assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.report.inputs.hasReleaseWorkflowReport, true);
   assert.equal(assertion.report.inputs.hasReleaseBootstrapResult, true);
   assert.equal(assertion.report.inputs.hasReleasePreflightResult, false);
   assert.equal(assertion.report.inputs.hasReleaseVerificationReport, false);
@@ -546,4 +549,45 @@ test("assert-release-workflow-report preserves missing input state in the assert
   assert.match(assertion.assertion.failureDetails.join("\n"), /release preflight status: missing/i);
   assert.match(assertion.assertion.failureDetails.join("\n"), /release verification status: missing/i);
   assert.match(assertion.assertion.failureDetails.join("\n"), /changesets release status: missing/i);
+});
+
+test("write-release-workflow-summary renders a truthful missing-report summary", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-workflow-"));
+  const releaseWorkflowReportPath = path.join(root, "missing-release-workflow-report.json");
+  const releaseWorkflowSummaryPath = path.join(root, "release-workflow-summary.md");
+
+  const result = runScript("scripts/ci/write-release-workflow-summary.mjs", {
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
+    RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const summary = fs.readFileSync(releaseWorkflowSummaryPath, "utf8");
+  assert.match(summary, /Overall status: `failed`/i);
+  assert.match(summary, /## Missing inputs/i);
+  assert.match(summary, /Release workflow report artifact was missing/i);
+  assert.match(summary, /Release bootstrap result was missing/i);
+});
+
+test("assert-release-workflow-report writes a failure artifact when the report is missing", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-workflow-"));
+  const releaseWorkflowReportPath = path.join(root, "missing-release-workflow-report.json");
+  const releaseWorkflowAssertionPath = path.join(root, "release-workflow-assertion.json");
+
+  const result = runScript("scripts/ci/assert-release-workflow-report.mjs", {
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
+  });
+
+  assert.notEqual(result.status, 0);
+  const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
+  assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.report.inputs.hasReleaseWorkflowReport, false);
+  assert.equal(assertion.report.inputs.hasReleaseBootstrapResult, false);
+  assert.equal(assertion.report.inputs.hasReleasePreflightResult, false);
+  assert.equal(assertion.report.inputs.hasReleaseVerificationReport, false);
+  assert.equal(assertion.report.inputs.hasChangesetsReleaseReport, false);
+  assert.match(assertion.assertion.failureDetails.join("\n"), /release workflow report artifact not found/i);
+  assert.match(result.stderr || result.stdout, /assertion failed/i);
 });
