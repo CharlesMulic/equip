@@ -98,6 +98,15 @@ export function appendDockerAcceptanceSummary({
   }
 
   appendGitHubWorkflowContextSection(lines, report.workflowContext);
+
+  const artifactNameEntries = Object.entries(report.artifactNames || {}).filter(([, value]) => value);
+  if (artifactNameEntries.length > 0) {
+    lines.push("", "## Evidence artifacts", "");
+    for (const [name, artifactName] of artifactNameEntries) {
+      lines.push(`- ${name}: \`${artifactName}\``);
+    }
+  }
+
   lines.push("");
   fs.appendFileSync(summaryPath, `${lines.join("\n")}\n`, "utf8");
 }

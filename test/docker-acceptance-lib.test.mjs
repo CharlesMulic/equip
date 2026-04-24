@@ -42,6 +42,9 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
         sha: "abc123",
         serverUrl: "https://github.com",
       },
+      artifactNames: {
+        bundle: "docker-acceptance",
+      },
       steps: [
         { name: "docker-build", durationMs: 123, exitCode: 0 },
         { name: "docker-run", durationMs: 456, exitCode: 0 },
@@ -54,6 +57,7 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   assert.equal(report.kind, "equip-docker-acceptance-report");
   assert.equal(report.steps[1].name, "docker-run");
+  assert.equal(report.artifactNames.bundle, "docker-acceptance");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
 });
 
@@ -84,6 +88,9 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
         sha: "abc123",
         serverUrl: "https://github.com",
       },
+      artifactNames: {
+        bundle: "docker-acceptance",
+      },
     },
   });
 
@@ -94,4 +101,6 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
   assert.match(summary, /Run log: `.generated\/docker\/docker-run\.log`/);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/789`/i);
+  assert.match(summary, /## Evidence artifacts/i);
+  assert.match(summary, /bundle: `docker-acceptance`/i);
 });

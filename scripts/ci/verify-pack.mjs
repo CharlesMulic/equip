@@ -14,6 +14,8 @@ const logPath =
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || null;
 const tarballOutputDir = process.env.PACK_TARBALL_OUTPUT_DIR || "";
 const workflowContext = readGitHubWorkflowContext(process.env);
+const verificationArtifactName = process.env.PACK_VERIFICATION_ARTIFACT_NAME || "pack-verification";
+const tarballArtifactName = process.env.PACK_TARBALL_ARTIFACT_NAME || "pack-tarball";
 
 function writeVerificationArtifact(verification) {
   if (!outputPath) {
@@ -59,6 +61,15 @@ function appendSummary(verification) {
   ].filter(Boolean);
 
   appendGitHubWorkflowContextSection(lines, verification.workflowContext);
+
+  const artifactNameEntries = Object.entries(verification.artifactNames || {}).filter(([, value]) => value);
+  if (artifactNameEntries.length > 0) {
+    lines.push("", "## Evidence artifacts", "");
+    for (const [name, artifactName] of artifactNameEntries) {
+      lines.push(`- ${name}: \`${artifactName}\``);
+    }
+  }
+
   lines.push("");
 
   appendFileSync(stepSummaryPath, lines.join("\n"), "utf8");
@@ -100,6 +111,10 @@ try {
     failureMessage: verification.hasFailures ? verification.problems.join("; ") : "",
     tarballPath: tarballPath && existsSync(tarballPath) ? tarballPath : "",
     workflowContext,
+    artifactNames: {
+      bundle: verificationArtifactName,
+      tarball: verification.tarballFileName ? tarballArtifactName : "",
+    },
     artifacts: {
       logPath: logPath ? path.resolve(logPath) : "",
     },
@@ -134,6 +149,10 @@ try {
     problems: [error instanceof Error ? error.message : String(error)],
     failureMessage: error instanceof Error ? error.message : String(error),
     workflowContext,
+    artifactNames: {
+      bundle: verificationArtifactName,
+      tarball: "",
+    },
     artifacts: {
       logPath: logPath ? path.resolve(logPath) : "",
     },

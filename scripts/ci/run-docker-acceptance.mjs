@@ -14,6 +14,8 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 const dockerfile = path.join(repoRoot, "test", "docker", "Dockerfile");
 const imageTag = process.env.EQUIP_DOCKER_ACCEPTANCE_TAG || "cg3-equip-acceptance:local";
 const workflowContext = readGitHubWorkflowContext(process.env);
+const dockerAcceptanceArtifactName =
+  process.env.EQUIP_DOCKER_ACCEPTANCE_ARTIFACT_NAME || "docker-acceptance";
 const artifactConfig = resolveDockerAcceptanceArtifacts({
   outputDir: process.env.EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR || "",
   reportPath: process.env.EQUIP_DOCKER_ACCEPTANCE_REPORT_PATH || "",
@@ -131,6 +133,9 @@ try {
     imageTag,
     dockerfile,
     workflowContext,
+    artifactNames: {
+      bundle: dockerAcceptanceArtifactName,
+    },
     totalDurationMs: Date.now() - startedAt,
     steps: [buildStep, runStep]
       .filter(Boolean)

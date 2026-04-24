@@ -47,6 +47,7 @@ GitHub Actions keeps the existing OS/Node matrix for `npm test` and adds a dedic
 - runs the internal acceptance suite inside the container
 - can write `.generated/docker-acceptance/docker-acceptance-report.json` plus raw `docker-build.log` / `docker-run.log`
 - now also records the GitHub workflow context directly in that Docker report, so the raw artifact stays traceable to the exact Actions run even before you open the higher-level rollups
+- now also records the uploaded artifact bundle name directly in that Docker report/summary, so the raw evidence tells you which GitHub Actions artifact to open next without relying on the later rollups
 - appends a concise job summary when `GITHUB_STEP_SUMMARY` is available
 
 Set `EQUIP_DOCKER_ACCEPTANCE_OUTPUT_DIR` to preserve those artifacts locally or in CI.

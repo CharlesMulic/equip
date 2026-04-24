@@ -21,6 +21,8 @@ const tarballOutputDir = process.env.PACK_TARBALL_OUTPUT_DIR || "";
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const stepLogs = [];
 const workflowContext = readGitHubWorkflowContext(process.env);
+const packInstallSmokeArtifactName =
+  process.env.PACK_INSTALL_SMOKE_ARTIFACT_NAME || "pack-install-smoke";
 const result = {
   kind: "equip-pack-install-smoke",
   generatedAt: new Date().toISOString(),
@@ -36,6 +38,9 @@ const result = {
   exportsCheck: "",
   steps: [],
   workflowContext,
+  artifactNames: {
+    bundle: packInstallSmokeArtifactName,
+  },
   artifacts: {
     logPath: logPath ? path.resolve(logPath) : "",
   },
@@ -170,6 +175,15 @@ function appendSummary() {
   ].filter(Boolean);
 
   appendGitHubWorkflowContextSection(lines, result.workflowContext);
+
+  const artifactNameEntries = Object.entries(result.artifactNames || {}).filter(([, value]) => value);
+  if (artifactNameEntries.length > 0) {
+    lines.push("", "## Evidence artifacts", "");
+    for (const [name, artifactName] of artifactNameEntries) {
+      lines.push(`- ${name}: \`${artifactName}\``);
+    }
+  }
+
   lines.push("");
 
   appendFileSync(stepSummaryPath, lines.join("\n"), "utf8");
