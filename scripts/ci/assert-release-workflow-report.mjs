@@ -54,6 +54,8 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
           : {},
       evidenceFiles:
         report?.evidenceFiles && typeof report.evidenceFiles === "object" ? report.evidenceFiles : {},
+      workflowContext:
+        report?.workflowContext && typeof report.workflowContext === "object" ? report.workflowContext : {},
     },
     assertion,
   };
@@ -65,6 +67,17 @@ const report = fs.existsSync(reportPath)
   ? JSON.parse(fs.readFileSync(reportPath, "utf8"))
   : (() => {
       const syntheticReport = buildReleaseWorkflowReport({
+        workflowContext: {
+          repository: process.env.GITHUB_REPOSITORY || "",
+          workflow: process.env.GITHUB_WORKFLOW || "",
+          runId: process.env.GITHUB_RUN_ID || "",
+          runAttempt: process.env.GITHUB_RUN_ATTEMPT || "",
+          ref: process.env.GITHUB_REF || "",
+          sha: process.env.GITHUB_SHA || "",
+          eventName: process.env.GITHUB_EVENT_NAME || "",
+          serverUrl: process.env.GITHUB_SERVER_URL || "",
+          apiUrl: process.env.GITHUB_API_URL || "",
+        },
         artifacts: {
           reportPath: path.resolve(reportPath),
           assertionPath: path.resolve(assertionPath),

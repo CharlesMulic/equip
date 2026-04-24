@@ -114,13 +114,14 @@ On pushes to `main` it:
     as the matching human-readable summary of the full workflow rollup, including the uploaded artifact names to open next
     plus the flattened evidence-file paths for the nested bootstrap/preflight/verification/changesets bundles,
     plus the flattened nested verification/Changesets artifact names from those bundles,
+    plus the GitHub workflow context (repository/workflow/run/ref/sha/event) for that release run,
     and appends that final top-level rendering to the GitHub job summary,
     while now also rendering a truthful `release workflow report missing` state instead of failing empty-handed if the top-level report artifact never appeared
 19. rewrites `.generated/release/release-workflow-report.json`
     after the summary step so the final machine-readable report also points at the uploaded summary artifact path
 20. asserts that workflow-level report explicitly and writes `.generated/release/release-workflow-assertion.json`
     so the final release verdict is preserved as a machine-readable gate artifact instead of being inferred only from the report contents,
-    and that assertion artifact now also carries the report's machine-readable input-presence state plus the top-level artifact-name and flattened evidence-file / evidence-artifact maps from the workflow report,
+    and that assertion artifact now also carries the report's machine-readable input-presence state, GitHub workflow context, plus the top-level artifact-name and flattened evidence-file / evidence-artifact maps from the workflow report,
     and it now still writes a failure artifact with `hasReleaseWorkflowReport: false` when the top-level workflow report artifact itself is missing
 21. rewrites the workflow summary/report after that assertion step and uploads the summary, assertion, and report artifacts
     before the job turns red, so failed final-release gates still leave behind one complete evidence bundle

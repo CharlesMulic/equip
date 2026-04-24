@@ -120,6 +120,20 @@ function createReleasePreflightResult() {
   };
 }
 
+function createWorkflowContext() {
+  return {
+    repository: "CharlesMulic/equip",
+    workflow: "Release",
+    runId: "1234567890",
+    runAttempt: "2",
+    ref: "refs/heads/main",
+    sha: "abcdef1234567890",
+    eventName: "push",
+    serverUrl: "https://github.com",
+    apiUrl: "https://api.github.com",
+  };
+}
+
 test("buildReleaseWorkflowReport combines verification and changesets release status", () => {
   const report = buildReleaseWorkflowReport({
     releaseBootstrapResult: createReleaseBootstrapResult(),
@@ -152,6 +166,7 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
       summary: "release-workflow-summary",
       report: "release-workflow-report",
     },
+    workflowContext: createWorkflowContext(),
   });
 
   assert.equal(report.kind, "equip-release-workflow-report");
@@ -178,6 +193,10 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   assert.equal(report.evidenceArtifactNames.releaseVerificationDockerAcceptance, "docker-acceptance");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseResult, "changesets-release-result");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseAssertion, "changesets-release-assertion");
+  assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(report.workflowContext.workflow, "Release");
+  assert.equal(report.workflowContext.runId, "1234567890");
+  assert.equal(report.workflowContext.eventName, "push");
 });
 
 test("buildReleaseWorkflowReport marks missing reports explicitly", () => {
@@ -272,6 +291,7 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
         summary: "release-workflow-summary",
         report: "release-workflow-report",
       },
+      workflowContext: createWorkflowContext(),
     }),
   });
 
@@ -287,6 +307,9 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /Changesets summary:/i);
   assert.match(markdown, /Final assertion/i);
   assert.match(markdown, /Outcome: `failed`/i);
+  assert.match(markdown, /## GitHub workflow context/i);
+  assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(markdown, /Run ID: `1234567890`/i);
   assert.match(markdown, /Release Verification: `release-verification-report`/i);
   assert.match(markdown, /## Nested evidence artifacts/i);
   assert.match(markdown, /Changesets Release Result: `changesets-release-result`/i);
@@ -369,6 +392,13 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
     RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -376,6 +406,13 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
     RELEASE_WORKFLOW_ALLOWED_STATUSES: "published,completed",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -383,6 +420,13 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
     RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -401,6 +445,13 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
     RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -408,6 +459,13 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
     RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -426,6 +484,9 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(assertion.report.inputs.hasReleasePreflightResult, true);
   assert.equal(assertion.report.inputs.hasReleaseVerificationReport, true);
   assert.equal(assertion.report.inputs.hasChangesetsReleaseReport, true);
+  assert.equal(assertion.report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.report.workflowContext.workflow, "Release");
+  assert.equal(assertion.report.workflowContext.runId, "1234567890");
   assert.equal(assertion.report.artifactNames.report, "release-workflow-report");
   assert.equal(assertion.report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(assertion.report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
@@ -438,6 +499,9 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(report.artifactNames.releasePreflight, "release-preflight-result");
   assert.equal(report.artifactNames.report, "release-workflow-report");
   assert.equal(report.artifactNames.assertion, "release-workflow-assertion");
+  assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(report.workflowContext.workflow, "Release");
+  assert.equal(report.workflowContext.runId, "1234567890");
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(report.evidenceArtifactNames.releaseVerificationAssertion, "release-verification-assertion");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseSummary, "changesets-release-summary");
@@ -450,6 +514,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Overall status: `published`/i);
   assert.match(summary, /Actual status: `published`/i);
   assert.match(summary, /Effective status: `published`/i);
+  assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(summary, /Final assertion/i);
   assert.match(summary, /## Nested evidence artifacts/i);
   assert.match(summary, /Release Verification Pack Tarball: `pack-tarball`/i);
@@ -560,6 +626,13 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
     RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -578,6 +651,13 @@ test("assert-release-workflow-report writes a failure artifact when the report i
   const result = runScript("scripts/ci/assert-release-workflow-report.mjs", {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
   });
 
   assert.notEqual(result.status, 0);
@@ -588,6 +668,9 @@ test("assert-release-workflow-report writes a failure artifact when the report i
   assert.equal(assertion.report.inputs.hasReleasePreflightResult, false);
   assert.equal(assertion.report.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.report.inputs.hasChangesetsReleaseReport, false);
+  assert.equal(assertion.report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.report.workflowContext.workflow, "Release");
+  assert.equal(assertion.report.workflowContext.runId, "1234567890");
   assert.match(assertion.assertion.failureDetails.join("\n"), /release workflow report artifact not found/i);
   assert.match(result.stderr || result.stdout, /assertion failed/i);
 });

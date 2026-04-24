@@ -21,6 +21,34 @@ function normalizeArtifactNames(artifactNames) {
   );
 }
 
+function normalizeWorkflowContext(workflowContext) {
+  if (!workflowContext || typeof workflowContext !== "object") {
+    return {
+      repository: "",
+      workflow: "",
+      runId: "",
+      runAttempt: "",
+      ref: "",
+      sha: "",
+      eventName: "",
+      serverUrl: "",
+      apiUrl: "",
+    };
+  }
+
+  return {
+    repository: workflowContext.repository || "",
+    workflow: workflowContext.workflow || "",
+    runId: workflowContext.runId || "",
+    runAttempt: workflowContext.runAttempt || "",
+    ref: workflowContext.ref || "",
+    sha: workflowContext.sha || "",
+    eventName: workflowContext.eventName || "",
+    serverUrl: workflowContext.serverUrl || "",
+    apiUrl: workflowContext.apiUrl || "",
+  };
+}
+
 function prefixArtifactEntries(prefix, artifacts) {
   const normalizedArtifacts = normalizeArtifacts(artifacts);
   const entries = Object.entries(normalizedArtifacts).filter(([, value]) => value);
@@ -225,6 +253,7 @@ export function buildReleaseWorkflowReport({
   assertionArtifact = null,
   artifacts = {},
   artifactNames = {},
+  workflowContext = {},
   generatedAt = new Date().toISOString(),
 }) {
   const actualStatus = buildOverallStatus(
@@ -281,6 +310,7 @@ export function buildReleaseWorkflowReport({
             : [],
         }
       : null,
+    workflowContext: normalizeWorkflowContext(workflowContext),
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
     evidenceArtifactNames: buildEvidenceArtifactNames({
@@ -374,6 +404,47 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
       for (const detail of report.assertion.failureDetails) {
         lines.push(`  - ${detail}`);
       }
+    }
+  }
+
+  const workflowContext = report.workflowContext || {};
+  if (
+    workflowContext.repository ||
+    workflowContext.workflow ||
+    workflowContext.runId ||
+    workflowContext.runAttempt ||
+    workflowContext.ref ||
+    workflowContext.sha ||
+    workflowContext.eventName
+  ) {
+    lines.push("", "## GitHub workflow context", "");
+
+    if (workflowContext.repository) {
+      lines.push(`- Repository: \`${workflowContext.repository}\``);
+    }
+
+    if (workflowContext.workflow) {
+      lines.push(`- Workflow: \`${workflowContext.workflow}\``);
+    }
+
+    if (workflowContext.runId) {
+      lines.push(`- Run ID: \`${workflowContext.runId}\``);
+    }
+
+    if (workflowContext.runAttempt) {
+      lines.push(`- Run attempt: \`${workflowContext.runAttempt}\``);
+    }
+
+    if (workflowContext.eventName) {
+      lines.push(`- Event: \`${workflowContext.eventName}\``);
+    }
+
+    if (workflowContext.ref) {
+      lines.push(`- Ref: \`${workflowContext.ref}\``);
+    }
+
+    if (workflowContext.sha) {
+      lines.push(`- SHA: \`${workflowContext.sha}\``);
     }
   }
 
