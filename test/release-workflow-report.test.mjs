@@ -421,6 +421,10 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(assertion.assertion.outcome, "passed");
   assert.equal(assertion.report.actualStatus, "published");
   assert.equal(assertion.report.effectiveStatus, "published");
+  assert.equal(assertion.report.inputs.hasReleaseBootstrapResult, true);
+  assert.equal(assertion.report.inputs.hasReleasePreflightResult, true);
+  assert.equal(assertion.report.inputs.hasReleaseVerificationReport, true);
+  assert.equal(assertion.report.inputs.hasChangesetsReleaseReport, true);
   assert.equal(assertion.report.artifactNames.report, "release-workflow-report");
   assert.equal(assertion.report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(assertion.report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
@@ -492,6 +496,10 @@ test("assert-release-workflow-report writes a failure artifact before exiting no
   assert.notEqual(result.status, 0);
   const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
   assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.report.inputs.hasReleaseBootstrapResult, true);
+  assert.equal(assertion.report.inputs.hasReleasePreflightResult, true);
+  assert.equal(assertion.report.inputs.hasReleaseVerificationReport, true);
+  assert.equal(assertion.report.inputs.hasChangesetsReleaseReport, true);
   assert.deepEqual(assertion.report.artifactNames, {});
   assert.equal(assertion.report.evidenceArtifactNames.changesetsReleaseResult, "changesets-release-result");
   assert.equal(assertion.report.evidenceArtifactNames.changesetsReleaseAssertion, "changesets-release-assertion");
@@ -501,4 +509,41 @@ test("assert-release-workflow-report writes a failure artifact before exiting no
   assert.match(assertion.assertion.failureDetails.join("\n"), /release preflight status: failed/i);
   assert.match(assertion.assertion.failureDetails.join("\n"), /release verification status: failed/i);
   assert.match(result.stderr || result.stdout, /assertion failed/i);
+});
+
+test("assert-release-workflow-report preserves missing input state in the assertion artifact", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-workflow-"));
+  const releaseWorkflowReportPath = path.join(root, "release-workflow-report.json");
+  const releaseWorkflowAssertionPath = path.join(root, "release-workflow-assertion.json");
+
+  fs.writeFileSync(
+    releaseWorkflowReportPath,
+    `${JSON.stringify(
+      buildReleaseWorkflowReport({
+        releaseBootstrapResult: createReleaseBootstrapResult(),
+        releasePreflightResult: null,
+        releaseVerificationReport: null,
+        changesetsReleaseReport: null,
+      }),
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const result = runScript("scripts/ci/assert-release-workflow-report.mjs", {
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
+  });
+
+  assert.notEqual(result.status, 0);
+  const assertion = JSON.parse(fs.readFileSync(releaseWorkflowAssertionPath, "utf8"));
+  assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.report.inputs.hasReleaseBootstrapResult, true);
+  assert.equal(assertion.report.inputs.hasReleasePreflightResult, false);
+  assert.equal(assertion.report.inputs.hasReleaseVerificationReport, false);
+  assert.equal(assertion.report.inputs.hasChangesetsReleaseReport, false);
+  assert.match(assertion.assertion.failureDetails.join("\n"), /release preflight status: missing/i);
+  assert.match(assertion.assertion.failureDetails.join("\n"), /release verification status: missing/i);
+  assert.match(assertion.assertion.failureDetails.join("\n"), /changesets release status: missing/i);
 });

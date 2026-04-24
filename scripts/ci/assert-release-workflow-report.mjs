@@ -29,6 +29,20 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
       releasePreflight: report?.releasePreflight || null,
       releaseVerification: report?.releaseVerification || null,
       changesetsRelease: report?.changesetsRelease || null,
+      inputs:
+        report?.inputs && typeof report.inputs === "object"
+          ? {
+              hasReleaseBootstrapResult: !!report.inputs.hasReleaseBootstrapResult,
+              hasReleasePreflightResult: !!report.inputs.hasReleasePreflightResult,
+              hasReleaseVerificationReport: !!report.inputs.hasReleaseVerificationReport,
+              hasChangesetsReleaseReport: !!report.inputs.hasChangesetsReleaseReport,
+            }
+          : {
+              hasReleaseBootstrapResult: false,
+              hasReleasePreflightResult: false,
+              hasReleaseVerificationReport: false,
+              hasChangesetsReleaseReport: false,
+            },
       artifactNames:
         report?.artifactNames && typeof report.artifactNames === "object" ? report.artifactNames : {},
       evidenceArtifactNames:
