@@ -38,6 +38,7 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
   assert.equal(result.stepOutcome, "success");
   assert.equal(result.status, "published");
   assert.equal(result.published, true);
+  assert.equal(result.inputs.hasReleaseVerificationReport, false);
   assert.equal(result.publishedPackages.length, 1);
   assert.equal(result.publishedPackages[0].name, "@cg3/equip");
   assert.match(result.summary, /published 1 package/i);
@@ -57,6 +58,7 @@ test("buildChangesetsReleaseResult marks skipped runs explicitly when verificati
   assert.equal(result.stepOutcome, "skipped");
   assert.equal(result.status, "skipped");
   assert.equal(result.published, false);
+  assert.equal(result.inputs.hasReleaseVerificationReport, true);
   assert.equal(result.prerequisites.releaseVerificationStatus, "failed");
   assert.match(result.summary, /skipped because release verification was failed/i);
   assert.equal(result.skipReason, result.summary);
@@ -78,6 +80,7 @@ test("write-changesets-release-result writes an artifact and appends summary out
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
   assert.equal(artifact.status, "published");
+  assert.equal(artifact.inputs.hasReleaseVerificationReport, false);
   assert.equal(artifact.publishedPackages[0].version, "0.17.8");
 });
 
@@ -107,6 +110,7 @@ test("write-changesets-release-result records verification-blocked skips", () =>
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
   assert.equal(artifact.status, "skipped");
+  assert.equal(artifact.inputs.hasReleaseVerificationReport, true);
   assert.equal(artifact.prerequisites.releaseVerificationStatus, "failed");
   assert.match(artifact.summary, /skipped because release verification was failed/i);
 });
@@ -221,6 +225,7 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
   assert.equal(report.status, "published");
   assert.equal(report.effectiveStatus, "published");
   assert.equal(report.result.status, "published");
+  assert.equal(report.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(report.result.publishedPackages[0].name, "@cg3/equip");
   assert.equal(report.assertion.outcome, "passed");
   assert.equal(report.assertion.publishedPackages[0].version, "0.17.8");
@@ -260,6 +265,7 @@ test("buildChangesetsReleaseReport preserves skipped lane status when assertion 
   assert.equal(report.status, "skipped");
   assert.equal(report.effectiveStatus, "failed");
   assert.equal(report.result.status, "skipped");
+  assert.equal(report.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(report.assertion.outcome, "failed");
   assert.equal(report.assertion.status, "skipped");
 });
@@ -534,6 +540,7 @@ test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict"
   assert.equal(artifact.kind, "equip-changesets-release-assertion");
   assert.equal(artifact.status, "completed");
   assert.equal(artifact.effectiveStatus, "completed");
+  assert.equal(artifact.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(artifact.artifacts.summaryPath, summaryPath);
   assert.equal(artifact.artifactNames.report, "changesets-release-report");
   const persisted = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
@@ -575,6 +582,7 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
   assert.equal(assertion.assertion.outcome, "passed");
   assert.equal(assertion.status, "published");
   assert.equal(assertion.effectiveStatus, "published");
+  assert.equal(assertion.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.assertion.published, true);
   assert.equal(assertion.assertion.publishedPackages[0].name, "@cg3/equip");
   assert.equal(assertion.artifacts.summaryPath, path.resolve(summaryPath));
@@ -614,6 +622,68 @@ test("assert-changesets-release-result preserves self-contained evidence pointer
   assert.equal(assertion.assertion.outcome, "failed");
   assert.equal(assertion.status, "failed");
   assert.equal(assertion.effectiveStatus, "failed");
+  assert.equal(assertion.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.artifacts.reportPath, path.resolve(reportPath));
   assert.equal(assertion.artifactNames.summary, "changesets-release-summary");
+});
+
+test("changesets release artifacts preserve verification input presence when provided", () => {
+  const result = buildChangesetsReleaseResult({
+    stepOutcome: "skipped",
+    published: "false",
+    publishedPackages: "[]",
+    releaseVerificationReport: {
+      overallStatus: "failed",
+      summary: "release verification failed",
+    },
+  });
+
+  const report = buildChangesetsReleaseReport({
+    result,
+    assertionArtifact: {
+      kind: "equip-changesets-release-assertion",
+      result: {
+        status: "skipped",
+      },
+      assertion: {
+        outcome: "failed",
+        status: "skipped",
+        published: false,
+        error: "Changesets release step finished with outcome 'skipped'. changesets release step skipped because release verification was failed",
+        publishedPackages: [],
+      },
+    },
+  });
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
+  const assertionPath = path.join(root, "changesets-release-assertion.json");
+
+  const assertion = writeChangesetsReleaseAssertionArtifact({
+    result,
+    artifacts: {
+      resultPath: "/tmp/changesets-release-result.json",
+      assertionPath,
+      summaryPath: "/tmp/changesets-release-summary.md",
+      reportPath: "/tmp/changesets-release-report.json",
+    },
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
+    assertion: {
+      outcome: "failed",
+      resultPath: "/tmp/changesets-release-result.json",
+      assertionPath,
+      status: "skipped",
+      published: false,
+      publishedPackages: [],
+      error: "Changesets release step finished with outcome 'skipped'. changesets release step skipped because release verification was failed",
+    },
+    outPath: assertionPath,
+  });
+
+  assert.equal(report.result.inputs.hasReleaseVerificationReport, true);
+  assert.equal(assertion.result.inputs.hasReleaseVerificationReport, true);
 });

@@ -109,6 +109,9 @@ export function buildChangesetsReleaseResult({
     })),
     summary,
     skipReason: status === "skipped" ? summary : "",
+    inputs: {
+      hasReleaseVerificationReport: !!releaseVerificationReport,
+    },
     prerequisites: {
       releaseVerificationStatus: normalizedVerificationStatus,
     },
@@ -224,6 +227,14 @@ export function buildChangesetsReleaseReport({
       published: !!result?.published,
       summary: result?.summary || "",
       skipReason: result?.skipReason || "",
+      inputs:
+        result?.inputs && typeof result.inputs === "object"
+          ? {
+              hasReleaseVerificationReport: !!result.inputs.hasReleaseVerificationReport,
+            }
+          : {
+              hasReleaseVerificationReport: false,
+            },
       prerequisites:
         result?.prerequisites && typeof result.prerequisites === "object"
           ? result.prerequisites
@@ -293,6 +304,14 @@ export function writeChangesetsReleaseAssertionArtifact({
       published: !!result?.published,
       summary: result?.summary || "",
       skipReason: result?.skipReason || "",
+      inputs:
+        result?.inputs && typeof result.inputs === "object"
+          ? {
+              hasReleaseVerificationReport: !!result.inputs.hasReleaseVerificationReport,
+            }
+          : {
+              hasReleaseVerificationReport: false,
+            },
       prerequisites:
         result?.prerequisites && typeof result.prerequisites === "object"
           ? result.prerequisites
