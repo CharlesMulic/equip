@@ -197,6 +197,14 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   assert.equal(report.workflowContext.workflow, "Release");
   assert.equal(report.workflowContext.runId, "1234567890");
   assert.equal(report.workflowContext.eventName, "push");
+  assert.equal(
+    report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    report.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
 });
 
 test("buildReleaseWorkflowReport marks missing reports explicitly", () => {
@@ -310,6 +318,8 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /## GitHub workflow context/i);
   assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
   assert.match(markdown, /Run ID: `1234567890`/i);
+  assert.match(markdown, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(markdown, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(markdown, /Release Verification: `release-verification-report`/i);
   assert.match(markdown, /## Nested evidence artifacts/i);
   assert.match(markdown, /Changesets Release Result: `changesets-release-result`/i);
@@ -399,6 +409,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -413,6 +425,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -427,6 +441,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -452,6 +468,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -466,6 +484,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -487,6 +507,10 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(assertion.report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(assertion.report.workflowContext.workflow, "Release");
   assert.equal(assertion.report.workflowContext.runId, "1234567890");
+  assert.equal(
+    assertion.report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
   assert.equal(assertion.report.artifactNames.report, "release-workflow-report");
   assert.equal(assertion.report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(assertion.report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
@@ -502,6 +526,10 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(report.workflowContext.workflow, "Release");
   assert.equal(report.workflowContext.runId, "1234567890");
+  assert.equal(
+    report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(report.evidenceArtifactNames.releaseVerificationAssertion, "release-verification-assertion");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseSummary, "changesets-release-summary");
@@ -516,6 +544,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Effective status: `published`/i);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Final assertion/i);
   assert.match(summary, /## Nested evidence artifacts/i);
   assert.match(summary, /Release Verification Pack Tarball: `pack-tarball`/i);
@@ -633,6 +662,8 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -658,6 +689,8 @@ test("assert-release-workflow-report writes a failure artifact when the report i
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
 
   assert.notEqual(result.status, 0);
@@ -671,6 +704,10 @@ test("assert-release-workflow-report writes a failure artifact when the report i
   assert.equal(assertion.report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(assertion.report.workflowContext.workflow, "Release");
   assert.equal(assertion.report.workflowContext.runId, "1234567890");
+  assert.equal(
+    assertion.report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
   assert.match(assertion.assertion.failureDetails.join("\n"), /release workflow report artifact not found/i);
   assert.match(result.stderr || result.stdout, /assertion failed/i);
 });

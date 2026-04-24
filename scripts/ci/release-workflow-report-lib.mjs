@@ -33,19 +33,39 @@ function normalizeWorkflowContext(workflowContext) {
       eventName: "",
       serverUrl: "",
       apiUrl: "",
+      runUrl: "",
+      commitUrl: "",
     };
   }
 
+  const repository = workflowContext.repository || "";
+  const runId = workflowContext.runId || "";
+  const sha = workflowContext.sha || "";
+  const serverUrl = workflowContext.serverUrl || "";
+  const normalizedServerUrl = serverUrl.replace(/\/+$/, "");
+  const runUrl =
+    workflowContext.runUrl ||
+    (normalizedServerUrl && repository && runId
+      ? `${normalizedServerUrl}/${repository}/actions/runs/${runId}`
+      : "");
+  const commitUrl =
+    workflowContext.commitUrl ||
+    (normalizedServerUrl && repository && sha
+      ? `${normalizedServerUrl}/${repository}/commit/${sha}`
+      : "");
+
   return {
-    repository: workflowContext.repository || "",
+    repository,
     workflow: workflowContext.workflow || "",
-    runId: workflowContext.runId || "",
+    runId,
     runAttempt: workflowContext.runAttempt || "",
     ref: workflowContext.ref || "",
-    sha: workflowContext.sha || "",
+    sha,
     eventName: workflowContext.eventName || "",
-    serverUrl: workflowContext.serverUrl || "",
+    serverUrl,
     apiUrl: workflowContext.apiUrl || "",
+    runUrl,
+    commitUrl,
   };
 }
 
@@ -445,6 +465,14 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
 
     if (workflowContext.sha) {
       lines.push(`- SHA: \`${workflowContext.sha}\``);
+    }
+
+    if (workflowContext.runUrl) {
+      lines.push(`- Run URL: \`${workflowContext.runUrl}\``);
+    }
+
+    if (workflowContext.commitUrl) {
+      lines.push(`- Commit URL: \`${workflowContext.commitUrl}\``);
     }
   }
 
