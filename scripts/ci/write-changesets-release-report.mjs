@@ -5,6 +5,7 @@ import {
   buildChangesetsReleaseReport,
   writeChangesetsReleaseReportArtifact,
 } from "./changesets-release-result-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 const resultPath =
   process.env.CHANGESETS_RELEASE_RESULT_PATH ||
@@ -47,6 +48,7 @@ const result =
     stepOutcome: "missing",
     published: false,
     publishedPackages: [],
+    workflowContext: readGitHubWorkflowContext(process.env),
   });
 const assertionArtifact = readOptionalJson(assertionPath);
 const inputs = {
@@ -59,6 +61,7 @@ const report = buildChangesetsReleaseReport({
   result,
   assertionArtifact,
   inputs,
+  workflowContext: readGitHubWorkflowContext(process.env),
   artifacts: {
     resultPath: resolveArtifactPath(resultPath),
     assertionPath: resolveArtifactPath(assertionPath),

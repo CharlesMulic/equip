@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  appendGitHubWorkflowContextSection,
+  normalizeWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 function parseBoolean(value) {
   if (typeof value === "boolean") {
@@ -94,6 +98,7 @@ export function buildChangesetsReleaseResult({
   published = false,
   publishedPackages = [],
   releaseVerificationReport = null,
+  workflowContext = {},
 }) {
   const normalizedPublished = parseBoolean(published) === true;
   const normalizedPackages = parsePublishedPackages(publishedPackages);
@@ -132,6 +137,7 @@ export function buildChangesetsReleaseResult({
     })),
     summary,
     skipReason: status === "skipped" ? summary : "",
+    workflowContext: normalizeWorkflowContext(workflowContext),
     inputs: {
       hasReleaseVerificationReport: !!releaseVerificationReport,
     },
@@ -193,6 +199,7 @@ export function buildChangesetsReleaseSummaryMarkdown({
   assertionArtifact = null,
   artifactNames = {},
   inputs = {},
+  workflowContext = null,
 }) {
   const normalizedResult =
     result ||
@@ -233,6 +240,10 @@ export function buildChangesetsReleaseSummaryMarkdown({
   }
 
   lines.push(...buildAssertionSummaryLines(assertionArtifact));
+  appendGitHubWorkflowContextSection(
+    lines,
+    workflowContext || assertionArtifact?.workflowContext || normalizedResult?.workflowContext,
+  );
 
   const normalizedArtifactNames = normalizeArtifactNames(artifactNames);
   const artifactEntries = Object.entries(normalizedArtifactNames).filter(([, value]) => value);
@@ -256,6 +267,7 @@ export function buildChangesetsReleaseReport({
   artifacts = {},
   artifactNames = {},
   inputs = {},
+  workflowContext = null,
   generatedAt = new Date().toISOString(),
 }) {
   const normalizedResult =
@@ -318,6 +330,9 @@ export function buildChangesetsReleaseReport({
             : [],
         }
       : null,
+    workflowContext: normalizeWorkflowContext(
+      workflowContext || assertionArtifact?.workflowContext || normalizedResult?.workflowContext,
+    ),
     inputs: normalizedInputs,
     artifacts: normalizeArtifactPaths(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
@@ -330,6 +345,7 @@ export function appendChangesetsReleaseSummary({
   assertionArtifact = null,
   artifactNames = {},
   inputs = {},
+  workflowContext = null,
 }) {
   if (!summaryPath) {
     return;
@@ -337,7 +353,13 @@ export function appendChangesetsReleaseSummary({
 
   fs.appendFileSync(
     summaryPath,
-    buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact, artifactNames, inputs }),
+    buildChangesetsReleaseSummaryMarkdown({
+      result,
+      assertionArtifact,
+      artifactNames,
+      inputs,
+      workflowContext,
+    }),
     "utf8",
   );
 }
@@ -348,6 +370,7 @@ export function writeChangesetsReleaseAssertionArtifact({
   artifacts = {},
   artifactNames = {},
   inputs = {},
+  workflowContext = null,
   outPath,
 }) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -389,6 +412,7 @@ export function writeChangesetsReleaseAssertionArtifact({
         ? normalizedResult.publishedPackages
         : [],
     },
+    workflowContext: normalizeWorkflowContext(workflowContext || normalizedResult?.workflowContext),
     inputs: normalizedInputs,
     artifacts: normalizeArtifactPaths(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),

@@ -4,6 +4,7 @@ import {
   buildChangesetsReleaseResult,
   writeChangesetsReleaseResultArtifact,
 } from "./changesets-release-result-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 const outputPath =
   process.env.CHANGESETS_RELEASE_RESULT_PATH ||
@@ -28,6 +29,7 @@ const result = buildChangesetsReleaseResult({
   published: process.env.CHANGESETS_PUBLISHED || "",
   publishedPackages: process.env.CHANGESETS_PUBLISHED_PACKAGES || "",
   releaseVerificationReport: readOptionalJson(releaseVerificationReportPath),
+  workflowContext: readGitHubWorkflowContext(process.env),
 });
 
 writeChangesetsReleaseResultArtifact({

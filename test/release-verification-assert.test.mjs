@@ -24,6 +24,20 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+function createWorkflowEnv() {
+  return {
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
+  };
+}
+
 test("assert-release-verification-report passes healthy rollups", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
   const reportPath = path.join(root, "release-verification-report.json");
@@ -83,6 +97,15 @@ test("assert-release-verification-report passes healthy rollups", () => {
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
+    workflowContext: {
+      repository: "CharlesMulic/equip",
+      workflow: "Release",
+      runId: "1234567890",
+      serverUrl: "https://github.com",
+      sha: "abcdef1234567890",
+      runUrl: "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+      commitUrl: "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+    },
   });
 
   const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
@@ -113,6 +136,11 @@ test("assert-release-verification-report passes healthy rollups", () => {
   });
   assert.equal(assertion.releaseBootstrap.status, "passed");
   assert.equal(assertion.releasePreflight.status, "passed");
+  assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(
+    assertion.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
   assert.equal(assertion.package.tarballFileName, "cg3-equip-0.17.7.tgz");
   assert.equal(assertion.package.artifacts.logPath, ".generated/release/pack-verification.log");
   assert.equal(assertion.tarballSmoke.artifacts.logPath, ".generated/release/pack-install-smoke.log");
@@ -127,6 +155,28 @@ test("assert-release-verification-report passes healthy rollups", () => {
   assert.match(summary, /Outcome: `passed`/i);
   assert.match(summary, /package: `passed`/i);
   assert.match(summary, /dockerAcceptance: `passed`/i);
+});
+
+test("assert-release-verification-report preserves workflow context when the report is missing", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
+  const reportPath = path.join(root, "missing-release-verification-report.json");
+  const assertionPath = path.join(root, "release-verification-assertion.json");
+
+  const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
+    RELEASE_VERIFICATION_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+    ...createWorkflowEnv(),
+  });
+
+  assert.notEqual(result.status, 0);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.equal(assertion.outcome, "failed");
+  assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.workflowContext.workflow, "Release");
+  assert.equal(
+    assertion.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
 });
 
 test("assert-release-verification-report can skip step summary output when requested", () => {

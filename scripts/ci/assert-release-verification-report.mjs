@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  normalizeWorkflowContext,
+  readGitHubWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 function formatStatusMap(statusMap) {
   return Object.entries(statusMap)
@@ -180,6 +184,7 @@ function buildAssertionResult({
   reportPath,
   assertionPath,
   report,
+  workflowContext = {},
   outcome,
   failureDetails = [],
   error = "",
@@ -199,6 +204,7 @@ function buildAssertionResult({
     overallStatus: report?.overallStatus || "unknown",
     components: componentStatuses,
     inputs: normalizeInputs(report?.inputs),
+    workflowContext: normalizeWorkflowContext(report?.workflowContext || workflowContext),
     releaseBootstrap: report?.releaseBootstrap || null,
     releasePreflight: report?.releasePreflight || null,
     package: report?.package
@@ -250,6 +256,7 @@ function main() {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY || "";
   const appendStepSummary =
     (process.env.RELEASE_VERIFICATION_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
+  const workflowContext = readGitHubWorkflowContext(process.env);
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   const componentStatuses = {
     package: report?.package?.status || "unknown",
@@ -279,6 +286,7 @@ function main() {
     reportPath,
     assertionPath,
     report,
+    workflowContext,
     outcome: "passed",
   });
   writeAssertionArtifact(assertionPath, assertionResult);
@@ -304,11 +312,13 @@ try {
     : null;
   const appendStepSummary =
     (process.env.RELEASE_VERIFICATION_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
+  const workflowContext = readGitHubWorkflowContext(process.env);
   const failureDetails = report ? buildFailureDetails(report) : [];
   const assertionResult = buildAssertionResult({
     reportPath,
     assertionPath,
     report,
+    workflowContext,
     outcome: "failed",
     failureDetails,
     error: error.message,

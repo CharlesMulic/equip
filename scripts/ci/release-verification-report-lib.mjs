@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  appendGitHubWorkflowContextSection,
+  normalizeWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 function normalizeArtifacts(artifacts) {
   if (!artifacts || typeof artifacts !== "object") {
@@ -403,6 +407,7 @@ export function buildReleaseVerificationReport({
   assertion = null,
   artifacts = {},
   artifactNames = {},
+  workflowContext = {},
   generatedAt = new Date().toISOString(),
 }) {
   const packageSection = buildPackageSection(
@@ -434,6 +439,7 @@ export function buildReleaseVerificationReport({
     overallStatus,
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    workflowContext: normalizeWorkflowContext(workflowContext),
     inputs: {
       hasReleaseBootstrapResult: !!releaseBootstrapResult,
       hasReleasePreflightResult: !!releasePreflightResult,
@@ -557,6 +563,7 @@ export function buildReleaseVerificationSummaryMarkdown({
     lines.push(`- Docker run log: \`${report.dockerAcceptance.artifacts.runLogPath}\``);
   }
 
+  appendGitHubWorkflowContextSection(lines, report.workflowContext);
   appendArtifactNamesSection(lines, report.artifactNames || {});
 
   if (assertion && typeof assertion === "object") {

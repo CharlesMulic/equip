@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  appendGitHubWorkflowContextSection,
+  normalizeWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 function normalizeArtifacts(artifacts) {
   if (!artifacts || typeof artifacts !== "object") {
@@ -19,54 +23,6 @@ function normalizeArtifactNames(artifactNames) {
   return Object.fromEntries(
     Object.entries(artifactNames).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
   );
-}
-
-function normalizeWorkflowContext(workflowContext) {
-  if (!workflowContext || typeof workflowContext !== "object") {
-    return {
-      repository: "",
-      workflow: "",
-      runId: "",
-      runAttempt: "",
-      ref: "",
-      sha: "",
-      eventName: "",
-      serverUrl: "",
-      apiUrl: "",
-      runUrl: "",
-      commitUrl: "",
-    };
-  }
-
-  const repository = workflowContext.repository || "";
-  const runId = workflowContext.runId || "";
-  const sha = workflowContext.sha || "";
-  const serverUrl = workflowContext.serverUrl || "";
-  const normalizedServerUrl = serverUrl.replace(/\/+$/, "");
-  const runUrl =
-    workflowContext.runUrl ||
-    (normalizedServerUrl && repository && runId
-      ? `${normalizedServerUrl}/${repository}/actions/runs/${runId}`
-      : "");
-  const commitUrl =
-    workflowContext.commitUrl ||
-    (normalizedServerUrl && repository && sha
-      ? `${normalizedServerUrl}/${repository}/commit/${sha}`
-      : "");
-
-  return {
-    repository,
-    workflow: workflowContext.workflow || "",
-    runId,
-    runAttempt: workflowContext.runAttempt || "",
-    ref: workflowContext.ref || "",
-    sha,
-    eventName: workflowContext.eventName || "",
-    serverUrl,
-    apiUrl: workflowContext.apiUrl || "",
-    runUrl,
-    commitUrl,
-  };
 }
 
 function prefixArtifactEntries(prefix, artifacts) {
@@ -427,54 +383,7 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
     }
   }
 
-  const workflowContext = report.workflowContext || {};
-  if (
-    workflowContext.repository ||
-    workflowContext.workflow ||
-    workflowContext.runId ||
-    workflowContext.runAttempt ||
-    workflowContext.ref ||
-    workflowContext.sha ||
-    workflowContext.eventName
-  ) {
-    lines.push("", "## GitHub workflow context", "");
-
-    if (workflowContext.repository) {
-      lines.push(`- Repository: \`${workflowContext.repository}\``);
-    }
-
-    if (workflowContext.workflow) {
-      lines.push(`- Workflow: \`${workflowContext.workflow}\``);
-    }
-
-    if (workflowContext.runId) {
-      lines.push(`- Run ID: \`${workflowContext.runId}\``);
-    }
-
-    if (workflowContext.runAttempt) {
-      lines.push(`- Run attempt: \`${workflowContext.runAttempt}\``);
-    }
-
-    if (workflowContext.eventName) {
-      lines.push(`- Event: \`${workflowContext.eventName}\``);
-    }
-
-    if (workflowContext.ref) {
-      lines.push(`- Ref: \`${workflowContext.ref}\``);
-    }
-
-    if (workflowContext.sha) {
-      lines.push(`- SHA: \`${workflowContext.sha}\``);
-    }
-
-    if (workflowContext.runUrl) {
-      lines.push(`- Run URL: \`${workflowContext.runUrl}\``);
-    }
-
-    if (workflowContext.commitUrl) {
-      lines.push(`- Commit URL: \`${workflowContext.commitUrl}\``);
-    }
-  }
+  appendGitHubWorkflowContextSection(lines, report.workflowContext);
 
   const artifactEntries = Object.entries(report.artifactNames || {}).filter(([, value]) => value);
   if (artifactEntries.length > 0) {

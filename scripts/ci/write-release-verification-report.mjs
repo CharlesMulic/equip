@@ -5,6 +5,7 @@ import {
   buildReleaseVerificationReport,
   rebaseReleaseVerificationInputs,
 } from "./release-verification-report-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 const packVerificationPath = process.env.PACK_VERIFICATION_PATH;
 const packInstallSmokePath = process.env.PACK_INSTALL_SMOKE_PATH;
@@ -74,6 +75,7 @@ const report = buildReleaseVerificationReport({
   packInstallSmoke: rebasedInputs.packInstallSmoke,
   dockerAcceptance: rebasedInputs.dockerAcceptance,
   assertion,
+  workflowContext: readGitHubWorkflowContext(process.env),
   artifacts: {
     reportPath: path.resolve(outputPath),
     assertionPath: fs.existsSync(assertionPath) ? path.resolve(assertionPath) : "",

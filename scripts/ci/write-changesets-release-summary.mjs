@@ -5,6 +5,7 @@ import {
   buildChangesetsReleaseResult,
   buildChangesetsReleaseSummaryMarkdown,
 } from "./changesets-release-result-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 const resultPath =
   process.env.CHANGESETS_RELEASE_RESULT_PATH ||
@@ -31,6 +32,7 @@ const result =
     stepOutcome: "missing",
     published: false,
     publishedPackages: [],
+    workflowContext: readGitHubWorkflowContext(process.env),
   });
 const assertionArtifact = fs.existsSync(assertionPath)
   ? JSON.parse(fs.readFileSync(assertionPath, "utf8"))
@@ -52,6 +54,7 @@ const markdown = buildChangesetsReleaseSummaryMarkdown({
   assertionArtifact,
   artifactNames,
   inputs,
+  workflowContext: readGitHubWorkflowContext(process.env),
 });
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -63,6 +66,7 @@ appendChangesetsReleaseSummary({
   assertionArtifact,
   artifactNames,
   inputs,
+  workflowContext: readGitHubWorkflowContext(process.env),
 });
 
 console.log(`[changesets-release] wrote summary ${outputPath}`);

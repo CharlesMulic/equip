@@ -10,6 +10,20 @@ import {
   rebaseReleaseVerificationInputs,
 } from "../scripts/ci/release-verification-report-lib.mjs";
 
+function createWorkflowContext() {
+  return {
+    repository: "CharlesMulic/equip",
+    workflow: "Release",
+    runId: "1234567890",
+    runAttempt: "2",
+    ref: "refs/heads/main",
+    sha: "abcdef1234567890",
+    eventName: "push",
+    serverUrl: "https://github.com",
+    apiUrl: "https://api.github.com",
+  };
+}
+
 test("buildReleaseVerificationReport marks the rollup passed when all component gates pass", () => {
   const report = buildReleaseVerificationReport({
     packVerification: {
@@ -73,6 +87,7 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
+    workflowContext: createWorkflowContext(),
   });
 
   assert.equal(report.overallStatus, "passed");
@@ -87,6 +102,16 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
   assert.equal(report.artifactNames.packVerification, "pack-verification");
   assert.equal(report.artifactNames.dockerAcceptance, "docker-acceptance");
   assert.equal(report.artifactNames.report, "release-verification-report");
+  assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(report.workflowContext.workflow, "Release");
+  assert.equal(
+    report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    report.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
 });
 
 test("buildReleaseVerificationReport marks the rollup failed when any component gate fails", () => {
@@ -253,6 +278,7 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
+    workflowContext: createWorkflowContext(),
   });
 
   appendReleaseVerificationSummary({
@@ -266,6 +292,9 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
   assert.match(summary, /Docker report: `\.generated\/docker-acceptance\/docker-acceptance-report\.json`/i);
   assert.match(summary, /Docker build log: `\.generated\/docker-acceptance\/docker-build\.log`/i);
   assert.match(summary, /Docker run log: `\.generated\/docker-acceptance\/docker-run\.log`/i);
+  assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /Pack Verification: `pack-verification`/i);
   assert.match(summary, /Summary: `release-verification-summary`/i);

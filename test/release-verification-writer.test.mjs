@@ -24,6 +24,20 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+function createWorkflowEnv() {
+  return {
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
+  };
+}
+
 test("write-release-verification-summary writes a markdown artifact with the final assertion", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-summary-writer-"));
   const reportPath = path.join(root, "release-verification-report.json");
@@ -63,6 +77,15 @@ test("write-release-verification-summary writes a markdown artifact with the fin
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
+    workflowContext: {
+      repository: "CharlesMulic/equip",
+      workflow: "Release",
+      runId: "1234567890",
+      serverUrl: "https://github.com",
+      sha: "abcdef1234567890",
+      runUrl: "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+      commitUrl: "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+    },
   });
 
   writeJson(assertionPath, {
@@ -93,6 +116,8 @@ test("write-release-verification-summary writes a markdown artifact with the fin
   const stepSummary = fs.readFileSync(stepSummaryPath, "utf8");
   assert.match(result.stdout, /wrote summary/i);
   assert.match(summary, /## Release verification rollup/i);
+  assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /Pack Tarball: `pack-tarball`/i);
   assert.match(summary, /## Final assertion/i);
@@ -155,6 +180,7 @@ test("write-release-verification-report can rewrite a final report without dupli
     RELEASE_VERIFICATION_SUMMARY_ARTIFACT_NAME: "release-verification-summary",
     RELEASE_VERIFICATION_APPEND_STEP_SUMMARY: "false",
     GITHUB_STEP_SUMMARY: stepSummaryPath,
+    ...createWorkflowEnv(),
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -169,6 +195,11 @@ test("write-release-verification-report can rewrite a final report without dupli
   assert.equal(report.artifactNames.report, "release-verification-report");
   assert.equal(report.artifactNames.assertion, "release-verification-assertion");
   assert.equal(report.artifactNames.summary, "release-verification-summary");
+  assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(
+    report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
   assert.equal(report.assertion?.outcome, "passed");
   assert.equal(stepSummary, "## Existing step summary\n");
 });
