@@ -31,12 +31,21 @@ test("buildReleaseBootstrapResult marks passing install step as passed", () => {
       resultPath: "/tmp/release-bootstrap-result.json",
       summaryPath: "/tmp/release-bootstrap-summary.md",
     },
+    workflowContext: {
+      repository: "CharlesMulic/equip",
+      workflow: "Release",
+      runId: "123",
+      sha: "abcdef123456",
+      serverUrl: "https://github.com",
+    },
   });
 
   assert.equal(result.kind, "equip-release-bootstrap-result");
   assert.equal(result.overallStatus, "passed");
   assert.equal(result.steps.install.status, "passed");
   assert.match(result.summary, /dependency install passed/i);
+  assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(result.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/123");
 });
 
 test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
@@ -51,6 +60,13 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
       artifacts: {
         logPath: "/tmp/release-bootstrap.log",
       },
+      workflowContext: {
+        repository: "CharlesMulic/equip",
+        workflow: "Release",
+        runId: "123",
+        sha: "abcdef123456",
+        serverUrl: "https://github.com",
+      },
     }),
   });
 
@@ -59,6 +75,8 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
   assert.match(markdown, /Exit code: `2`/i);
   assert.match(markdown, /dependency install failed/i);
   assert.match(markdown, /logPath:/i);
+  assert.match(markdown, /## GitHub workflow context/i);
+  assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
 });
 
 test("run-release-bootstrap writes passing artifacts for synthetic success commands", () => {
@@ -76,6 +94,11 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
     RELEASE_BOOTSTRAP_LOG_PATH: logPath,
     RELEASE_BOOTSTRAP_EXECUTABLE: process.execPath,
     RELEASE_BOOTSTRAP_ARGS_JSON: JSON.stringify([installScriptPath]),
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "123",
+    GITHUB_SHA: "abcdef123456",
+    GITHUB_SERVER_URL: "https://github.com",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -85,7 +108,10 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
 
   assert.equal(artifact.overallStatus, "passed");
   assert.equal(artifact.steps.install.status, "passed");
+  assert.equal(artifact.workflowContext.workflow, "Release");
+  assert.equal(artifact.workflowContext.commitUrl, "https://github.com/CharlesMulic/equip/commit/abcdef123456");
   assert.match(summary, /Overall status: `passed`/i);
+  assert.match(summary, /## GitHub workflow context/i);
   assert.match(log, /synthetic install ok/i);
 });
 

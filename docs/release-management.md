@@ -47,6 +47,7 @@ On pushes to `main` it:
    - `.generated/release/release-bootstrap-result.json`
    - `.generated/release/release-bootstrap-summary.md`
    - `.generated/release/release-bootstrap.log`
+   and now carries the GitHub workflow context for that run (repository/workflow/run/ref/sha/event plus derived run/commit URLs)
    and uploads them as the `release-bootstrap` evidence bundle even when dependency install fails
 2. runs `node scripts/ci/run-release-preflight.mjs`
    which captures the release workflow's `build` and `npm test` phases into:
@@ -54,6 +55,7 @@ On pushes to `main` it:
    - `.generated/release/release-preflight-summary.md`
    - `.generated/release/release-preflight-build.log`
    - `.generated/release/release-preflight-test.log`
+   and now carries the GitHub workflow context for that run (repository/workflow/run/ref/sha/event plus derived run/commit URLs)
    and uploads them as the `release-preflight` evidence bundle even when one of those early phases fails
    but only if the bootstrap lane passed
 3. runs `npm run test:docker:acceptance`

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildReleasePreflightResult, writeReleasePreflightArtifacts } from "./release-preflight-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 function parseArgs(rawValue, fallback) {
   if (!rawValue) {
@@ -123,6 +124,7 @@ const result = buildReleasePreflightResult({
     buildLogPath: path.resolve(buildLogPath),
     testLogPath: path.resolve(testLogPath),
   },
+  workflowContext: readGitHubWorkflowContext(process.env),
 });
 
 writeReleasePreflightArtifacts({

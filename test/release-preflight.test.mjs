@@ -37,6 +37,13 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
       resultPath: "/tmp/release-preflight-result.json",
       summaryPath: "/tmp/release-preflight-summary.md",
     },
+    workflowContext: {
+      repository: "CharlesMulic/equip",
+      workflow: "Release",
+      runId: "456",
+      sha: "fedcba654321",
+      serverUrl: "https://github.com",
+    },
   });
 
   assert.equal(result.kind, "equip-release-preflight-result");
@@ -44,6 +51,8 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
   assert.equal(result.phases.build.status, "passed");
   assert.equal(result.phases.test.status, "passed");
   assert.match(result.summary, /build passed; test passed/i);
+  assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(result.workflowContext.commitUrl, "https://github.com/CharlesMulic/equip/commit/fedcba654321");
 });
 
 test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
@@ -65,6 +74,13 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
         buildLogPath: "/tmp/release-preflight-build.log",
         testLogPath: "/tmp/release-preflight-test.log",
       },
+      workflowContext: {
+        repository: "CharlesMulic/equip",
+        workflow: "Release",
+        runId: "456",
+        sha: "fedcba654321",
+        serverUrl: "https://github.com",
+      },
     }),
   });
 
@@ -74,6 +90,8 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
   assert.match(markdown, /## Test/i);
   assert.match(markdown, /test skipped because build preflight failed/i);
   assert.match(markdown, /buildLogPath:/i);
+  assert.match(markdown, /## GitHub workflow context/i);
+  assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });
 
 test("run-release-preflight writes passing artifacts for synthetic success commands", () => {
@@ -97,6 +115,11 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
     RELEASE_PREFLIGHT_BUILD_ARGS_JSON: JSON.stringify([buildScriptPath]),
     RELEASE_PREFLIGHT_TEST_EXECUTABLE: process.execPath,
     RELEASE_PREFLIGHT_TEST_ARGS_JSON: JSON.stringify([testScriptPath]),
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "456",
+    GITHUB_SHA: "fedcba654321",
+    GITHUB_SERVER_URL: "https://github.com",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -108,7 +131,9 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.equal(artifact.overallStatus, "passed");
   assert.equal(artifact.phases.build.status, "passed");
   assert.equal(artifact.phases.test.status, "passed");
+  assert.equal(artifact.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/456");
   assert.match(summary, /Overall status: `passed`/i);
+  assert.match(summary, /## GitHub workflow context/i);
   assert.match(buildLog, /synthetic build ok/i);
   assert.match(testLog, /synthetic test ok/i);
 });

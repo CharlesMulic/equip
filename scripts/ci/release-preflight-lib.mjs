@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  appendGitHubWorkflowContextSection,
+  normalizeWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 function normalizeArtifacts(artifacts) {
   if (!artifacts || typeof artifacts !== "object") {
@@ -31,6 +35,7 @@ export function buildReleasePreflightResult({
   buildPhase = null,
   testPhase = null,
   artifacts = {},
+  workflowContext = {},
   generatedAt = new Date().toISOString(),
 }) {
   const normalizedBuild = buildPhase || {
@@ -58,6 +63,7 @@ export function buildReleasePreflightResult({
       test: normalizedTest,
     },
     artifacts: normalizeArtifacts(artifacts),
+    workflowContext: normalizeWorkflowContext(workflowContext),
   };
 }
 
@@ -98,6 +104,8 @@ export function buildReleasePreflightSummaryMarkdown({ result }) {
       lines.push(`- ${name}: ${artifactPath}`);
     }
   }
+
+  appendGitHubWorkflowContextSection(lines, result.workflowContext);
 
   return `${lines.join("\n")}\n`;
 }

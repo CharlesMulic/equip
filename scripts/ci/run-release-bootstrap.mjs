@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildReleaseBootstrapResult, writeReleaseBootstrapArtifacts } from "./release-bootstrap-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 function parseArgs(rawValue, fallback) {
   if (!rawValue) {
@@ -94,6 +95,7 @@ const result = buildReleaseBootstrapResult({
     summaryPath: path.resolve(summaryPath),
     logPath: path.resolve(logPath),
   },
+  workflowContext: readGitHubWorkflowContext(process.env),
 });
 
 writeReleaseBootstrapArtifacts({
