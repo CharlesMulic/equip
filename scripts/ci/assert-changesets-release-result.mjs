@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { writeChangesetsReleaseAssertionArtifact } from "./changesets-release-result-lib.mjs";
+import {
+  buildChangesetsReleaseResult,
+  writeChangesetsReleaseAssertionArtifact,
+} from "./changesets-release-result-lib.mjs";
 
 const resultPath =
   process.env.CHANGESETS_RELEASE_RESULT_PATH ||
@@ -27,13 +30,25 @@ const artifactNames = {
   report: process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "",
 };
 
-if (!fs.existsSync(resultPath)) {
-  throw new Error(`Changesets release result artifact not found: ${resultPath}`);
-}
-
-const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+const hasResultArtifact = fs.existsSync(resultPath);
+const result = hasResultArtifact
+  ? JSON.parse(fs.readFileSync(resultPath, "utf8"))
+  : buildChangesetsReleaseResult({
+      stepOutcome: "missing",
+      published: false,
+      publishedPackages: [],
+    });
+const inputs = {
+  hasResultArtifact,
+  hasAssertionArtifact: false,
+  hasReleaseVerificationReport: !!result?.inputs?.hasReleaseVerificationReport,
+};
 
 try {
+  if (!hasResultArtifact) {
+    throw new Error(`Changesets release result artifact not found: ${resultPath}`);
+  }
+
   if (result.stepOutcome !== "success") {
     const detail =
       result.status === "skipped" && result.skipReason
@@ -48,6 +63,7 @@ try {
     result,
     artifacts,
     artifactNames,
+    inputs,
     assertion: {
       outcome: "passed",
       resultPath: path.resolve(resultPath),
@@ -66,6 +82,7 @@ try {
     result,
     artifacts,
     artifactNames,
+    inputs,
     assertion: {
       outcome: "failed",
       resultPath: path.resolve(resultPath),

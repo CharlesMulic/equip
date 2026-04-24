@@ -64,6 +64,19 @@ test("buildChangesetsReleaseResult marks skipped runs explicitly when verificati
   assert.equal(result.skipReason, result.summary);
 });
 
+test("buildChangesetsReleaseResult marks missing artifacts explicitly", () => {
+  const result = buildChangesetsReleaseResult({
+    stepOutcome: "missing",
+    published: false,
+    publishedPackages: [],
+  });
+
+  assert.equal(result.stepOutcome, "missing");
+  assert.equal(result.status, "missing");
+  assert.equal(result.published, false);
+  assert.match(result.summary, /result artifact missing/i);
+});
+
 test("write-changesets-release-result writes an artifact and appends summary output", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
   const resultPath = path.join(root, "changesets-release-result.json");
@@ -224,6 +237,9 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
   assert.equal(report.kind, "equip-changesets-release-report");
   assert.equal(report.status, "published");
   assert.equal(report.effectiveStatus, "published");
+  assert.equal(report.inputs.hasResultArtifact, true);
+  assert.equal(report.inputs.hasAssertionArtifact, true);
+  assert.equal(report.inputs.hasReleaseVerificationReport, false);
   assert.equal(report.result.status, "published");
   assert.equal(report.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(report.result.publishedPackages[0].name, "@cg3/equip");
@@ -264,6 +280,8 @@ test("buildChangesetsReleaseReport preserves skipped lane status when assertion 
 
   assert.equal(report.status, "skipped");
   assert.equal(report.effectiveStatus, "failed");
+  assert.equal(report.inputs.hasResultArtifact, true);
+  assert.equal(report.inputs.hasAssertionArtifact, true);
   assert.equal(report.result.status, "skipped");
   assert.equal(report.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(report.assertion.outcome, "failed");
@@ -540,6 +558,8 @@ test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict"
   assert.equal(artifact.kind, "equip-changesets-release-assertion");
   assert.equal(artifact.status, "completed");
   assert.equal(artifact.effectiveStatus, "completed");
+  assert.equal(artifact.inputs.hasResultArtifact, true);
+  assert.equal(artifact.inputs.hasAssertionArtifact, false);
   assert.equal(artifact.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(artifact.artifacts.summaryPath, summaryPath);
   assert.equal(artifact.artifactNames.report, "changesets-release-report");
@@ -582,6 +602,8 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
   assert.equal(assertion.assertion.outcome, "passed");
   assert.equal(assertion.status, "published");
   assert.equal(assertion.effectiveStatus, "published");
+  assert.equal(assertion.inputs.hasResultArtifact, true);
+  assert.equal(assertion.inputs.hasAssertionArtifact, false);
   assert.equal(assertion.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.assertion.published, true);
   assert.equal(assertion.assertion.publishedPackages[0].name, "@cg3/equip");
@@ -622,6 +644,8 @@ test("assert-changesets-release-result preserves self-contained evidence pointer
   assert.equal(assertion.assertion.outcome, "failed");
   assert.equal(assertion.status, "failed");
   assert.equal(assertion.effectiveStatus, "failed");
+  assert.equal(assertion.inputs.hasResultArtifact, true);
+  assert.equal(assertion.inputs.hasAssertionArtifact, false);
   assert.equal(assertion.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.artifacts.reportPath, path.resolve(reportPath));
   assert.equal(assertion.artifactNames.summary, "changesets-release-summary");
@@ -686,4 +710,93 @@ test("changesets release artifacts preserve verification input presence when pro
 
   assert.equal(report.result.inputs.hasReleaseVerificationReport, true);
   assert.equal(assertion.result.inputs.hasReleaseVerificationReport, true);
+});
+
+test("assert-changesets-release-result writes a failure artifact when the result artifact is missing", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
+  const resultPath = path.join(root, "missing-changesets-release-result.json");
+  const assertionPath = path.join(root, "changesets-release-assertion.json");
+  const summaryPath = path.join(root, "changesets-release-summary.md");
+  const reportPath = path.join(root, "changesets-release-report.json");
+
+  const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
+    CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
+    CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
+    CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr || result.stdout, /result artifact not found/i);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.equal(assertion.assertion.outcome, "failed");
+  assert.equal(assertion.status, "missing");
+  assert.equal(assertion.effectiveStatus, "failed");
+  assert.equal(assertion.inputs.hasResultArtifact, false);
+  assert.equal(assertion.inputs.hasAssertionArtifact, false);
+  assert.equal(assertion.result.stepOutcome, "missing");
+  assert.match(assertion.assertion.error, /result artifact not found/i);
+});
+
+test("write-changesets-release-summary and report still render when the result artifact is missing", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-changesets-release-"));
+  const resultPath = path.join(root, "missing-changesets-release-result.json");
+  const assertionPath = path.join(root, "changesets-release-assertion.json");
+  const summaryPath = path.join(root, "changesets-release-summary.md");
+  const reportPath = path.join(root, "changesets-release-report.json");
+
+  fs.writeFileSync(
+    assertionPath,
+    `${JSON.stringify({
+      kind: "equip-changesets-release-assertion",
+      status: "missing",
+      effectiveStatus: "failed",
+      assertion: {
+        outcome: "failed",
+        status: "missing",
+        published: false,
+        error: "Changesets release result artifact not found",
+        publishedPackages: [],
+      },
+    }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const summaryResult = runScript("scripts/ci/write-changesets-release-summary.mjs", {
+    CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
+    CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
+    CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+  });
+
+  const reportResult = runScript("scripts/ci/write-changesets-release-report.mjs", {
+    CHANGESETS_RELEASE_RESULT_PATH: resultPath,
+    CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
+    CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
+    CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+  });
+
+  assert.equal(summaryResult.status, 0, summaryResult.stderr || summaryResult.stdout);
+  assert.equal(reportResult.status, 0, reportResult.stderr || reportResult.stdout);
+
+  const summary = fs.readFileSync(summaryPath, "utf8");
+  const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+  assert.match(summary, /Outcome: `missing`/i);
+  assert.match(summary, /## Input presence/i);
+  assert.match(summary, /Result artifact: `missing`/i);
+  assert.equal(report.status, "missing");
+  assert.equal(report.effectiveStatus, "failed");
+  assert.equal(report.inputs.hasResultArtifact, false);
+  assert.equal(report.inputs.hasAssertionArtifact, true);
 });

@@ -44,6 +44,10 @@ function parsePublishedPackages(value) {
 }
 
 function buildSummary({ stepOutcome, published, publishedPackages }) {
+  if (stepOutcome === "missing") {
+    return "changesets release result artifact missing; inspect earlier release workflow steps";
+  }
+
   if (stepOutcome !== "success") {
     return "changesets release step failed; inspect workflow logs for the underlying error";
   }
@@ -70,6 +74,21 @@ function buildSkipSummary({ releaseVerificationReport }) {
   return "changesets release step skipped before execution";
 }
 
+function normalizeChangesetsReleaseInputs(inputs, { result = null, assertionArtifact = null } = {}) {
+  return {
+    hasResultArtifact:
+      typeof inputs?.hasResultArtifact === "boolean" ? inputs.hasResultArtifact : !!result,
+    hasAssertionArtifact:
+      typeof inputs?.hasAssertionArtifact === "boolean"
+        ? inputs.hasAssertionArtifact
+        : !!assertionArtifact,
+    hasReleaseVerificationReport:
+      typeof inputs?.hasReleaseVerificationReport === "boolean"
+        ? inputs.hasReleaseVerificationReport
+        : !!result?.inputs?.hasReleaseVerificationReport,
+  };
+}
+
 export function buildChangesetsReleaseResult({
   stepOutcome = "",
   published = false,
@@ -81,6 +100,7 @@ export function buildChangesetsReleaseResult({
   const normalizedOutcome = typeof stepOutcome === "string" ? stepOutcome : "";
   const normalizedVerificationStatus = releaseVerificationReport?.overallStatus || "";
   const isSkipped = normalizedOutcome === "skipped";
+  const isMissing = normalizedOutcome === "missing";
   const status =
     normalizedOutcome === "success"
       ? normalizedPublished
@@ -88,10 +108,13 @@ export function buildChangesetsReleaseResult({
         : "completed"
       : isSkipped
         ? "skipped"
+      : isMissing
+        ? "missing"
         : "failed";
-  const summary = isSkipped
-    ? buildSkipSummary({ releaseVerificationReport })
-    : buildSummary({
+  const summary =
+    isSkipped
+      ? buildSkipSummary({ releaseVerificationReport })
+      : buildSummary({
         stepOutcome: normalizedOutcome,
         published: normalizedPublished,
         publishedPackages: normalizedPackages,
@@ -169,21 +192,44 @@ export function buildChangesetsReleaseSummaryMarkdown({
   result,
   assertionArtifact = null,
   artifactNames = {},
+  inputs = {},
 }) {
+  const normalizedResult =
+    result ||
+    buildChangesetsReleaseResult({
+      stepOutcome: "missing",
+      published: false,
+      publishedPackages: [],
+    });
+  const normalizedInputs = normalizeChangesetsReleaseInputs(inputs, {
+    result,
+    assertionArtifact,
+  });
   const lines = [
     "## Changesets release result",
     "",
-    `- Outcome: \`${result.stepOutcome}\``,
-    `- Status: \`${result.status}\``,
-    `- Published: \`${result.published ? "yes" : "no"}\``,
-    `- Summary: ${result.summary}`,
+    `- Outcome: \`${normalizedResult.stepOutcome}\``,
+    `- Status: \`${normalizedResult.status}\``,
+    `- Published: \`${normalizedResult.published ? "yes" : "no"}\``,
+    `- Summary: ${normalizedResult.summary}`,
   ];
 
-  if (result.publishedPackages.length > 0) {
+  if (normalizedResult.publishedPackages.length > 0) {
     lines.push("", "| Package | Version |", "| --- | --- |");
-    for (const pkg of result.publishedPackages) {
+    for (const pkg of normalizedResult.publishedPackages) {
       lines.push(`| \`${pkg.name}\` | \`${pkg.version}\` |`);
     }
+  }
+
+  if (Object.values(normalizedInputs).some((value) => !value)) {
+    lines.push("", "## Input presence", "");
+    lines.push(`- Result artifact: \`${normalizedInputs.hasResultArtifact ? "present" : "missing"}\``);
+    lines.push(
+      `- Assertion artifact: \`${normalizedInputs.hasAssertionArtifact ? "present" : "missing"}\``,
+    );
+    lines.push(
+      `- Release verification report: \`${normalizedInputs.hasReleaseVerificationReport ? "present" : "missing"}\``,
+    );
   }
 
   lines.push(...buildAssertionSummaryLines(assertionArtifact));
@@ -209,9 +255,21 @@ export function buildChangesetsReleaseReport({
   assertionArtifact = null,
   artifacts = {},
   artifactNames = {},
+  inputs = {},
   generatedAt = new Date().toISOString(),
 }) {
-  const resultStatus = result?.status || "unknown";
+  const normalizedResult =
+    result ||
+    buildChangesetsReleaseResult({
+      stepOutcome: "missing",
+      published: false,
+      publishedPackages: [],
+    });
+  const normalizedInputs = normalizeChangesetsReleaseInputs(inputs, {
+    result,
+    assertionArtifact,
+  });
+  const resultStatus = normalizedResult?.status || "unknown";
   const assertionStatus = assertionArtifact?.assertion?.status || "";
 
   return {
@@ -222,25 +280,25 @@ export function buildChangesetsReleaseReport({
       ? "failed"
       : (assertionStatus || resultStatus),
     result: {
-      stepOutcome: result?.stepOutcome || "",
+      stepOutcome: normalizedResult?.stepOutcome || "",
       status: resultStatus,
-      published: !!result?.published,
-      summary: result?.summary || "",
-      skipReason: result?.skipReason || "",
+      published: !!normalizedResult?.published,
+      summary: normalizedResult?.summary || "",
+      skipReason: normalizedResult?.skipReason || "",
       inputs:
-        result?.inputs && typeof result.inputs === "object"
+        normalizedResult?.inputs && typeof normalizedResult.inputs === "object"
           ? {
-              hasReleaseVerificationReport: !!result.inputs.hasReleaseVerificationReport,
+              hasReleaseVerificationReport: !!normalizedResult.inputs.hasReleaseVerificationReport,
             }
           : {
               hasReleaseVerificationReport: false,
             },
       prerequisites:
-        result?.prerequisites && typeof result.prerequisites === "object"
-          ? result.prerequisites
+        normalizedResult?.prerequisites && typeof normalizedResult.prerequisites === "object"
+          ? normalizedResult.prerequisites
           : {},
-      publishedPackages: Array.isArray(result?.publishedPackages)
-        ? result.publishedPackages.map((pkg) => ({
+      publishedPackages: Array.isArray(normalizedResult?.publishedPackages)
+        ? normalizedResult.publishedPackages.map((pkg) => ({
             name: pkg?.name || "",
             version: pkg?.version || "",
           }))
@@ -260,6 +318,7 @@ export function buildChangesetsReleaseReport({
             : [],
         }
       : null,
+    inputs: normalizedInputs,
     artifacts: normalizeArtifactPaths(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
   };
@@ -270,6 +329,7 @@ export function appendChangesetsReleaseSummary({
   result,
   assertionArtifact = null,
   artifactNames = {},
+  inputs = {},
 }) {
   if (!summaryPath) {
     return;
@@ -277,7 +337,7 @@ export function appendChangesetsReleaseSummary({
 
   fs.appendFileSync(
     summaryPath,
-    buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact, artifactNames }),
+    buildChangesetsReleaseSummaryMarkdown({ result, assertionArtifact, artifactNames, inputs }),
     "utf8",
   );
 }
@@ -287,37 +347,49 @@ export function writeChangesetsReleaseAssertionArtifact({
   assertion,
   artifacts = {},
   artifactNames = {},
+  inputs = {},
   outPath,
 }) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  const normalizedResult =
+    result ||
+    buildChangesetsReleaseResult({
+      stepOutcome: "missing",
+      published: false,
+      publishedPackages: [],
+    });
+  const normalizedInputs = normalizeChangesetsReleaseInputs(inputs, { result });
   const artifact = {
     kind: "equip-changesets-release-assertion",
     generatedAt: new Date().toISOString(),
-    status: result?.status || "",
+    status: normalizedResult?.status || "",
     effectiveStatus:
       assertion?.outcome === "failed"
         ? "failed"
-        : (assertion?.status || result?.status || ""),
+        : (assertion?.status || normalizedResult?.status || ""),
     result: {
-      stepOutcome: result?.stepOutcome || "",
-      status: result?.status || "",
-      published: !!result?.published,
-      summary: result?.summary || "",
-      skipReason: result?.skipReason || "",
+      stepOutcome: normalizedResult?.stepOutcome || "",
+      status: normalizedResult?.status || "",
+      published: !!normalizedResult?.published,
+      summary: normalizedResult?.summary || "",
+      skipReason: normalizedResult?.skipReason || "",
       inputs:
-        result?.inputs && typeof result.inputs === "object"
+        normalizedResult?.inputs && typeof normalizedResult.inputs === "object"
           ? {
-              hasReleaseVerificationReport: !!result.inputs.hasReleaseVerificationReport,
+              hasReleaseVerificationReport: !!normalizedResult.inputs.hasReleaseVerificationReport,
             }
           : {
               hasReleaseVerificationReport: false,
             },
       prerequisites:
-        result?.prerequisites && typeof result.prerequisites === "object"
-          ? result.prerequisites
+        normalizedResult?.prerequisites && typeof normalizedResult.prerequisites === "object"
+          ? normalizedResult.prerequisites
           : {},
-      publishedPackages: Array.isArray(result?.publishedPackages) ? result.publishedPackages : [],
+      publishedPackages: Array.isArray(normalizedResult?.publishedPackages)
+        ? normalizedResult.publishedPackages
+        : [],
     },
+    inputs: normalizedInputs,
     artifacts: normalizeArtifactPaths(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
     assertion,

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  buildChangesetsReleaseResult,
   buildChangesetsReleaseReport,
   writeChangesetsReleaseReportArtifact,
 } from "./changesets-release-result-lib.mjs";
@@ -39,16 +40,25 @@ function resolveArtifactPath(filePath) {
   return fs.existsSync(absolutePath) ? absolutePath : "";
 }
 
-if (!fs.existsSync(resultPath)) {
-  throw new Error(`Changesets release result artifact not found: ${resultPath}`);
-}
-
-const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+const resultArtifact = readOptionalJson(resultPath);
+const result =
+  resultArtifact ||
+  buildChangesetsReleaseResult({
+    stepOutcome: "missing",
+    published: false,
+    publishedPackages: [],
+  });
 const assertionArtifact = readOptionalJson(assertionPath);
+const inputs = {
+  hasResultArtifact: !!resultArtifact,
+  hasAssertionArtifact: !!assertionArtifact,
+  hasReleaseVerificationReport: !!result?.inputs?.hasReleaseVerificationReport,
+};
 
 const report = buildChangesetsReleaseReport({
   result,
   assertionArtifact,
+  inputs,
   artifacts: {
     resultPath: resolveArtifactPath(resultPath),
     assertionPath: resolveArtifactPath(assertionPath),

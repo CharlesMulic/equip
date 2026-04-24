@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   appendChangesetsReleaseSummary,
+  buildChangesetsReleaseResult,
   buildChangesetsReleaseSummaryMarkdown,
 } from "./changesets-release-result-lib.mjs";
 
@@ -21,14 +22,24 @@ const reportArtifactName = process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME |
 const appendStepSummary =
   (process.env.CHANGESETS_RELEASE_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
 
-if (!fs.existsSync(resultPath)) {
-  throw new Error(`Changesets release result artifact not found: ${resultPath}`);
-}
-
-const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+const resultArtifact = fs.existsSync(resultPath)
+  ? JSON.parse(fs.readFileSync(resultPath, "utf8"))
+  : null;
+const result =
+  resultArtifact ||
+  buildChangesetsReleaseResult({
+    stepOutcome: "missing",
+    published: false,
+    publishedPackages: [],
+  });
 const assertionArtifact = fs.existsSync(assertionPath)
   ? JSON.parse(fs.readFileSync(assertionPath, "utf8"))
   : null;
+const inputs = {
+  hasResultArtifact: !!resultArtifact,
+  hasAssertionArtifact: !!assertionArtifact,
+  hasReleaseVerificationReport: !!result?.inputs?.hasReleaseVerificationReport,
+};
 const artifactNames = {
   result: resultArtifactName,
   assertion: assertionArtifactName,
@@ -40,6 +51,7 @@ const markdown = buildChangesetsReleaseSummaryMarkdown({
   result,
   assertionArtifact,
   artifactNames,
+  inputs,
 });
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -50,6 +62,7 @@ appendChangesetsReleaseSummary({
   result,
   assertionArtifact,
   artifactNames,
+  inputs,
 });
 
 console.log(`[changesets-release] wrote summary ${outputPath}`);

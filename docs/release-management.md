@@ -91,14 +91,16 @@ On pushes to `main` it:
     while also preserving whether the upstream release-verification report was actually present
 13. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
     so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs,
-    and that assertion artifact now also carries the actual/effective status split, the release-verification input-presence state, plus the summary/report evidence paths and artifact names
+    and that assertion artifact now also carries the actual/effective status split, the release-verification input-presence state, the Changesets result-artifact presence state, plus the summary/report evidence paths and artifact names
 14. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
-    after that assertion step so the human-readable Markdown artifact reflects the true final gate state
+    after that assertion step so the human-readable Markdown artifact reflects the true final gate state,
+    and it now still renders a truthful `missing` result state when the Changesets result artifact itself never appeared
 15. writes and uploads `.generated/release/changesets-release-report.json`
     as a single machine-readable rollup of the result, final assertion, summary/report artifact paths,
     and the corresponding uploaded GitHub artifact names,
     while also preserving the release-verification input-presence state that fed the Changesets lane,
-    while preserving both the actual lane `status` and the assertion-adjusted `effectiveStatus`
+    while preserving both the actual lane `status` and the assertion-adjusted `effectiveStatus`,
+    and while now also recording whether the result/assertion inputs themselves were actually present
 16. uploads the result, summary, assertion, and report artifacts before the workflow turns red
     so release-PR/publish failures still leave behind both structured and quick-scan evidence plus one canonical JSON entrypoint
 17. writes and uploads `.generated/release/release-workflow-report.json`
