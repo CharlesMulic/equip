@@ -98,6 +98,8 @@ export function buildChangesetsReleaseResult({
   published = false,
   publishedPackages = [],
   releaseVerificationReport = null,
+  artifacts = {},
+  artifactNames = {},
   workflowContext = {},
 }) {
   const normalizedPublished = parseBoolean(published) === true;
@@ -138,6 +140,8 @@ export function buildChangesetsReleaseResult({
     summary,
     skipReason: status === "skipped" ? summary : "",
     workflowContext: normalizeWorkflowContext(workflowContext),
+    artifacts: normalizeArtifactPaths(artifacts),
+    artifactNames: normalizeArtifactNames(artifactNames),
     inputs: {
       hasReleaseVerificationReport: !!releaseVerificationReport,
     },

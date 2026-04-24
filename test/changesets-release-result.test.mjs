@@ -60,6 +60,14 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
     publishedPackages: JSON.stringify([
       { name: "@cg3/equip", version: "0.17.8" },
     ]),
+    artifacts: {
+      resultPath: "/tmp/changesets-release-result.json",
+      releaseVerificationReportPath: "/tmp/release-verification-report.json",
+    },
+    artifactNames: {
+      result: "changesets-release-result",
+      releaseVerification: "release-verification-report",
+    },
     workflowContext: createWorkflowContext(),
   });
 
@@ -68,6 +76,13 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
   assert.equal(result.status, "published");
   assert.equal(result.published, true);
   assert.equal(result.inputs.hasReleaseVerificationReport, false);
+  assert.equal(result.artifacts.resultPath, "/tmp/changesets-release-result.json");
+  assert.equal(
+    result.artifacts.releaseVerificationReportPath,
+    "/tmp/release-verification-report.json",
+  );
+  assert.equal(result.artifactNames.result, "changesets-release-result");
+  assert.equal(result.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(
     result.workflowContext.runUrl,
@@ -122,6 +137,8 @@ test("write-changesets-release-result writes an artifact and appends summary out
     CHANGESETS_PUBLISHED_PACKAGES: JSON.stringify([
       { name: "@cg3/equip", version: "0.17.8" },
     ]),
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     ...createWorkflowEnv(),
   });
 
@@ -129,6 +146,10 @@ test("write-changesets-release-result writes an artifact and appends summary out
   const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
   assert.equal(artifact.status, "published");
   assert.equal(artifact.inputs.hasReleaseVerificationReport, false);
+  assert.equal(artifact.artifacts.resultPath, path.resolve(resultPath));
+  assert.equal(artifact.artifacts.releaseVerificationReportPath, "");
+  assert.equal(artifact.artifactNames.result, "changesets-release-result");
+  assert.equal(artifact.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(artifact.publishedPackages[0].version, "0.17.8");
 });
@@ -154,12 +175,21 @@ test("write-changesets-release-result records verification-blocked skips", () =>
     CHANGESETS_PUBLISHED: "false",
     CHANGESETS_PUBLISHED_PACKAGES: "[]",
     RELEASE_VERIFICATION_REPORT_PATH: verificationReportPath,
+    CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const artifact = JSON.parse(fs.readFileSync(resultPath, "utf8"));
   assert.equal(artifact.status, "skipped");
   assert.equal(artifact.inputs.hasReleaseVerificationReport, true);
+  assert.equal(artifact.artifacts.resultPath, path.resolve(resultPath));
+  assert.equal(
+    artifact.artifacts.releaseVerificationReportPath,
+    path.resolve(verificationReportPath),
+  );
+  assert.equal(artifact.artifactNames.result, "changesets-release-result");
+  assert.equal(artifact.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.prerequisites.releaseVerificationStatus, "failed");
   assert.match(artifact.summary, /skipped because release verification was failed/i);
 });

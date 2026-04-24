@@ -10,6 +10,10 @@ const outputPath =
   process.env.CHANGESETS_RELEASE_RESULT_PATH ||
   path.join(".generated", "release", "changesets-release-result.json");
 const releaseVerificationReportPath = process.env.RELEASE_VERIFICATION_REPORT_PATH || "";
+const changesetsReleaseResultArtifactName =
+  process.env.CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME || "";
+const releaseVerificationReportArtifactName =
+  process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "";
 
 function readOptionalJson(filePath) {
   if (!filePath) {
@@ -29,6 +33,16 @@ const result = buildChangesetsReleaseResult({
   published: process.env.CHANGESETS_PUBLISHED || "",
   publishedPackages: process.env.CHANGESETS_PUBLISHED_PACKAGES || "",
   releaseVerificationReport: readOptionalJson(releaseVerificationReportPath),
+  artifacts: {
+    resultPath: path.resolve(outputPath),
+    releaseVerificationReportPath: releaseVerificationReportPath
+      ? path.resolve(releaseVerificationReportPath)
+      : "",
+  },
+  artifactNames: {
+    result: changesetsReleaseResultArtifactName,
+    releaseVerification: releaseVerificationReportArtifactName,
+  },
   workflowContext: readGitHubWorkflowContext(process.env),
 });
 
