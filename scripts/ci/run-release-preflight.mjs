@@ -86,6 +86,7 @@ const buildExecutable = process.env.RELEASE_PREFLIGHT_BUILD_EXECUTABLE || "npm";
 const buildArgs = parseArgs(process.env.RELEASE_PREFLIGHT_BUILD_ARGS_JSON, ["run", "build"]);
 const testExecutable = process.env.RELEASE_PREFLIGHT_TEST_EXECUTABLE || "npm";
 const testArgs = parseArgs(process.env.RELEASE_PREFLIGHT_TEST_ARGS_JSON, ["test"]);
+const artifactName = process.env.RELEASE_PREFLIGHT_ARTIFACT_NAME || "";
 
 const buildPhase = runPhase({
   label: "build",
@@ -123,6 +124,9 @@ const result = buildReleasePreflightResult({
     summaryPath: path.resolve(summaryPath),
     buildLogPath: path.resolve(buildLogPath),
     testLogPath: path.resolve(testLogPath),
+  },
+  artifactNames: {
+    bundle: artifactName,
   },
   workflowContext: readGitHubWorkflowContext(process.env),
 });

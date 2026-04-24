@@ -81,6 +81,7 @@ const logPath =
   path.join(".generated", "release", "release-bootstrap.log");
 const executable = process.env.RELEASE_BOOTSTRAP_EXECUTABLE || "npm";
 const args = parseArgs(process.env.RELEASE_BOOTSTRAP_ARGS_JSON, ["ci"]);
+const artifactName = process.env.RELEASE_BOOTSTRAP_ARTIFACT_NAME || "";
 
 const installStep = runInstallStep({
   executable,
@@ -94,6 +95,9 @@ const result = buildReleaseBootstrapResult({
     resultPath: path.resolve(resultPath),
     summaryPath: path.resolve(summaryPath),
     logPath: path.resolve(logPath),
+  },
+  artifactNames: {
+    bundle: artifactName,
   },
   workflowContext: readGitHubWorkflowContext(process.env),
 });

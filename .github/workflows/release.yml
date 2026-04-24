@@ -38,6 +38,7 @@ jobs:
           RELEASE_BOOTSTRAP_RESULT_PATH: .generated/release/release-bootstrap-result.json
           RELEASE_BOOTSTRAP_SUMMARY_PATH: .generated/release/release-bootstrap-summary.md
           RELEASE_BOOTSTRAP_LOG_PATH: .generated/release/release-bootstrap.log
+          RELEASE_BOOTSTRAP_ARTIFACT_NAME: release-bootstrap
         run: node scripts/ci/run-release-bootstrap.mjs
 
       - name: Upload release bootstrap artifacts
@@ -60,6 +61,7 @@ jobs:
           RELEASE_PREFLIGHT_SUMMARY_PATH: .generated/release/release-preflight-summary.md
           RELEASE_PREFLIGHT_BUILD_LOG_PATH: .generated/release/release-preflight-build.log
           RELEASE_PREFLIGHT_TEST_LOG_PATH: .generated/release/release-preflight-test.log
+          RELEASE_PREFLIGHT_ARTIFACT_NAME: release-preflight
         run: node scripts/ci/run-release-preflight.mjs
 
       - name: Upload release preflight artifacts

@@ -37,6 +37,9 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
       resultPath: "/tmp/release-preflight-result.json",
       summaryPath: "/tmp/release-preflight-summary.md",
     },
+    artifactNames: {
+      bundle: "release-preflight",
+    },
     workflowContext: {
       repository: "CharlesMulic/equip",
       workflow: "Release",
@@ -51,6 +54,7 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
   assert.equal(result.phases.build.status, "passed");
   assert.equal(result.phases.test.status, "passed");
   assert.match(result.summary, /build passed; test passed/i);
+  assert.equal(result.artifactNames.bundle, "release-preflight");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(result.workflowContext.commitUrl, "https://github.com/CharlesMulic/equip/commit/fedcba654321");
 });
@@ -74,6 +78,9 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
         buildLogPath: "/tmp/release-preflight-build.log",
         testLogPath: "/tmp/release-preflight-test.log",
       },
+      artifactNames: {
+        bundle: "release-preflight",
+      },
       workflowContext: {
         repository: "CharlesMulic/equip",
         workflow: "Release",
@@ -90,6 +97,8 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
   assert.match(markdown, /## Test/i);
   assert.match(markdown, /test skipped because build preflight failed/i);
   assert.match(markdown, /buildLogPath:/i);
+  assert.match(markdown, /## Evidence artifacts/i);
+  assert.match(markdown, /bundle: `release-preflight`/i);
   assert.match(markdown, /## GitHub workflow context/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });
@@ -115,6 +124,7 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
     RELEASE_PREFLIGHT_BUILD_ARGS_JSON: JSON.stringify([buildScriptPath]),
     RELEASE_PREFLIGHT_TEST_EXECUTABLE: process.execPath,
     RELEASE_PREFLIGHT_TEST_ARGS_JSON: JSON.stringify([testScriptPath]),
+    RELEASE_PREFLIGHT_ARTIFACT_NAME: "release-preflight",
     GITHUB_REPOSITORY: "CharlesMulic/equip",
     GITHUB_WORKFLOW: "Release",
     GITHUB_RUN_ID: "456",
@@ -131,8 +141,10 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.equal(artifact.overallStatus, "passed");
   assert.equal(artifact.phases.build.status, "passed");
   assert.equal(artifact.phases.test.status, "passed");
+  assert.equal(artifact.artifactNames.bundle, "release-preflight");
   assert.equal(artifact.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/456");
   assert.match(summary, /Overall status: `passed`/i);
+  assert.match(summary, /bundle: `release-preflight`/i);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(buildLog, /synthetic build ok/i);
   assert.match(testLog, /synthetic test ok/i);

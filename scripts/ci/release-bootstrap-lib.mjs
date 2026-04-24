@@ -15,6 +15,16 @@ function normalizeArtifacts(artifacts) {
   );
 }
 
+function normalizeArtifactNames(artifactNames) {
+  if (!artifactNames || typeof artifactNames !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifactNames).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+  );
+}
+
 function summarizeInstallStep(step) {
   if (!step) {
     return "dependency install result missing";
@@ -30,6 +40,7 @@ function summarizeInstallStep(step) {
 export function buildReleaseBootstrapResult({
   installStep = null,
   artifacts = {},
+  artifactNames = {},
   workflowContext = {},
   generatedAt = new Date().toISOString(),
 }) {
@@ -49,6 +60,7 @@ export function buildReleaseBootstrapResult({
       install: normalizedInstall,
     },
     artifacts: normalizeArtifacts(artifacts),
+    artifactNames: normalizeArtifactNames(artifactNames),
     workflowContext: normalizeWorkflowContext(workflowContext),
   };
 }
@@ -88,6 +100,14 @@ export function buildReleaseBootstrapSummaryMarkdown({ result }) {
     lines.push("", "## Evidence files", "");
     for (const [name, artifactPath] of artifactEntries) {
       lines.push(`- ${name}: ${artifactPath}`);
+    }
+  }
+
+  const artifactNameEntries = Object.entries(result.artifactNames || {}).filter(([, value]) => value);
+  if (artifactNameEntries.length > 0) {
+    lines.push("", "## Evidence artifacts", "");
+    for (const [name, artifactName] of artifactNameEntries) {
+      lines.push(`- ${name}: \`${artifactName}\``);
     }
   }
 

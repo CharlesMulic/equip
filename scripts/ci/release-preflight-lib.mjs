@@ -15,6 +15,16 @@ function normalizeArtifacts(artifacts) {
   );
 }
 
+function normalizeArtifactNames(artifactNames) {
+  if (!artifactNames || typeof artifactNames !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifactNames).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+  );
+}
+
 function summarizePhase(label, phase) {
   if (!phase) {
     return `${label} phase result missing`;
@@ -35,6 +45,7 @@ export function buildReleasePreflightResult({
   buildPhase = null,
   testPhase = null,
   artifacts = {},
+  artifactNames = {},
   workflowContext = {},
   generatedAt = new Date().toISOString(),
 }) {
@@ -63,6 +74,7 @@ export function buildReleasePreflightResult({
       test: normalizedTest,
     },
     artifacts: normalizeArtifacts(artifacts),
+    artifactNames: normalizeArtifactNames(artifactNames),
     workflowContext: normalizeWorkflowContext(workflowContext),
   };
 }
@@ -102,6 +114,14 @@ export function buildReleasePreflightSummaryMarkdown({ result }) {
     lines.push("", "## Evidence files", "");
     for (const [name, artifactPath] of artifactEntries) {
       lines.push(`- ${name}: ${artifactPath}`);
+    }
+  }
+
+  const artifactNameEntries = Object.entries(result.artifactNames || {}).filter(([, value]) => value);
+  if (artifactNameEntries.length > 0) {
+    lines.push("", "## Evidence artifacts", "");
+    for (const [name, artifactName] of artifactNameEntries) {
+      lines.push(`- ${name}: \`${artifactName}\``);
     }
   }
 
