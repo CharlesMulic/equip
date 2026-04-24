@@ -95,6 +95,9 @@ function createReleaseBootstrapResult() {
       resultPath: "/tmp/release-bootstrap-result.json",
       summaryPath: "/tmp/release-bootstrap-summary.md",
     },
+    artifactNames: {
+      bundle: "release-bootstrap",
+    },
   };
 }
 
@@ -116,6 +119,9 @@ function createReleasePreflightResult() {
     artifacts: {
       resultPath: "/tmp/release-preflight-result.json",
       summaryPath: "/tmp/release-preflight-summary.md",
+    },
+    artifactNames: {
+      bundle: "release-preflight",
     },
   };
 }
@@ -191,6 +197,8 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(report.evidenceArtifactNames.releaseVerificationDockerAcceptance, "docker-acceptance");
+  assert.equal(report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
+  assert.equal(report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseResult, "changesets-release-result");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseAssertion, "changesets-release-assertion");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
@@ -512,6 +520,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
   );
   assert.equal(assertion.report.artifactNames.report, "release-workflow-report");
+  assert.equal(assertion.report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
+  assert.equal(assertion.report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(assertion.report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(assertion.report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
   assert.equal(assertion.report.evidenceFiles.changesetsReleaseSummaryPath, "/tmp/changesets-release-summary.md");
@@ -532,6 +542,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   );
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(report.evidenceArtifactNames.releaseVerificationAssertion, "release-verification-assertion");
+  assert.equal(report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
+  assert.equal(report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseSummary, "changesets-release-summary");
   assert.equal(report.evidenceFiles.releaseWorkflowReportPath, path.resolve(releaseWorkflowReportPath));
   assert.equal(report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
@@ -547,6 +559,8 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Final assertion/i);
   assert.match(summary, /## Nested evidence artifacts/i);
+  assert.match(summary, /Release Bootstrap Bundle: `release-bootstrap`/i);
+  assert.match(summary, /Release Preflight Bundle: `release-preflight`/i);
   assert.match(summary, /Release Verification Pack Tarball: `pack-tarball`/i);
   assert.match(summary, /## Evidence files/i);
   assert.match(summary, /Release Workflow Report Path:/i);

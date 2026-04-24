@@ -75,10 +75,14 @@ function buildEvidenceFiles({
 }
 
 function buildEvidenceArtifactNames({
+  releaseBootstrapResult = null,
+  releasePreflightResult = null,
   releaseVerificationReport = null,
   changesetsReleaseReport = null,
 }) {
   return {
+    ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.artifactNames),
+    ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.artifactNames),
     ...prefixArtifactNameEntries("releaseVerification", releaseVerificationReport?.artifactNames),
     ...prefixArtifactNameEntries("changesetsRelease", changesetsReleaseReport?.artifactNames),
   };
@@ -290,6 +294,8 @@ export function buildReleaseWorkflowReport({
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
     evidenceArtifactNames: buildEvidenceArtifactNames({
+      releaseBootstrapResult,
+      releasePreflightResult,
       releaseVerificationReport,
       changesetsReleaseReport,
     }),

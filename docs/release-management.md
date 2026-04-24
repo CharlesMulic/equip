@@ -115,12 +115,12 @@ On pushes to `main` it:
     so operators have one canonical machine-readable entrypoint for the whole release run,
     while preserving both the actual workflow status and the assertion-adjusted effective status,
     while also flattening the key nested log/report artifact paths into one `evidenceFiles` view for easier debugging,
-    while also flattening the nested release-verification and Changesets uploaded artifact names into one `evidenceArtifactNames` view,
+    while also flattening the nested release-bootstrap, release-preflight, release-verification, and Changesets uploaded artifact names into one `evidenceArtifactNames` view,
     while marking verification and Changesets as `skipped` instead of `missing` when an earlier release stage prevented them from running
 18. writes and uploads `.generated/release/release-workflow-summary.md`
     as the matching human-readable summary of the full workflow rollup, including the uploaded artifact names to open next
     plus the flattened evidence-file paths for the nested bootstrap/preflight/verification/changesets bundles,
-    plus the flattened nested verification/Changesets artifact names from those bundles,
+    plus the flattened nested bootstrap/preflight/verification/Changesets artifact names from those bundles,
     plus the GitHub workflow context (repository/workflow/run/ref/sha/event plus derived run/commit URLs) for that release run,
     and appends that final top-level rendering to the GitHub job summary,
     while now also rendering a truthful `release workflow report missing` state instead of failing empty-handed if the top-level report artifact never appeared
