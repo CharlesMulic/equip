@@ -25,6 +25,17 @@ function normalizeArtifactNames(artifactNames) {
   );
 }
 
+function deriveEvidenceFileNames(artifacts) {
+  const normalizedArtifacts = normalizeArtifacts(artifacts);
+
+  return Object.fromEntries(
+    Object.entries(normalizedArtifacts).map(([key, value]) => [
+      key,
+      typeof value === "string" && value ? path.parse(value).name : "",
+    ]),
+  );
+}
+
 function summarizePhase(label, phase) {
   if (!phase) {
     return `${label} phase result missing`;
@@ -74,6 +85,7 @@ export function buildReleasePreflightResult({
       test: normalizedTest,
     },
     artifacts: normalizeArtifacts(artifacts),
+    evidenceFileNames: deriveEvidenceFileNames(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
     workflowContext: normalizeWorkflowContext(workflowContext),
   };
@@ -114,6 +126,14 @@ export function buildReleasePreflightSummaryMarkdown({ result }) {
     lines.push("", "## Evidence files", "");
     for (const [name, artifactPath] of artifactEntries) {
       lines.push(`- ${name}: ${artifactPath}`);
+    }
+  }
+
+  const evidenceFileNameEntries = Object.entries(result.evidenceFileNames || {}).filter(([, value]) => value);
+  if (evidenceFileNameEntries.length > 0) {
+    lines.push("", "## Evidence file names", "");
+    for (const [name, fileName] of evidenceFileNameEntries) {
+      lines.push(`- ${name}: \`${fileName}\``);
     }
   }
 

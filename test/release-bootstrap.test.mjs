@@ -47,6 +47,8 @@ test("buildReleaseBootstrapResult marks passing install step as passed", () => {
   assert.equal(result.overallStatus, "passed");
   assert.equal(result.steps.install.status, "passed");
   assert.match(result.summary, /dependency install passed/i);
+  assert.equal(result.evidenceFileNames.resultPath, "release-bootstrap-result");
+  assert.equal(result.evidenceFileNames.summaryPath, "release-bootstrap-summary");
   assert.equal(result.artifactNames.bundle, "release-bootstrap");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(result.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/123");
@@ -82,6 +84,8 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
   assert.match(markdown, /Exit code: `2`/i);
   assert.match(markdown, /dependency install failed/i);
   assert.match(markdown, /logPath:/i);
+  assert.match(markdown, /## Evidence file names/i);
+  assert.match(markdown, /logPath: `release-bootstrap`/i);
   assert.match(markdown, /## Evidence artifacts/i);
   assert.match(markdown, /bundle: `release-bootstrap`/i);
   assert.match(markdown, /## GitHub workflow context/i);
@@ -118,10 +122,15 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
 
   assert.equal(artifact.overallStatus, "passed");
   assert.equal(artifact.steps.install.status, "passed");
+  assert.equal(artifact.evidenceFileNames.resultPath, "release-bootstrap-result");
+  assert.equal(artifact.evidenceFileNames.summaryPath, "release-bootstrap-summary");
+  assert.equal(artifact.evidenceFileNames.logPath, "release-bootstrap");
   assert.equal(artifact.artifactNames.bundle, "release-bootstrap");
   assert.equal(artifact.workflowContext.workflow, "Release");
   assert.equal(artifact.workflowContext.commitUrl, "https://github.com/CharlesMulic/equip/commit/abcdef123456");
   assert.match(summary, /Overall status: `passed`/i);
+  assert.match(summary, /## Evidence file names/i);
+  assert.match(summary, /resultPath: `release-bootstrap-result`/i);
   assert.match(summary, /bundle: `release-bootstrap`/i);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(log, /synthetic install ok/i);
@@ -156,6 +165,10 @@ test("run-release-bootstrap preserves failure artifacts before exiting nonzero",
   assert.equal(artifact.overallStatus, "failed");
   assert.equal(artifact.steps.install.status, "failed");
   assert.equal(artifact.steps.install.exitCode, 2);
+  assert.equal(artifact.evidenceFileNames.resultPath, "release-bootstrap-result");
+  assert.equal(artifact.evidenceFileNames.summaryPath, "release-bootstrap-summary");
+  assert.equal(artifact.evidenceFileNames.logPath, "release-bootstrap");
   assert.match(summary, /Overall status: `failed`/i);
+  assert.match(summary, /## Evidence file names/i);
   assert.match(log, /synthetic install failed/i);
 });

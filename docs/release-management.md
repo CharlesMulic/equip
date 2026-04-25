@@ -48,6 +48,7 @@ On pushes to `main` it:
    - `.generated/release/release-bootstrap-summary.md`
    - `.generated/release/release-bootstrap.log`
    and now carries the GitHub workflow context for that run (repository/workflow/run/ref/sha/event plus derived run/commit URLs)
+   plus machine-readable evidence file names derived from those raw JSON/Markdown/log paths
    plus the uploaded GitHub artifact bundle name for that early evidence set
    and uploads them as the `release-bootstrap` evidence bundle even when dependency install fails
 2. runs `node scripts/ci/run-release-preflight.mjs`
@@ -57,6 +58,7 @@ On pushes to `main` it:
    - `.generated/release/release-preflight-build.log`
    - `.generated/release/release-preflight-test.log`
    and now carries the GitHub workflow context for that run (repository/workflow/run/ref/sha/event plus derived run/commit URLs)
+   plus machine-readable evidence file names derived from those raw JSON/Markdown/log paths
    plus the uploaded GitHub artifact bundle name for that early evidence set
    and uploads them as the `release-preflight` evidence bundle even when one of those early phases fails
    but only if the bootstrap lane passed
