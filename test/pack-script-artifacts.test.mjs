@@ -77,6 +77,8 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
     PACK_TARBALL_PATH: missingTarballPath,
     PACK_INSTALL_SMOKE_OUTPUT_PATH: outputPath,
     PACK_INSTALL_SMOKE_LOG_PATH: logPath,
+    PACK_INSTALL_SMOKE_ARTIFACT_NAME: "pack-install-smoke",
+    PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
     GITHUB_REPOSITORY: "CharlesMulic/equip",
     GITHUB_WORKFLOW: "Release",
     GITHUB_RUN_ID: "456",
@@ -101,6 +103,7 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.equal(artifact.artifacts.resultPath, path.resolve(outputPath));
   assert.equal(artifact.artifacts.logPath, path.resolve(logPath));
   assert.equal(artifact.artifactNames.bundle, "pack-install-smoke");
+  assert.equal(artifact.artifactNames.tarball, "pack-tarball");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(artifact.workflowContext.runAttempt, "3");
   assert.equal(

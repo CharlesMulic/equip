@@ -75,7 +75,7 @@ On pushes to `main` it:
    while still preserving a machine-readable failure artifact plus raw `pack-install-smoke.log` output if the smoke dies before it can pass
    while now also carrying the GitHub workflow context for that raw tarball-smoke artifact
    plus the raw tarball-smoke JSON's own file path
-   plus the uploaded artifact bundle name for that raw tarball-smoke JSON/log bundle
+   plus the uploaded artifact bundle names for both the raw tarball-smoke JSON/log bundle and the input tarball bundle
    and only after the preflight lane passed
 6. runs `npm run test:docker:acceptance`
    and uploads the machine-readable Docker acceptance report plus raw build/run logs

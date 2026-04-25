@@ -50,6 +50,8 @@ jobs:
           PACK_TARBALL_OUTPUT_DIR: .generated/pack/tarball
           PACK_INSTALL_SMOKE_OUTPUT_PATH: .generated/pack/pack-install-smoke.json
           PACK_INSTALL_SMOKE_LOG_PATH: .generated/pack/pack-install-smoke.log
+          PACK_INSTALL_SMOKE_ARTIFACT_NAME: pack-install-smoke
+          PACK_TARBALL_ARTIFACT_NAME: pack-tarball
         run: npm run test:pack:smoke
 
       - name: Upload pack verification

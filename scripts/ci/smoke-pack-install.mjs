@@ -23,6 +23,7 @@ const stepLogs = [];
 const workflowContext = readGitHubWorkflowContext(process.env);
 const packInstallSmokeArtifactName =
   process.env.PACK_INSTALL_SMOKE_ARTIFACT_NAME || "pack-install-smoke";
+const packTarballArtifactName = process.env.PACK_TARBALL_ARTIFACT_NAME || "";
 const result = {
   kind: "equip-pack-install-smoke",
   generatedAt: new Date().toISOString(),
@@ -40,6 +41,7 @@ const result = {
   workflowContext,
   artifactNames: {
     bundle: packInstallSmokeArtifactName,
+    tarball: packTarballArtifactName,
   },
   artifacts: {
     resultPath: outputPath ? path.resolve(outputPath) : "",
