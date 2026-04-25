@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   appendDockerAcceptanceSummary,
+  deriveDockerAcceptanceEvidenceFileNames,
   resolveDockerAcceptanceArtifacts,
   writeDockerAcceptanceArtifacts,
 } from "./docker-acceptance-lib.mjs";
@@ -151,6 +152,11 @@ try {
       buildLogPath: artifactConfig.buildLogPath,
       runLogPath: artifactConfig.runLogPath,
     },
+    evidenceFileNames: deriveDockerAcceptanceEvidenceFileNames({
+      reportPath: artifactConfig.reportPath,
+      buildLogPath: artifactConfig.buildLogPath,
+      runLogPath: artifactConfig.runLogPath,
+    }),
   };
 
   writeDockerAcceptanceArtifacts({

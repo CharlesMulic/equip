@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   appendDockerAcceptanceSummary,
+  deriveDockerAcceptanceEvidenceFileNames,
   resolveDockerAcceptanceArtifacts,
   writeDockerAcceptanceArtifacts,
 } from "../scripts/ci/docker-acceptance-lib.mjs";
@@ -45,6 +46,11 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
       artifactNames: {
         bundle: "docker-acceptance",
       },
+      evidenceFileNames: {
+        reportPath: "docker-acceptance-report.json",
+        buildLogPath: "docker-build.log",
+        runLogPath: "docker-run.log",
+      },
       steps: [
         { name: "docker-build", durationMs: 123, exitCode: 0 },
         { name: "docker-run", durationMs: 456, exitCode: 0 },
@@ -58,7 +64,20 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
   assert.equal(report.kind, "equip-docker-acceptance-report");
   assert.equal(report.steps[1].name, "docker-run");
   assert.equal(report.artifactNames.bundle, "docker-acceptance");
+  assert.equal(report.evidenceFileNames.reportPath, "docker-acceptance-report.json");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+});
+
+test("deriveDockerAcceptanceEvidenceFileNames derives stable file-name breadcrumbs", () => {
+  const evidenceFileNames = deriveDockerAcceptanceEvidenceFileNames({
+    reportPath: path.join("artifacts", "docker", "docker-acceptance-report.json"),
+    buildLogPath: path.join("artifacts", "docker", "docker-build.log"),
+    runLogPath: path.join("artifacts", "docker", "docker-run.log"),
+  });
+
+  assert.equal(evidenceFileNames.reportPath, "docker-acceptance-report.json");
+  assert.equal(evidenceFileNames.buildLogPath, "docker-build.log");
+  assert.equal(evidenceFileNames.runLogPath, "docker-run.log");
 });
 
 test("appendDockerAcceptanceSummary writes a concise step summary block", () => {
@@ -91,6 +110,11 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
       artifactNames: {
         bundle: "docker-acceptance",
       },
+      evidenceFileNames: {
+        reportPath: "docker-acceptance-report.json",
+        buildLogPath: "docker-build.log",
+        runLogPath: "docker-run.log",
+      },
     },
   });
 
@@ -103,4 +127,6 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/789`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /bundle: `docker-acceptance`/i);
+  assert.match(summary, /## Evidence file names/i);
+  assert.match(summary, /reportPath: `docker-acceptance-report\.json`/i);
 });

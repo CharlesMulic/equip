@@ -33,6 +33,18 @@ export function resolveDockerAcceptanceArtifacts({
   };
 }
 
+export function deriveDockerAcceptanceEvidenceFileNames({
+  reportPath = "",
+  buildLogPath = "",
+  runLogPath = "",
+}) {
+  return {
+    reportPath: reportPath ? path.basename(reportPath) : "",
+    buildLogPath: buildLogPath ? path.basename(buildLogPath) : "",
+    runLogPath: runLogPath ? path.basename(runLogPath) : "",
+  };
+}
+
 export function writeDockerAcceptanceArtifacts({
   reportPath = "",
   buildLogPath = "",
@@ -104,6 +116,16 @@ export function appendDockerAcceptanceSummary({
     lines.push("", "## Evidence artifacts", "");
     for (const [name, artifactName] of artifactNameEntries) {
       lines.push(`- ${name}: \`${artifactName}\``);
+    }
+  }
+
+  const evidenceFileNameEntries = Object.entries(report.evidenceFileNames || {}).filter(
+    ([, value]) => value,
+  );
+  if (evidenceFileNameEntries.length > 0) {
+    lines.push("", "## Evidence file names", "");
+    for (const [name, fileName] of evidenceFileNameEntries) {
+      lines.push(`- ${name}: \`${fileName}\``);
     }
   }
 

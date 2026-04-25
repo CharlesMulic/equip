@@ -17,6 +17,14 @@ const workflowContext = readGitHubWorkflowContext(process.env);
 const verificationArtifactName = process.env.PACK_VERIFICATION_ARTIFACT_NAME || "pack-verification";
 const tarballArtifactName = process.env.PACK_TARBALL_ARTIFACT_NAME || "pack-tarball";
 
+function buildEvidenceFileNames({ reportPath = "", logPath = "", tarballPath = "" }) {
+  return {
+    reportPath: reportPath ? path.basename(reportPath) : "",
+    logPath: logPath ? path.basename(logPath) : "",
+    tarballPath: tarballPath ? path.basename(tarballPath) : "",
+  };
+}
+
 function writeVerificationArtifact(verification) {
   if (!outputPath) {
     return;
@@ -71,6 +79,16 @@ function appendSummary(verification) {
     }
   }
 
+  const evidenceFileNameEntries = Object.entries(verification.evidenceFileNames || {}).filter(
+    ([, value]) => value,
+  );
+  if (evidenceFileNameEntries.length > 0) {
+    lines.push("", "## Evidence file names", "");
+    for (const [name, fileName] of evidenceFileNameEntries) {
+      lines.push(`- ${name}: \`${fileName}\``);
+    }
+  }
+
   lines.push("");
 
   appendFileSync(stepSummaryPath, lines.join("\n"), "utf8");
@@ -120,6 +138,11 @@ try {
       reportPath: outputPath ? path.resolve(outputPath) : "",
       logPath: logPath ? path.resolve(logPath) : "",
     },
+    evidenceFileNames: buildEvidenceFileNames({
+      reportPath: outputPath ? path.resolve(outputPath) : "",
+      logPath: logPath ? path.resolve(logPath) : "",
+      tarballPath: tarballPath && existsSync(tarballPath) ? tarballPath : "",
+    }),
   };
 } catch (error) {
   const stdout = typeof error?.stdout === "string" ? error.stdout : "";
@@ -159,6 +182,11 @@ try {
       reportPath: outputPath ? path.resolve(outputPath) : "",
       logPath: logPath ? path.resolve(logPath) : "",
     },
+    evidenceFileNames: buildEvidenceFileNames({
+      reportPath: outputPath ? path.resolve(outputPath) : "",
+      logPath: logPath ? path.resolve(logPath) : "",
+      tarballPath: "",
+    }),
   };
 }
 

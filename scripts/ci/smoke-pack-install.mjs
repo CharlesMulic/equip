@@ -24,6 +24,15 @@ const workflowContext = readGitHubWorkflowContext(process.env);
 const packInstallSmokeArtifactName =
   process.env.PACK_INSTALL_SMOKE_ARTIFACT_NAME || "pack-install-smoke";
 const packTarballArtifactName = process.env.PACK_TARBALL_ARTIFACT_NAME || "";
+
+function buildEvidenceFileNames({ resultPath = "", logPath = "", tarballPath = "" }) {
+  return {
+    resultPath: resultPath ? path.basename(resultPath) : "",
+    logPath: logPath ? path.basename(logPath) : "",
+    tarballPath: tarballPath ? path.basename(tarballPath) : "",
+  };
+}
+
 const result = {
   kind: "equip-pack-install-smoke",
   generatedAt: new Date().toISOString(),
@@ -47,6 +56,11 @@ const result = {
     resultPath: outputPath ? path.resolve(outputPath) : "",
     logPath: logPath ? path.resolve(logPath) : "",
   },
+  evidenceFileNames: buildEvidenceFileNames({
+    resultPath: outputPath ? path.resolve(outputPath) : "",
+    logPath: logPath ? path.resolve(logPath) : "",
+    tarballPath: "",
+  }),
 };
 
 function runOrThrow(name, command, args, options = {}) {
@@ -188,6 +202,16 @@ function appendSummary() {
     }
   }
 
+  const evidenceFileNameEntries = Object.entries(result.evidenceFileNames || {}).filter(
+    ([, value]) => value,
+  );
+  if (evidenceFileNameEntries.length > 0) {
+    lines.push("", "## Evidence file names", "");
+    for (const [name, fileName] of evidenceFileNameEntries) {
+      lines.push(`- ${name}: \`${fileName}\``);
+    }
+  }
+
   lines.push("");
 
   appendFileSync(stepSummaryPath, lines.join("\n"), "utf8");
@@ -201,6 +225,11 @@ try {
   result.tarballPath = tarballPath;
   result.tarballFileName = path.basename(tarballPath);
   result.installRoot = installRoot;
+  result.evidenceFileNames = buildEvidenceFileNames({
+    resultPath: result.artifacts.resultPath,
+    logPath: result.artifacts.logPath,
+    tarballPath,
+  });
 
   mkdirSync(installRoot, { recursive: true });
   writeFileSync(
