@@ -108,17 +108,17 @@ On pushes to `main` it:
     after the Changesets step so the workflow preserves a machine-readable release outcome even when the action fails,
     and blocked publish attempts are marked `skipped` with the upstream verification status instead of being flattened into a generic failure,
     while also preserving whether the upstream release-verification report was actually present,
-    while now also preserving its own result path plus the upstream release-verification report path and their uploaded artifact names,
+    while now also preserving its own result path plus the upstream release-verification report path, their machine-readable evidence file names, and their uploaded artifact names,
     and now also carrying the GitHub workflow context for that run (repository/workflow/run/ref/sha/event plus derived run/commit URLs)
 14. asserts the Changesets result explicitly and writes `.generated/release/changesets-release-assertion.json`
    so the final pass/fail verdict is preserved as a machine-readable gate artifact instead of living only in workflow logs,
-   and that assertion artifact now also carries the actual/effective status split, the release-verification input-presence state, the Changesets result-artifact presence state, the GitHub workflow context, plus the summary/report evidence paths and artifact names
-15. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state and the uploaded artifact names for the result/assertion/summary/report evidence set
+   and that assertion artifact now also carries the actual/effective status split, the release-verification input-presence state, the Changesets result-artifact presence state, the GitHub workflow context, plus the summary/report evidence paths, evidence file names, and artifact names
+15. writes and uploads `.generated/release/changesets-release-summary.md`, including the final assertion state plus the uploaded artifact names and machine-readable evidence file names for the result/assertion/summary/report evidence set
     after that assertion step so the human-readable Markdown artifact reflects the true final gate state,
     and it now still renders a truthful `missing` result state when the Changesets result artifact itself never appeared
 16. writes and uploads `.generated/release/changesets-release-report.json`
     as a single machine-readable rollup of the result, final assertion, summary/report artifact paths,
-    and the corresponding uploaded GitHub artifact names,
+    plus the corresponding machine-readable evidence file names and uploaded GitHub artifact names,
     while also preserving the release-verification input-presence state that fed the Changesets lane,
     while preserving both the actual lane `status` and the assertion-adjusted `effectiveStatus`,
     while now also recording whether the result/assertion inputs themselves were actually present,

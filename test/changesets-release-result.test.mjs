@@ -81,6 +81,11 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
     result.artifacts.releaseVerificationReportPath,
     "/tmp/release-verification-report.json",
   );
+  assert.equal(result.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(
+    result.evidenceFileNames.releaseVerificationReportPath,
+    "release-verification-report.json",
+  );
   assert.equal(result.artifactNames.result, "changesets-release-result");
   assert.equal(result.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
@@ -148,6 +153,7 @@ test("write-changesets-release-result writes an artifact and appends summary out
   assert.equal(artifact.inputs.hasReleaseVerificationReport, false);
   assert.equal(artifact.artifacts.resultPath, path.resolve(resultPath));
   assert.equal(artifact.artifacts.releaseVerificationReportPath, "");
+  assert.equal(artifact.evidenceFileNames.resultPath, "changesets-release-result.json");
   assert.equal(artifact.artifactNames.result, "changesets-release-result");
   assert.equal(artifact.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
@@ -188,6 +194,11 @@ test("write-changesets-release-result records verification-blocked skips", () =>
     artifact.artifacts.releaseVerificationReportPath,
     path.resolve(verificationReportPath),
   );
+  assert.equal(artifact.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(
+    artifact.evidenceFileNames.releaseVerificationReportPath,
+    "release-verification-report.json",
+  );
   assert.equal(artifact.artifactNames.result, "changesets-release-result");
   assert.equal(artifact.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.prerequisites.releaseVerificationStatus, "failed");
@@ -202,6 +213,9 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
       publishedPackages: JSON.stringify([
         { name: "@cg3/equip", version: "0.17.8" },
       ]),
+      artifacts: {
+        resultPath: "/tmp/changesets-release-result.json",
+      },
       workflowContext: createWorkflowContext(),
     }),
     artifactNames: {
@@ -219,6 +233,8 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
   assert.match(markdown, /## Evidence artifacts/i);
   assert.match(markdown, /Result: `changesets-release-result`/i);
   assert.match(markdown, /Summary: `changesets-release-summary`/i);
+  assert.match(markdown, /## Evidence file names/i);
+  assert.match(markdown, /Result Path: `changesets-release-result\.json`/i);
 });
 
 test("buildChangesetsReleaseSummaryMarkdown includes final assertion details when present", () => {
@@ -315,6 +331,10 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
   assert.equal(report.assertion.outcome, "passed");
   assert.equal(report.assertion.publishedPackages[0].version, "0.17.8");
   assert.equal(report.artifacts.summaryPath, "/tmp/changesets-release-summary.md");
+  assert.equal(report.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(report.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
+  assert.equal(report.evidenceFileNames.summaryPath, "changesets-release-summary.md");
+  assert.equal(report.evidenceFileNames.reportPath, "changesets-release-report.json");
   assert.equal(report.artifactNames.result, "changesets-release-result");
   assert.equal(report.artifactNames.report, "changesets-release-report");
 });
@@ -371,6 +391,9 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
     publishedPackages: JSON.stringify([
       { name: "@cg3/equip", version: "0.17.8" },
     ]),
+    artifacts: {
+      resultPath,
+    },
   }), null, 2)}\n`, "utf8");
   fs.writeFileSync(assertionPath, `${JSON.stringify({
     kind: "equip-changesets-release-assertion",
@@ -414,6 +437,8 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(summaryArtifact, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summaryArtifact, /## Final assertion/i);
   assert.match(summaryArtifact, /## Evidence artifacts/i);
+  assert.match(summaryArtifact, /## Evidence file names/i);
+  assert.match(summaryArtifact, /Result Path: `changesets-release-result\.json`/i);
   assert.match(summaryArtifact, /Report: `changesets-release-report`/i);
   assert.match(summaryArtifact, /Outcome: `passed`/i);
   assert.match(stepSummary, /## Changesets release result/i);
@@ -531,6 +556,10 @@ test("write-changesets-release-report writes a machine-readable rollup artifact"
   assert.equal(report.artifactNames.assertion, "changesets-release-assertion");
   assert.equal(report.artifactNames.summary, "changesets-release-summary");
   assert.equal(report.artifactNames.report, "changesets-release-report");
+  assert.equal(report.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(report.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
+  assert.equal(report.evidenceFileNames.summaryPath, "changesets-release-summary.md");
+  assert.equal(report.evidenceFileNames.reportPath, "changesets-release-report.json");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(
     report.workflowContext.commitUrl,
@@ -640,11 +669,16 @@ test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict"
   assert.equal(artifact.inputs.hasAssertionArtifact, false);
   assert.equal(artifact.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(artifact.artifacts.summaryPath, summaryPath);
+  assert.equal(artifact.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(artifact.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
+  assert.equal(artifact.evidenceFileNames.summaryPath, "changesets-release-summary.md");
+  assert.equal(artifact.evidenceFileNames.reportPath, "changesets-release-report.json");
   assert.equal(artifact.artifactNames.report, "changesets-release-report");
   const persisted = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
   assert.equal(persisted.assertion.outcome, "passed");
   assert.equal(persisted.result.status, "completed");
   assert.equal(persisted.effectiveStatus, "completed");
+  assert.equal(persisted.evidenceFileNames.resultPath, "changesets-release-result.json");
   assert.equal(persisted.artifactNames.summary, "changesets-release-summary");
 });
 
@@ -692,6 +726,10 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
   assert.equal(assertion.assertion.published, true);
   assert.equal(assertion.assertion.publishedPackages[0].name, "@cg3/equip");
   assert.equal(assertion.artifacts.summaryPath, path.resolve(summaryPath));
+  assert.equal(assertion.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(assertion.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
+  assert.equal(assertion.evidenceFileNames.summaryPath, "changesets-release-summary.md");
+  assert.equal(assertion.evidenceFileNames.reportPath, "changesets-release-report.json");
   assert.equal(assertion.artifactNames.report, "changesets-release-report");
 });
 
@@ -734,6 +772,10 @@ test("assert-changesets-release-result preserves self-contained evidence pointer
   assert.equal(assertion.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(assertion.artifacts.reportPath, path.resolve(reportPath));
+  assert.equal(assertion.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(assertion.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
+  assert.equal(assertion.evidenceFileNames.summaryPath, "changesets-release-summary.md");
+  assert.equal(assertion.evidenceFileNames.reportPath, "changesets-release-report.json");
   assert.equal(assertion.artifactNames.summary, "changesets-release-summary");
 });
 
@@ -827,6 +869,10 @@ test("assert-changesets-release-result writes a failure artifact when the result
   assert.equal(assertion.inputs.hasAssertionArtifact, false);
   assert.equal(assertion.result.stepOutcome, "missing");
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.evidenceFileNames.resultPath, "missing-changesets-release-result.json");
+  assert.equal(assertion.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
+  assert.equal(assertion.evidenceFileNames.summaryPath, "changesets-release-summary.md");
+  assert.equal(assertion.evidenceFileNames.reportPath, "changesets-release-report.json");
   assert.match(assertion.assertion.error, /result artifact not found/i);
 });
 

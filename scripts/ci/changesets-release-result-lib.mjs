@@ -141,6 +141,7 @@ export function buildChangesetsReleaseResult({
     skipReason: status === "skipped" ? summary : "",
     workflowContext: normalizeWorkflowContext(workflowContext),
     artifacts: normalizeArtifactPaths(artifacts),
+    evidenceFileNames: deriveEvidenceFileNames(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
     inputs: {
       hasReleaseVerificationReport: !!releaseVerificationReport,
@@ -196,6 +197,19 @@ function normalizeArtifactNames(artifacts) {
   return Object.fromEntries(
     Object.entries(artifacts).map(([key, value]) => [key, typeof value === "string" ? value : ""]),
   );
+}
+
+function deriveEvidenceFileNames(artifacts) {
+  return Object.fromEntries(
+    Object.entries(normalizeArtifactPaths(artifacts)).map(([key, value]) => [key, path.basename(value)]),
+  );
+}
+
+function buildEvidenceFileNames({ result = null, artifacts = {} }) {
+  return {
+    ...deriveEvidenceFileNames(result?.artifacts),
+    ...deriveEvidenceFileNames(artifacts),
+  };
 }
 
 export function buildChangesetsReleaseSummaryMarkdown({
@@ -255,6 +269,20 @@ export function buildChangesetsReleaseSummaryMarkdown({
     lines.push("", "## Evidence artifacts", "");
 
     for (const [key, value] of artifactEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
+
+  const evidenceFileNameEntries = Object.entries(normalizedResult.evidenceFileNames || {}).filter(
+    ([, value]) => value,
+  );
+  if (evidenceFileNameEntries.length > 0) {
+    lines.push("", "## Evidence file names", "");
+
+    for (const [key, value] of evidenceFileNameEntries) {
       const label = key
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/^./, (char) => char.toUpperCase());
@@ -339,6 +367,7 @@ export function buildChangesetsReleaseReport({
     ),
     inputs: normalizedInputs,
     artifacts: normalizeArtifactPaths(artifacts),
+    evidenceFileNames: buildEvidenceFileNames({ result: normalizedResult, artifacts }),
     artifactNames: normalizeArtifactNames(artifactNames),
   };
 }
@@ -419,6 +448,7 @@ export function writeChangesetsReleaseAssertionArtifact({
     workflowContext: normalizeWorkflowContext(workflowContext || normalizedResult?.workflowContext),
     inputs: normalizedInputs,
     artifacts: normalizeArtifactPaths(artifacts),
+    evidenceFileNames: buildEvidenceFileNames({ result: normalizedResult, artifacts }),
     artifactNames: normalizeArtifactNames(artifactNames),
     assertion,
   };
