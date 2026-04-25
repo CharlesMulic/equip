@@ -89,15 +89,16 @@ On pushes to `main` it:
    even if one of those upstream artifacts is missing because a verification lane failed early,
    while also carrying the bootstrap/preflight prerequisite state so intentionally blocked downstream lanes are marked `skipped` instead of being mislabeled `missing`,
    while rebasing the per-lane log/report/tarball artifact pointers to the current verification workspace for easier debugging
+   while now also preserving machine-readable evidence file names for the upstream bootstrap/preflight inputs plus the package/tarball-smoke/docker/report files it points at,
    and recording the corresponding uploaded GitHub artifact names for each verification lane,
    and now also carrying the GitHub workflow context for that run (repository/workflow/run/ref/sha/event plus derived run/commit URLs)
 8. uploads that report and then asserts it explicitly before continuing, so failures still preserve the rollup artifact for debugging
 9. writes `.generated/release/release-verification-assertion.json`
    as a final machine-readable gate verdict with component statuses and failure details,
-   and that assertion artifact now also carries the machine-readable upstream input-presence state, the bootstrap/preflight summaries, the GitHub workflow context, plus the verification-lane evidence paths and artifact names
+   and that assertion artifact now also carries the machine-readable upstream input-presence state, the bootstrap/preflight summaries, the GitHub workflow context, plus the verification-lane evidence file names, evidence paths, and artifact names
 10. writes and uploads `.generated/release/release-verification-summary.md`
-    after the assertion step so the Markdown artifact reflects the final gate outcome,
-    includes the uploaded evidence artifact names, and stays aligned behind one canonical human-readable rendering
+   after the assertion step so the Markdown artifact reflects the final gate outcome,
+   includes the uploaded evidence artifact names plus the machine-readable evidence file names, and stays aligned behind one canonical human-readable rendering
 11. rewrites `.generated/release/release-verification-report.json`
     after the assertion/summary steps so the uploaded rollup also points at the final assertion and Markdown summary artifacts
 12. uses `changesets/action` to either:

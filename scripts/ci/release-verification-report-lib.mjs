@@ -25,6 +25,36 @@ function normalizeArtifactNames(artifacts) {
   );
 }
 
+function prefixArtifactNameEntries(prefix, artifactNames) {
+  const normalizedArtifactNames = normalizeArtifactNames(artifactNames);
+  const artifactEntries = Object.entries(normalizedArtifactNames).filter(([, value]) => value);
+  if (artifactEntries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    artifactEntries.map(([key, value]) => [
+      `${prefix}${key[0].toUpperCase()}${key.slice(1)}`,
+      value,
+    ]),
+  );
+}
+
+function deriveEvidenceFileNamesFromArtifacts(artifacts) {
+  const normalizedArtifacts = normalizeArtifacts(artifacts);
+  const artifactEntries = Object.entries(normalizedArtifacts).filter(([, value]) => value);
+  if (artifactEntries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    artifactEntries.map(([key, value]) => [
+      key,
+      path.parse(value).name,
+    ]),
+  );
+}
+
 function appendArtifactNamesSection(lines, artifactNames) {
   const normalizedArtifactNames = normalizeArtifactNames(artifactNames);
   const artifactEntries = Object.entries(normalizedArtifactNames).filter(([, value]) => value);
@@ -94,6 +124,10 @@ export function rebaseReleaseVerificationInputs({
           ),
           artifacts: {
             ...normalizeArtifacts(packVerification?.artifacts),
+            reportPath: resolveExistingPath(
+              packVerificationPath,
+              packVerification?.artifacts?.reportPath || "",
+            ),
             logPath: resolveSiblingArtifact(
               packVerificationPath,
               "pack-verification.log",
@@ -112,6 +146,10 @@ export function rebaseReleaseVerificationInputs({
           ),
           artifacts: {
             ...normalizeArtifacts(packInstallSmoke?.artifacts),
+            resultPath: resolveExistingPath(
+              packInstallSmokePath,
+              packInstallSmoke?.artifacts?.resultPath || "",
+            ),
             logPath: resolveSiblingArtifact(
               packInstallSmokePath,
               "pack-install-smoke.log",
@@ -398,6 +436,24 @@ function buildDockerAcceptanceSection(dockerAcceptance, releaseBootstrapResult, 
   };
 }
 
+function buildEvidenceFileNames({
+  releaseBootstrapResult = null,
+  releasePreflightResult = null,
+  packageSection,
+  tarballSmokeSection,
+  dockerAcceptanceSection,
+  artifacts = {},
+}) {
+  return {
+    ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.evidenceFileNames),
+    ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.evidenceFileNames),
+    ...prefixArtifactNameEntries("package", deriveEvidenceFileNamesFromArtifacts(packageSection?.artifacts)),
+    ...prefixArtifactNameEntries("tarballSmoke", deriveEvidenceFileNamesFromArtifacts(tarballSmokeSection?.artifacts)),
+    ...prefixArtifactNameEntries("dockerAcceptance", deriveEvidenceFileNamesFromArtifacts(dockerAcceptanceSection?.artifacts)),
+    ...prefixArtifactNameEntries("releaseVerification", deriveEvidenceFileNamesFromArtifacts(artifacts)),
+  };
+}
+
 export function buildReleaseVerificationReport({
   releaseBootstrapResult = null,
   releasePreflightResult = null,
@@ -439,6 +495,14 @@ export function buildReleaseVerificationReport({
     overallStatus,
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceFileNames: buildEvidenceFileNames({
+      releaseBootstrapResult,
+      releasePreflightResult,
+      packageSection,
+      tarballSmokeSection,
+      dockerAcceptanceSection,
+      artifacts,
+    }),
     workflowContext: normalizeWorkflowContext(workflowContext),
     inputs: {
       hasReleaseBootstrapResult: !!releaseBootstrapResult,
@@ -565,6 +629,20 @@ export function buildReleaseVerificationSummaryMarkdown({
 
   appendGitHubWorkflowContextSection(lines, report.workflowContext);
   appendArtifactNamesSection(lines, report.artifactNames || {});
+
+  const evidenceFileNameEntries = Object.entries(report.evidenceFileNames || {}).filter(([, value]) => value);
+  if (evidenceFileNameEntries.length > 0) {
+    lines.push("");
+    lines.push("## Evidence file names");
+    lines.push("");
+
+    for (const [key, value] of evidenceFileNameEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
 
   if (assertion && typeof assertion === "object") {
     lines.push("");

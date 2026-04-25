@@ -241,6 +241,7 @@ function buildAssertionResult({
       : null,
     artifacts: normalizeArtifacts(report?.artifacts),
     artifactNames: normalizeArtifacts(report?.artifactNames),
+    evidenceFileNames: normalizeArtifacts(report?.evidenceFileNames),
     failureDetails,
     error,
   };

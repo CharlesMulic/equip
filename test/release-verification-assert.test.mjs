@@ -97,6 +97,13 @@ test("assert-release-verification-report passes healthy rollups", () => {
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
+    evidenceFileNames: {
+      packageLogPath: "pack-verification",
+      tarballSmokeLogPath: "pack-install-smoke",
+      releaseVerificationReportPath: "release-verification-report",
+      releaseVerificationAssertionPath: "release-verification-assertion",
+      releaseVerificationSummaryPath: "release-verification-summary",
+    },
     workflowContext: {
       repository: "CharlesMulic/equip",
       workflow: "Release",
@@ -150,6 +157,9 @@ test("assert-release-verification-report passes healthy rollups", () => {
   );
   assert.equal(assertion.artifacts.summaryPath, summaryPath);
   assert.equal(assertion.artifactNames.report, "release-verification-report");
+  assert.equal(assertion.evidenceFileNames.packageLogPath, "pack-verification");
+  assert.equal(assertion.evidenceFileNames.tarballSmokeLogPath, "pack-install-smoke");
+  assert.equal(assertion.evidenceFileNames.releaseVerificationReportPath, "release-verification-report");
   assert.deepEqual(assertion.failureDetails, []);
   assert.match(summary, /## Release verification assertion/i);
   assert.match(summary, /Outcome: `passed`/i);
@@ -304,6 +314,7 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.ok(assertion.failureDetails.some((detail) => /tarball smoke artifacts:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance details:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance artifacts:/i.test(detail)));
+  assert.deepEqual(assertion.evidenceFileNames, {});
   assert.match(summary, /Outcome: `failed`/i);
   assert.match(summary, /Failure details:/i);
   assert.match(summary, /package problems: missing bin\/equip\.js; unexpected src\/ fixture/i);
@@ -355,6 +366,7 @@ test("assert-release-verification-report reports missing component artifacts cle
   });
   assert.equal(assertion.package.missingReason, "pack verification artifact missing");
   assert.equal(assertion.dockerAcceptance.missingReason, "docker acceptance artifact missing");
+  assert.deepEqual(assertion.evidenceFileNames, {});
   assert.ok(assertion.failureDetails.some((detail) => /package missing:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance missing:/i.test(detail)));
 });
@@ -407,6 +419,7 @@ test("assert-release-verification-report reports skipped component artifacts cle
   assert.match(assertion.package.skippedReason, /release preflight did not pass/i);
   assert.match(assertion.tarballSmoke.skippedReason, /release preflight did not pass/i);
   assert.match(assertion.dockerAcceptance.skippedReason, /release preflight did not pass/i);
+  assert.deepEqual(assertion.evidenceFileNames, {});
   assert.ok(assertion.failureDetails.some((detail) => /package skipped:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance skipped:/i.test(detail)));
 });
@@ -443,4 +456,5 @@ test("assert-release-verification-report defaults missing input state to false",
     hasTarballSmoke: false,
     hasDockerAcceptance: false,
   });
+  assert.deepEqual(assertion.evidenceFileNames, {});
 });
