@@ -67,12 +67,14 @@ On pushes to `main` it:
    and uploads a machine-readable pack verification artifact, a raw `pack-verification.log`, and the actual packed `.tgz` for debugging / inspection
    even when `npm pack` itself fails before normal verification can complete
    while now also carrying the GitHub workflow context for that raw pack artifact (repository/workflow/run/ref/sha/event plus derived run/commit URLs)
+   plus the raw verification JSON's own file path
    plus the uploaded artifact bundle names for the raw verification JSON/log bundle and the packed tarball bundle
    and only after the preflight lane passed
 5. runs `npm run test:pack:smoke`
    to install the produced tarball into a clean temp project and prove the packaged CLI + exports still work from the npm package boundary
    while still preserving a machine-readable failure artifact plus raw `pack-install-smoke.log` output if the smoke dies before it can pass
    while now also carrying the GitHub workflow context for that raw tarball-smoke artifact
+   plus the raw tarball-smoke JSON's own file path
    plus the uploaded artifact bundle name for that raw tarball-smoke JSON/log bundle
    and only after the preflight lane passed
 6. runs `npm run test:docker:acceptance`

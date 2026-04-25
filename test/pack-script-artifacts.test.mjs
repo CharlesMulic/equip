@@ -54,6 +54,7 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   assert.ok(artifact.problems.length > 0);
   assert.equal(typeof artifact.failureMessage, "string");
   assert.ok(artifact.failureMessage.length > 0);
+  assert.equal(artifact.artifacts.reportPath, path.resolve(outputPath));
   assert.equal(artifact.artifacts.logPath, path.resolve(logPath));
   assert.equal(artifact.artifactNames.bundle, "pack-verification");
   assert.equal(artifact.artifactNames.tarball, "");
@@ -97,6 +98,7 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.equal(artifact.status, "failed");
   assert.equal(artifact.tarballPath, "");
   assert.match(artifact.failureMessage, /PACK_TARBALL_PATH does not exist or is not a file/i);
+  assert.equal(artifact.artifacts.resultPath, path.resolve(outputPath));
   assert.equal(artifact.artifacts.logPath, path.resolve(logPath));
   assert.equal(artifact.artifactNames.bundle, "pack-install-smoke");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");

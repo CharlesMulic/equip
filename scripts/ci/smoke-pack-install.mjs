@@ -42,6 +42,7 @@ const result = {
     bundle: packInstallSmokeArtifactName,
   },
   artifacts: {
+    resultPath: outputPath ? path.resolve(outputPath) : "",
     logPath: logPath ? path.resolve(logPath) : "",
   },
 };
@@ -171,6 +172,7 @@ function appendSummary() {
     `- unequip --version: \`${result.unequipVersion || "unknown"}\``,
     `- Help check: ${result.helpIncludesUsage ? "passed" : "failed"}`,
     result.failureMessage ? `- Failure: ${result.failureMessage}` : null,
+    result.artifacts?.resultPath ? `- Result: \`${result.artifacts.resultPath}\`` : null,
     result.artifacts?.logPath ? `- Log: \`${result.artifacts.logPath}\`` : null,
   ].filter(Boolean);
 

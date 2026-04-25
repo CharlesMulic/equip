@@ -57,6 +57,7 @@ function appendSummary(verification) {
     `- Forbidden prefixes checked: ${verification.forbiddenPrefixesChecked.join(", ") || "(none)"}`,
     verification.shasum ? `- Tarball shasum: \`${verification.shasum}\`` : null,
     verification.problems.length > 0 ? `- Problems: ${verification.problems.join("; ")}` : null,
+    verification.artifacts?.reportPath ? `- Report: \`${verification.artifacts.reportPath}\`` : null,
     verification.artifacts?.logPath ? `- Log: \`${verification.artifacts.logPath}\`` : null,
   ].filter(Boolean);
 
@@ -116,6 +117,7 @@ try {
       tarball: verification.tarballFileName ? tarballArtifactName : "",
     },
     artifacts: {
+      reportPath: outputPath ? path.resolve(outputPath) : "",
       logPath: logPath ? path.resolve(logPath) : "",
     },
   };
@@ -154,6 +156,7 @@ try {
       tarball: "",
     },
     artifacts: {
+      reportPath: outputPath ? path.resolve(outputPath) : "",
       logPath: logPath ? path.resolve(logPath) : "",
     },
   };
