@@ -55,6 +55,21 @@ function prefixArtifactNameEntries(prefix, artifactNames) {
   );
 }
 
+function deriveEvidenceFileNamesFromArtifacts(artifacts) {
+  const normalizedArtifacts = normalizeArtifacts(artifacts);
+  const entries = Object.entries(normalizedArtifacts).filter(([, value]) => value);
+  if (entries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    entries.map(([key, value]) => [
+      key,
+      path.parse(value).name,
+    ]),
+  );
+}
+
 function buildEvidenceFiles({
   releaseBootstrapResult = null,
   releasePreflightResult = null,
@@ -71,6 +86,22 @@ function buildEvidenceFiles({
     ...prefixArtifactEntries("dockerAcceptance", releaseVerificationReport?.dockerAcceptance?.artifacts),
     ...prefixArtifactEntries("changesetsRelease", changesetsReleaseReport?.artifacts),
     ...prefixArtifactEntries("releaseWorkflow", artifacts),
+  };
+}
+
+function buildEvidenceFileNames({
+  releaseBootstrapResult = null,
+  releasePreflightResult = null,
+  releaseVerificationReport = null,
+  changesetsReleaseReport = null,
+  artifacts = {},
+}) {
+  return {
+    ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.evidenceFileNames),
+    ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.evidenceFileNames),
+    ...prefixArtifactNameEntries("releaseVerification", releaseVerificationReport?.evidenceFileNames),
+    ...prefixArtifactNameEntries("changesetsRelease", changesetsReleaseReport?.evidenceFileNames),
+    ...prefixArtifactNameEntries("releaseWorkflow", deriveEvidenceFileNamesFromArtifacts(artifacts)),
   };
 }
 
@@ -293,6 +324,13 @@ export function buildReleaseWorkflowReport({
     workflowContext: normalizeWorkflowContext(workflowContext),
     artifacts: normalizeArtifacts(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceFileNames: buildEvidenceFileNames({
+      releaseBootstrapResult,
+      releasePreflightResult,
+      releaseVerificationReport,
+      changesetsReleaseReport,
+      artifacts,
+    }),
     evidenceArtifactNames: buildEvidenceArtifactNames({
       releaseBootstrapResult,
       releasePreflightResult,
@@ -406,6 +444,17 @@ export function buildReleaseWorkflowSummaryMarkdown({ report }) {
   if (evidenceArtifactEntries.length > 0) {
     lines.push("", "## Nested evidence artifacts", "");
     for (const [key, value] of evidenceArtifactEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
+
+  const evidenceFileNameEntries = Object.entries(report.evidenceFileNames || {}).filter(([, value]) => value);
+  if (evidenceFileNameEntries.length > 0) {
+    lines.push("", "## Nested evidence file names", "");
+    for (const [key, value] of evidenceFileNameEntries) {
       const label = key
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/^./, (char) => char.toUpperCase());

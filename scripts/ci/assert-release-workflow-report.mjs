@@ -48,6 +48,10 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
             },
       artifactNames:
         report?.artifactNames && typeof report.artifactNames === "object" ? report.artifactNames : {},
+      evidenceFileNames:
+        report?.evidenceFileNames && typeof report.evidenceFileNames === "object"
+          ? report.evidenceFileNames
+          : {},
       evidenceArtifactNames:
         report?.evidenceArtifactNames && typeof report.evidenceArtifactNames === "object"
           ? report.evidenceArtifactNames
