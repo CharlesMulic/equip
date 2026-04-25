@@ -79,6 +79,7 @@ function makeRegistryToolDef(overrides = {}) {
     ],
     homepage: "https://example.com",
     categories: ["testing"],
+    publisher: { name: "CG3", slug: "cg3", verified: true },
     version: 1,
     contentHash: "hash-v1",
     ...overrides,
@@ -161,6 +162,15 @@ describe("augment-defs CRUD", () => {
     assert.equal(result, null);
     // Should have created a .corrupt.bak file
     assert.ok(fs.existsSync(path.join(augmentsDir, "corrupt.json.corrupt.bak")));
+  });
+
+  it("unreadable augment entries are skipped gracefully", () => {
+    const augmentsDir = path.join(tempHome, ".equip", "augments");
+    fs.mkdirSync(augmentsDir, { recursive: true });
+    fs.mkdirSync(path.join(augmentsDir, "unreadable.json"));
+
+    assert.equal(readAugmentDef("unreadable"), null);
+    assert.deepEqual(listAugmentDefs(), []);
   });
 });
 
@@ -281,7 +291,7 @@ describe("syncFromRegistry", () => {
     assert.equal(result.title, "My Local Tool", "Local title should be preserved");
   });
 
-  it("does not overwrite wrapped augment with same name", () => {
+  it("upgrades auto-wrapped augment with same name to registry metadata", () => {
     wrapUnmanaged({
       name: "test-tool",
       title: "Wrapped Tool",
@@ -291,8 +301,15 @@ describe("syncFromRegistry", () => {
 
     const result = syncFromRegistry(makeRegistryToolDef());
 
-    assert.equal(result.source, "wrapped", "Source should remain 'wrapped'");
-    assert.equal(result.description, "Auto-detected", "Wrapped description should be preserved");
+    assert.equal(result.source, "registry", "Source should become 'registry'");
+    assert.equal(result.title, "Test Tool");
+    assert.equal(result.description, "A test tool from the registry");
+    assert.equal(result.publisher.slug, "cg3");
+    assert.equal(result.registryVersionNumber, 1);
+
+    const persisted = readAugmentDef("test-tool");
+    assert.equal(persisted.source, "registry");
+    assert.equal(persisted.publisher.slug, "cg3");
   });
 });
 

@@ -6,7 +6,7 @@ Equip your AI agents with augments — packages of MCP servers, behavioral rules
 [![license](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](./LICENSE)
 [![node](https://img.shields.io/node/v/@cg3/equip)](https://nodejs.org)
 
-[Discord](https://discord.gg/bBcRHT4J) · [Augment Author Guide](./docs/augment-author.md)
+[Discord](https://discord.gg/qV5BHa9AtS) · [Augment Author Guide](./docs/augment-author.md)
 
 ## What It Does
 

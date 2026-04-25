@@ -175,6 +175,23 @@ function loadRegistryModule(registryUrl) {
   return registryModule;
 }
 
+function findCachedDefinitionFiles(root, name) {
+  if (!fs.existsSync(root)) return [];
+  const matches = [];
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      matches.push(...findCachedDefinitionFiles(fullPath, name));
+    } else if (entry.isFile() && entry.name === `${name}.json`) {
+      matches.push(fullPath);
+    }
+  }
+
+  return matches;
+}
+
 function runEquip(args, env) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["bin/equip.js", ...args], {
@@ -376,12 +393,26 @@ describe("fetchRegistryDef", () => {
   it("caches fetched definitions", async () => {
     await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
 
-    const cachePath = path.join(hermeticHome.homeDir, ".equip", "cache", `${HERMETIC_FIXTURE_NAME}.json`);
-    assert.ok(fs.existsSync(cachePath), "Cache file should exist after fetch");
+    const cacheRoot = path.join(hermeticHome.homeDir, ".equip", "cache");
+    const cachePath = path.join(cacheRoot, `${HERMETIC_FIXTURE_NAME}.json`);
+    assert.equal(fs.existsSync(cachePath), false, "Cache file should not be written to the legacy shared path");
 
-    const cached = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+    const matches = findCachedDefinitionFiles(cacheRoot, HERMETIC_FIXTURE_NAME);
+    assert.equal(matches.length, 1, "Cache file should exist under one registry-scoped directory");
+    assert.ok(matches[0].includes(`${path.sep}registries${path.sep}`), "Cache path should be registry-scoped");
+
+    const cached = JSON.parse(fs.readFileSync(matches[0], "utf-8"));
     assert.equal(cached.name, HERMETIC_FIXTURE_NAME);
     assert.equal(cached.installMode, "direct");
+  });
+
+  it("does not use cache entries written for another registry URL", async () => {
+    await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+
+    const { fetchRegistryDef: fetchFromOtherRegistry } = loadRegistryModule("http://127.0.0.1:1");
+    const def = await fetchFromOtherRegistry(HERMETIC_FIXTURE_NAME);
+
+    assert.equal(def, null);
   });
 });
 

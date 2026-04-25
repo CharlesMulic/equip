@@ -3,6 +3,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as cp from "child_process";
+import * as os from "os";
 
 // ─── Atomic Write ───────────────────────────────────────────
 
@@ -33,15 +35,17 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EPERM" && process.platform === "win32") {
+      if (repairUnreadableEquipJsonFile(filePath)) {
+        try {
+          fs.renameSync(tmp, filePath);
+          return;
+        } catch {}
+      }
+
       // Target file is locked by another process (e.g., IDE file watcher).
       // Fall back to direct write — less atomic but avoids hard failure.
       try { fs.unlinkSync(tmp); } catch {}
       fs.writeFileSync(filePath, content);
-      // Phase 2 security-review fix M-2: match the .tmp path's 0600
-      // hardening on the fallback branch too. Matters on WSL / cross-
-      // mount scenarios where unix perms are enforced even though the
-      // write code ran on the Windows fallback.
-      try { fs.chmodSync(filePath, 0o600); } catch { /* best effort */ }
     } else {
       throw err;
     }
@@ -49,8 +53,6 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
 }
 
 // ─── Process Lockfile ────────────────────────────────────────
-
-import * as os from "os";
 
 const LOCK_STALE_MS = 60_000; // consider lock stale after 60 seconds
 let lockDepth = 0; // re-entrancy counter for same-process calls
@@ -137,6 +139,34 @@ export interface SafeJsonResult {
   error?: string;
 }
 
+function isUnderEquipDir(filePath: string): boolean {
+  const resolved = path.resolve(filePath).toLowerCase();
+  const equipRoot = path.resolve(os.homedir(), ".equip").toLowerCase();
+  return resolved === equipRoot || resolved.startsWith(equipRoot + path.sep.toLowerCase());
+}
+
+function repairUnreadableEquipJsonFile(filePath: string): boolean {
+  if (process.platform !== "win32") return false;
+  if (!filePath.toLowerCase().endsWith(".json")) return false;
+  if (!isUnderEquipDir(filePath)) return false;
+
+  try {
+    if (!fs.statSync(filePath).isFile()) return false;
+  } catch {
+    return false;
+  }
+
+  try {
+    const result = cp.spawnSync("icacls", [path.resolve(filePath), "/inheritance:e"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Read and parse a JSON file, distinguishing "missing" from "corrupt".
  * Handles BOM-prefixed files.
@@ -150,7 +180,16 @@ export function safeReadJsonSync(filePath: string): SafeJsonResult {
     if (code === "ENOENT") {
       return { data: null, status: "missing" };
     }
-    return { data: null, status: "unreadable", error: `Cannot read file: ${(err as Error).message}` };
+
+    if (repairUnreadableEquipJsonFile(filePath)) {
+      try {
+        raw = fs.readFileSync(filePath, "utf-8");
+      } catch (retryErr: unknown) {
+        return { data: null, status: "unreadable", error: `Cannot read file: ${(retryErr as Error).message}` };
+      }
+    } else {
+      return { data: null, status: "unreadable", error: `Cannot read file: ${(err as Error).message}` };
+    }
   }
 
   // Strip BOM

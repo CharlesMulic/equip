@@ -349,6 +349,7 @@ export function readAugmentDef(name: string): AugmentDef | null {
     try { fs.copyFileSync(filePath, filePath + ".corrupt.bak"); } catch {}
     return null;
   }
+  if (status === "unreadable" || !data) return null;
 
   return normalizeAugmentDef(data as unknown as AugmentDef).def;
 }
@@ -457,13 +458,16 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
     return updateFromRegistry(existing, registryDef, now);
   }
 
-  if (existing) {
-    // Local or wrapped augment with this name already exists — don't overwrite.
-    // User's local content is sovereign over registry definitions.
+  if (existing && existing.source === "local") {
+    // Local augments with this name already exist - don't overwrite.
+    // User-authored local content is sovereign over registry definitions.
     return existing;
   }
 
-  // Create new definition from registry
+  // Create new definition from registry. Auto-wrapped definitions are upgraded
+  // because they are inferred from detected platform config, not authored
+  // content; if the registry now knows this augment, registry ownership should
+  // win so creator/publisher flows see the published metadata.
   const def: AugmentDef = {
     name: registryDef.name,
     source: "registry",
@@ -497,7 +501,7 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
     license: registryDef.license,
     categories: registryDef.categories,
     publisher: registryDef.publisher,
-    createdAt: now,
+    createdAt: existing?.createdAt || now,
     updatedAt: now,
   };
 

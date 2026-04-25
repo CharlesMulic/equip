@@ -5,6 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as crypto from "crypto";
 import type { AugmentConfig } from "../index";
 import type { HookDefinition } from "./hooks";
 import type { SkillConfig, SkillFile } from "./skills";
@@ -21,6 +22,30 @@ const FETCH_TIMEOUT_MS = 8000;
 // ─── Paths ─────────────────────────────────────────────────
 
 function cacheDir(): string { return path.join(os.homedir(), ".equip", "cache"); }
+
+function registryCacheKey(): string {
+  const normalized = (REGISTRY_API || "registry").trim().replace(/\/+$/, "") || "registry";
+  let label = normalized;
+
+  try {
+    const url = new URL(normalized);
+    label = `${url.protocol.replace(":", "")}-${url.host}${url.pathname}`;
+  } catch {
+    // Non-URL registry strings are allowed for local/test overrides; sanitize below.
+  }
+
+  const safeLabel = label
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "registry";
+  const digest = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 12);
+  return `${safeLabel}-${digest}`;
+}
+
+function cachePathFor(name: string): string {
+  return path.join(cacheDir(), "registries", registryCacheKey(), `${name}.json`);
+}
 
 // ─── Post-Install Actions ──────────────────────────────────
 
@@ -168,9 +193,9 @@ export async function validateAgainstRegistry(
 
 function cacheAugmentDef(name: string, def: RegistryDef, logger: EquipLogger): void {
   try {
-    const dir = cacheDir();
+    const cachePath = cachePathFor(name);
+    const dir = path.dirname(cachePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const cachePath = path.join(dir, `${name}.json`);
     fs.writeFileSync(cachePath, JSON.stringify(def, null, 2));
     logger.debug("Augment definition cached", { name, path: cachePath });
   } catch (err: unknown) {
@@ -180,7 +205,7 @@ function cacheAugmentDef(name: string, def: RegistryDef, logger: EquipLogger): v
 
 function readCachedAugmentDef(name: string, logger: EquipLogger): RegistryDef | null {
   try {
-    const cachePath = path.join(cacheDir(), `${name}.json`);
+    const cachePath = cachePathFor(name);
     const raw = fs.readFileSync(cachePath, "utf-8");
     const def = JSON.parse(raw) as RegistryDef;
     logger.info("Augment definition loaded from cache", { name });
