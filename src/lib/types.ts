@@ -20,6 +20,7 @@ export type ArtifactAction =
 export type EquipErrorCode =
   | "CONFIG_CORRUPT"
   | "CONFIG_UNREADABLE"
+  | "CONFIG_CONFLICT"
   | "CONFIG_WRITE_FAILED"
   | "SETTINGS_CORRUPT"
   | "SETTINGS_WRITE_FAILED"

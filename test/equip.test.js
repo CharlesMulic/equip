@@ -56,6 +56,36 @@ function cleanup(...paths) {
   }
 }
 
+function withTempHome(fn) {
+  const tempHome = tmpPath("equip-home");
+  fs.mkdirSync(tempHome, { recursive: true });
+  const previous = {
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+    HOMEDRIVE: process.env.HOMEDRIVE,
+    HOMEPATH: process.env.HOMEPATH,
+  };
+
+  process.env.HOME = tempHome;
+  process.env.USERPROFILE = tempHome;
+  delete process.env.HOMEDRIVE;
+  delete process.env.HOMEPATH;
+
+  try {
+    return fn(tempHome);
+  } finally {
+    if (previous.HOME === undefined) delete process.env.HOME;
+    else process.env.HOME = previous.HOME;
+    if (previous.USERPROFILE === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previous.USERPROFILE;
+    if (previous.HOMEDRIVE === undefined) delete process.env.HOMEDRIVE;
+    else process.env.HOMEDRIVE = previous.HOMEDRIVE;
+    if (previous.HOMEPATH === undefined) delete process.env.HOMEPATH;
+    else process.env.HOMEPATH = previous.HOMEPATH;
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+}
+
 const RULES_CONTENT = `<!-- test:v1.0.0 -->
 ## Test Rules
 Always do the thing.
@@ -353,6 +383,52 @@ describe("installMcpJson", () => {
     assert.ok(data.mcpServers.other);
     cleanup(p.configPath);
   });
+
+  it("refuses to overwrite an unmanaged same-slug entry", () => withTempHome(() => {
+    const p = mockPlatform();
+    fs.writeFileSync(p.configPath, JSON.stringify({
+      mcpServers: {
+        prior: {
+          command: "node",
+          args: ["/usr/local/lib/user-tools/their-own-handler.js"],
+          env: { USER_OWNED_API_KEY: "secret-not-equip-managed-do-not-touch" },
+        },
+      },
+      theme: "dark",
+    }, null, 2));
+
+    const before = fs.readFileSync(p.configPath, "utf-8");
+    const result = installMcpJson(p, "prior", { url: "https://api.cg3.io/mcp", type: "http" }, false);
+
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "CONFIG_CONFLICT");
+    assert.equal(fs.readFileSync(p.configPath, "utf-8"), before, "user-managed config should remain byte-identical");
+    cleanup(p.configPath);
+  }));
+
+  it("updates a same-slug entry when Equip already manages it on that platform", () => withTempHome(() => {
+    const p = mockPlatform();
+    fs.writeFileSync(p.configPath, JSON.stringify({
+      mcpServers: { prior: { url: "https://old.example.com/mcp", type: "http" } },
+    }, null, 2));
+    trackInstallation("prior", {
+      source: "registry",
+      title: "Prior",
+      transport: "http",
+      serverUrl: "https://old.example.com/mcp",
+      platforms: ["claude-code"],
+      artifacts: { "claude-code": { mcp: true } },
+    });
+
+    const result = installMcpJson(p, "prior", { url: "https://new.example.com/mcp", type: "http" }, false);
+    const data = JSON.parse(fs.readFileSync(p.configPath, "utf-8"));
+
+    assert.equal(result.success, true);
+    assert.equal(result.action, "updated");
+    assert.equal(data.mcpServers.prior.url, "https://new.example.com/mcp");
+    cleanup(p.configPath, path.join(os.homedir(), ".equip", "installations.json"));
+    try { fs.rmSync(path.join(os.homedir(), ".equip"), { recursive: true, force: true }); } catch {}
+  }));
 });
 
 // ─── Rules (internal) ───────────────────────────────────────
@@ -772,11 +848,19 @@ describe("installMcpToml", () => {
     cleanup(configPath);
   });
 
-  it("replaces existing entry on re-install", () => {
+  it("replaces existing entry on re-install when Equip already manages it", () => withTempHome(() => {
     const configPath = tmpPath("codex-config") + ".toml";
     const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
     cleanup(configPath);
     installMcpToml(p, "prior", { url: "https://old.com" }, false);
+    trackInstallation("prior", {
+      source: "registry",
+      title: "Prior",
+      transport: "http",
+      serverUrl: "https://old.com",
+      platforms: ["codex"],
+      artifacts: { codex: { mcp: true } },
+    });
     installMcpToml(p, "prior", { url: "https://new.com" }, false);
     const content = fs.readFileSync(configPath, "utf-8");
     assert.ok(content.includes("https://new.com"));
@@ -784,7 +868,30 @@ describe("installMcpToml", () => {
     const count = (content.match(/\[mcp_servers\.prior\]/g) || []).length;
     assert.equal(count, 1);
     cleanup(configPath);
-  });
+    try { fs.rmSync(path.join(os.homedir(), ".equip"), { recursive: true, force: true }); } catch {}
+  }));
+
+  it("refuses to overwrite an unmanaged same-slug TOML entry", () => withTempHome(() => {
+    const configPath = tmpPath("codex-config") + ".toml";
+    fs.writeFileSync(configPath, [
+      '[mcp_servers.prior]',
+      'command = "node"',
+      'args = ["/usr/local/lib/user-tools/their-own-handler.js"]',
+      '',
+      '[mcp_servers.prior.env]',
+      'USER_OWNED_API_KEY = "secret-not-equip-managed-do-not-touch"',
+      '',
+    ].join("\n"));
+    const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
+
+    const before = fs.readFileSync(configPath, "utf-8");
+    const result = installMcpToml(p, "prior", { url: "https://api.cg3.io/mcp" }, false);
+
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "CONFIG_CONFLICT");
+    assert.equal(fs.readFileSync(configPath, "utf-8"), before, "user-managed TOML should remain untouched");
+    cleanup(configPath);
+  }));
 });
 
 describe("Codex uninstallMcp (TOML)", () => {
@@ -1296,11 +1403,19 @@ describe("buildStdioConfig", () => {
 // ─── updateMcpKey ───────────────────────────────────────────
 
 describe("Augment.updateMcpKey()", () => {
-  it("updates API key in existing JSON config", () => {
+  it("updates API key in existing JSON config", () => withTempHome(() => {
     const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform();
     cleanup(p.configPath);
     e.installMcp(p, "old-key");
+    trackInstallation("myserver", {
+      source: "registry",
+      title: "My Server",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      platforms: ["claude-code"],
+      artifacts: { "claude-code": { mcp: true } },
+    });
     let entry = e.readMcp(p);
     assert.equal(entry.headers.Authorization, "Bearer old-key");
 
@@ -1308,19 +1423,29 @@ describe("Augment.updateMcpKey()", () => {
     entry = e.readMcp(p);
     assert.equal(entry.headers.Authorization, "Bearer new-key");
     cleanup(p.configPath);
-  });
+    try { fs.rmSync(path.join(os.homedir(), ".equip"), { recursive: true, force: true }); } catch {}
+  }));
 
-  it("updates API key in TOML config", () => {
+  it("updates API key in TOML config", () => withTempHome(() => {
     const configPath = tmpPath("toml-rekey") + ".toml";
     const e = new Augment({ name: "myserver", serverUrl: "https://example.com/mcp" });
     const p = mockPlatform({ platform: "codex", configPath, rootKey: "mcp_servers", configFormat: "toml" });
     cleanup(configPath);
     e.installMcp(p, "old-key");
+    trackInstallation("myserver", {
+      source: "registry",
+      title: "My Server",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      platforms: ["codex"],
+      artifacts: { codex: { mcp: true } },
+    });
     e.updateMcpKey(p, "new-key");
     const entry = e.readMcp(p);
     assert.equal(entry.http_headers.Authorization, "Bearer new-key");
     cleanup(configPath);
-  });
+    try { fs.rmSync(path.join(os.homedir(), ".equip"), { recursive: true, force: true }); } catch {}
+  }));
 });
 
 // ─── resolvePlatformId ──────────────────────────────────────

@@ -8,6 +8,7 @@ import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } from "./fs";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
+import { readInstallations } from "./installations";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -263,12 +264,26 @@ export function installMcp(platform: DetectedPlatform, serverName: string, mcpEn
   return installMcpJson(platform, serverName, mcpEntry, dryRun, logger);
 }
 
+function hasManagedInstallOnPlatform(serverName: string, platformId: string): boolean {
+  const record = readInstallations().augments[serverName];
+  return !!record && Array.isArray(record.platforms) && record.platforms.includes(platformId);
+}
+
+function conflictResult(configPath: string, serverName: string, platformId: string, method: "json" | "toml", logger: EquipLogger): ArtifactResult {
+  logger.warn("Refusing to overwrite unmanaged MCP entry", { configPath, serverName, platform: platformId, method });
+  return makeResult("mcp", {
+    errorCode: "CONFIG_CONFLICT",
+    error: `Cannot install "${serverName}" on ${platformId}: ${configPath} already has an unmanaged MCP entry with that name. Remove or rename the existing entry first.`,
+    method,
+  });
+}
+
 /**
  * Write MCP config directly to JSON file.
  * Uses atomic writes and detects corrupt config files.
  */
 export function installMcpJson(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger = NOOP_LOGGER): ArtifactResult {
-  const { configPath, rootKey } = platform;
+  const { configPath, rootKey, platform: platformId } = platform;
 
   const { data: existing, status, error } = safeReadJsonSync(configPath);
   if (status === "corrupt") {
@@ -282,9 +297,18 @@ export function installMcpJson(platform: DetectedPlatform, serverName: string, m
 
   const config = existing || {};
   if (!config[rootKey]) config[rootKey] = {};
-  (config[rootKey] as Record<string, unknown>)[serverName] = mcpEntry;
+  const currentRoot = config[rootKey] as Record<string, unknown>;
+  const hasExistingEntry = !!currentRoot[serverName];
+  if (hasExistingEntry && !hasManagedInstallOnPlatform(serverName, platformId)) {
+    return conflictResult(configPath, serverName, platformId, "json", logger);
+  }
+  currentRoot[serverName] = mcpEntry;
 
-  const result = makeResult("mcp", { success: true, action: existing ? "updated" : "created", method: "json" });
+  const result = makeResult("mcp", {
+    success: true,
+    action: hasExistingEntry ? "updated" : "created",
+    method: "json",
+  });
 
   if (!dryRun) {
     const backedUp = createBackup(configPath);
@@ -305,7 +329,7 @@ export function installMcpJson(platform: DetectedPlatform, serverName: string, m
  * Uses atomic writes.
  */
 export function installMcpToml(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger = NOOP_LOGGER): ArtifactResult {
-  const { configPath, rootKey } = platform;
+  const { configPath, rootKey, platform: platformId } = platform;
 
   let existing = "";
   try {
@@ -322,7 +346,11 @@ export function installMcpToml(platform: DetectedPlatform, serverName: string, m
   }
 
   const tableHeader = `[${rootKey}.${serverName}]`;
-  if (existing.includes(tableHeader)) {
+  const hasExistingEntry = existing.includes(tableHeader);
+  if (hasExistingEntry && !hasManagedInstallOnPlatform(serverName, platformId)) {
+    return conflictResult(configPath, serverName, platformId, "toml", logger);
+  }
+  if (hasExistingEntry) {
     existing = removeTomlEntry(existing, rootKey, serverName);
   }
 
@@ -336,7 +364,7 @@ export function installMcpToml(platform: DetectedPlatform, serverName: string, m
     logger.info("MCP config written", { configPath, serverName, method: "toml" });
   }
 
-  return makeResult("mcp", { success: true, action: "created", method: "toml" });
+  return makeResult("mcp", { success: true, action: hasExistingEntry ? "updated" : "created", method: "toml" });
 }
 
 /**
