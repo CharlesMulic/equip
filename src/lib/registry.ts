@@ -310,6 +310,9 @@ export function registryDefToConfig(def: RegistryDef, options?: { logger?: Equip
   const config: AugmentConfig = {
     name: def.name,
     logger: options?.logger,
+    augmentVersion: def.version,
+    source: "registry",
+    package: def.npmPackage,
   };
 
   if (def.serverUrl) {

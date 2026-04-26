@@ -13,7 +13,8 @@ import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
 import * as cli from "./lib/cli";
-import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile } from "./lib/skills";
+import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile, type InstallSkillOptions } from "./lib/skills";
+import type { SkillManifestOwnerSource } from "./lib/skill-manifest";
 import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, type EquipWarning, type EquipLogger, type EquipErrorCode, type EquipWarningCode, type ArtifactType, type ArtifactAction } from "./lib/types";
 import type { ReadMcpResult } from "./lib/mcp";
 import { fetchRegistryDef, registryDefToConfig, type RegistryDef, type PostInstallAction } from "./lib/registry";
@@ -47,6 +48,14 @@ export interface AugmentConfig {
   /** Multiple skills — each gets its own directory at {skillsPath}/{skillName}/ (flat per the Agent Skills spec). */
   skills?: SkillConfig[];
   logger?: EquipLogger;
+  /** Augment registry version recorded in per-skill manifests. Defaults to 0 for local installs. */
+  augmentVersion?: number;
+  /** Where this augment def came from. Defaults to "local". */
+  source?: SkillManifestOwnerSource;
+  /** npm package name (registry installs). */
+  package?: string;
+  /** Equip CLI version recorded in per-skill manifests. Defaults to "unknown". */
+  equipVersion?: string;
 }
 
 /**
@@ -61,6 +70,10 @@ class Augment {
   hookDir: string;
   skills: SkillConfig[];
   logger: EquipLogger;
+  augmentVersion?: number;
+  source: SkillManifestOwnerSource;
+  package?: string;
+  equipVersion?: string;
 
   constructor(config: AugmentConfig) {
     if (!config.name) throw new Error("Augment: name is required");
@@ -73,6 +86,10 @@ class Augment {
     this.hookDir = config.hookDir || path.join(os.homedir(), `.${config.name}`, "hooks");
     this.skills = config.skills || [];
     this.logger = config.logger || NOOP_LOGGER;
+    this.augmentVersion = config.augmentVersion;
+    this.source = config.source || "local";
+    this.package = config.package;
+    this.equipVersion = config.equipVersion;
   }
 
   detect(): DetectedPlatform[] {
@@ -154,19 +171,62 @@ class Augment {
     return !!this.hookDefs && this.hookDefs.length > 0 && !!getHookCapabilities(platform.platform);
   }
 
-  installSkill(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): ArtifactResult {
+  installSkill(
+    platform: DetectedPlatform,
+    options: { dryRun?: boolean; takeover?: boolean; adopt?: boolean } = {},
+  ): ArtifactResult {
     if (this.skills.length === 0) return makeResult("skills", { attempted: false, success: true, action: "skipped" });
+
+    const baseOpts: InstallSkillOptions = {
+      ...options,
+      logger: this.logger,
+      augmentVersion: this.augmentVersion,
+      source: this.source,
+      package: this.package,
+      equipVersion: this.equipVersion,
+    };
+
     let anyCreated = false;
     let anyUpdated = false;
+    const collisions: ArtifactResult[] = [];
     let lastResult: ArtifactResult = makeResult("skills", { attempted: false, success: true, action: "skipped" });
+
     for (const sk of this.skills) {
-      const result = installSkill(platform, this.name, sk, { ...options, logger: this.logger });
+      const result = installSkill(platform, this.name, sk, baseOpts);
       lastResult = result;
       if (result.action === "created") anyCreated = true;
       if (result.action === "updated") anyUpdated = true;
-      if (!result.success) return result; // fail fast on error
+      if (!result.success) {
+        // Per ENG-0011: collision refusals don't fail-fast — surface the conflict
+        // and continue installing other skills so a multi-skill augment isn't held
+        // hostage by a single colliding name. Any non-collision failure (write error,
+        // disk full, etc.) still propagates immediately.
+        const isCollision = result.errorCode === "SKILL_COLLISION_OTHER_AUGMENT"
+          || result.errorCode === "SKILL_COLLISION_USER_AUTHORED"
+          || result.errorCode === "SKILL_COLLISION_FORGED_MANIFEST";
+        if (isCollision) {
+          collisions.push(result);
+          continue;
+        }
+        return result; // fail fast on real errors
+      }
     }
-    // Prefer the strongest action across skills for aggregate telemetry.
+
+    // Aggregate telemetry: strongest action wins, but propagate first collision via
+    // errorCode so callers (CLI summary printer) can detect and surface the conflict
+    // list. The error string is the per-skill message of the first collision; full
+    // collision detail is loggable via the logger interface above.
+    const aggregateAction = anyCreated ? "created" : anyUpdated ? "updated" : lastResult.action;
+    if (collisions.length > 0) {
+      return makeResult("skills", {
+        attempted: true,
+        success: collisions.length < this.skills.length, // partial success vs full failure
+        action: aggregateAction,
+        errorCode: collisions[0].errorCode,
+        error: `${collisions.length}/${this.skills.length} skill${collisions.length === 1 ? "" : "s"} refused: `
+          + collisions.map(c => c.error).join("; "),
+      });
+    }
     if (anyCreated) return makeResult("skills", { attempted: true, success: true, action: "created" });
     if (anyUpdated) return makeResult("skills", { attempted: true, success: true, action: "updated" });
     return lastResult;

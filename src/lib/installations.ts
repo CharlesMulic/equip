@@ -158,3 +158,29 @@ export function getManagedAugmentNames(): Set<string> {
   const inst = readInstallations();
   return new Set(Object.keys(inst.augments));
 }
+
+/**
+ * Find augments that installations.json records as owning a given skill name
+ * on a given platform. Used by the install-time collision check to
+ * cross-reference per-skill manifest claims against the authoritative
+ * installation index. Returns augment names; usually 0 or 1.
+ *
+ * Excluding `excludeAugment` lets the caller ask "does anyone OTHER than me
+ * already own this skill?"
+ */
+export function findAugmentsOwningSkill(
+  platformId: string,
+  skillName: string,
+  excludeAugment?: string,
+): string[] {
+  const inst = readInstallations();
+  const owners: string[] = [];
+  for (const [augmentName, record] of Object.entries(inst.augments)) {
+    if (excludeAugment && augmentName === excludeAugment) continue;
+    const skills = record.artifacts?.[platformId]?.skills;
+    if (Array.isArray(skills) && skills.includes(skillName)) {
+      owners.push(augmentName);
+    }
+  }
+  return owners;
+}

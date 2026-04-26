@@ -79,6 +79,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
 
   // ── Platform Detection ──
   const config = registryDefToConfig(toolDef, { logger });
+  config.equipVersion = equipVersion;
   const equip = new Augment(config);
   let platforms = equip.detect();
 
@@ -171,9 +172,24 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
     cli.step(++stepNum, totalSteps, "Skills");
     const skillNames = (config.skills || []).map(s => s.name);
     for (const p of platforms) {
-      const result = equip.installSkill(p, { dryRun });
+      const result = equip.installSkill(p, {
+        dryRun,
+        takeover: parsedArgs.takeover,
+        adopt: parsedArgs.adopt,
+      });
       report.addResult(p.platform, result);
-      if (result.action === "created") {
+      if (result.errorCode && (
+        result.errorCode === "SKILL_COLLISION_OTHER_AUGMENT" ||
+        result.errorCode === "SKILL_COLLISION_USER_AUTHORED" ||
+        result.errorCode === "SKILL_COLLISION_FORGED_MANIFEST"
+      )) {
+        // Partial-augment install (ENG-0011): some skills landed, some refused.
+        cli.warn(`${platformName(p.platform)}   ${result.error}`);
+        const hint = result.errorCode === "SKILL_COLLISION_USER_AUTHORED"
+          ? "Re-run with --adopt to take ownership."
+          : "Re-run with --takeover to overwrite the existing skill.";
+        cli.log(`  ${cli.DIM}${hint}${cli.RESET}`);
+      } else if (result.action === "created") {
         cli.ok(`${platformName(p.platform)}   ${skillNames.length} skill${skillNames.length === 1 ? "" : "s"} installed (${skillNames.join(", ")})`);
       } else if (result.action === "skipped" && result.attempted) {
         cli.ok(`${platformName(p.platform)}   Skills already current`);

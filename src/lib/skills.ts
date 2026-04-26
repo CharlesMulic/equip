@@ -7,6 +7,15 @@ import * as path from "path";
 import { type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync } from "./fs";
 import { validateRelativePath, validatePathWithinDir, validateToolName, validateSkillName } from "./validation";
+import { findAugmentsOwningSkill, readInstallations } from "./installations";
+import {
+  buildManifestForInstall,
+  findOwner,
+  manifestSoleOwner,
+  readManifest,
+  writeManifest,
+  type SkillManifestOwnerSource,
+} from "./skill-manifest";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
 
@@ -60,6 +69,41 @@ function declaredSkillFilesAreCurrent(skillDir: string, files: SkillFile[]): boo
 }
 
 /**
+ * Options accepted by installSkill / Augment.installSkill.
+ *
+ * Identity / provenance fields populate the per-skill manifest written by
+ * Package 01 of the equip-skill-ownership initiative. They're optional — local
+ * installs and unit tests pass nothing and get sensible defaults — but the
+ * registry-install path should populate them so the manifest reflects accurate
+ * ownership.
+ */
+export interface InstallSkillOptions {
+  dryRun?: boolean;
+  logger?: EquipLogger;
+  /** Bypass cross-augment collision refusal (manifest names a different augment). */
+  takeover?: boolean;
+  /** Bypass user-authored refusal (skill dir exists with no manifest and no installations.json record for us). */
+  adopt?: boolean;
+  /** Augment registry version recorded in the manifest. Defaults to 0 for local installs. */
+  augmentVersion?: number;
+  /** Where the augment def came from. Defaults to "local". */
+  source?: SkillManifestOwnerSource;
+  /** npm package name when applicable (registry installs). */
+  package?: string;
+  /** Equip CLI version recorded in the manifest. Defaults to "unknown". */
+  equipVersion?: string;
+}
+
+/**
+ * Reasons installSkill can refuse a write. Returned via ArtifactResult.errorCode
+ * so callers can branch on the conflict type for tailored messaging or for
+ * partial-augment-install handling (see ENG-0011).
+ */
+export const SKILL_COLLISION_OTHER_AUGMENT = "SKILL_COLLISION_OTHER_AUGMENT" as const;
+export const SKILL_COLLISION_USER_AUTHORED = "SKILL_COLLISION_USER_AUTHORED" as const;
+export const SKILL_COLLISION_FORGED_MANIFEST = "SKILL_COLLISION_FORGED_MANIFEST" as const;
+
+/**
  * Install skill files to a platform's skills directory.
  * Layout: {skillsPath}/{skillName}/SKILL.md
  *
@@ -73,16 +117,21 @@ function declaredSkillFilesAreCurrent(skillDir: string, files: SkillFile[]): boo
  * left in place until managed-install metadata can distinguish stale files from
  * user-added local files.
  *
+ * Per-skill ownership is recorded in {skillDir}/.equip-meta.json (the manifest),
+ * which is the on-disk hygiene control for cross-augment collision detection.
+ * `installations.json` remains the authoritative cross-platform index — the
+ * manifest is advisory and forgeable, so collision decisions cross-check both.
+ *
  * @param platform - Detected platform with skillsPath
- * @param toolName - Owning augment name; used for legacy-layout cleanup, not for path scoping
+ * @param toolName - Owning augment name; used for ownership + legacy-layout cleanup
  * @param skill - Skill config with name and files
- * @param options - { dryRun }
+ * @param options - See {@link InstallSkillOptions}
  */
 export function installSkill(
   platform: DetectedPlatform,
   toolName: string,
   skill: SkillConfig,
-  options: { dryRun?: boolean; logger?: EquipLogger } = {},
+  options: InstallSkillOptions = {},
 ): ArtifactResult {
   const logger = options.logger || NOOP_LOGGER;
 
@@ -96,31 +145,201 @@ export function installSkill(
   validateToolName(toolName);
   validateSkillName(skill.name);
   const files = normalizeSkillFiles(skill.files);
+  const normalizedSkill: SkillConfig = { name: skill.name, files };
 
   const skillDir = path.join(platform.skillsPath, skill.name);
   const skillDirExists = fs.existsSync(skillDir);
 
+  // ── Collision-check decision tree ──
+  // Read the existing manifest; tolerate a corrupt one by treating it as absent
+  // and warning. We never want a corrupt manifest to brick install.
+  let existingManifest;
+  try {
+    existingManifest = readManifest(skillDir);
+  } catch (e) {
+    logger.warn("Skill manifest unreadable; treating as absent", {
+      skillDir, error: (e as Error).message,
+    });
+    existingManifest = null;
+  }
+
+  if (skillDirExists) {
+    const collisionRefusal = decideCollision({
+      platform: platform.platform,
+      toolName,
+      skillName: skill.name,
+      existingManifest,
+      options,
+      logger,
+    });
+    if (collisionRefusal) return collisionRefusal;
+  }
+
+  // ── Files: skip-current OR write ──
+  let filesAction: "created" | "updated" | "skipped";
   if (declaredSkillFilesAreCurrent(skillDir, files)) {
     logger.debug("Skill already current", { platform: platform.platform, skill: skill.name });
     cleanupLegacySkillSubtree(platform.skillsPath, toolName, skill.name, logger, options.dryRun);
-    return makeResult("skills", { attempted: true, success: true, action: "skipped" });
+    filesAction = "skipped";
+  } else {
+    if (!options.dryRun) {
+      for (const file of files) {
+        const filePath = skillFilePath(skillDir, file.path);
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        atomicWriteFileSync(filePath, file.content);
+      }
+      logger.info("Skill installed", { platform: platform.platform, skill: skill.name });
+      cleanupLegacySkillSubtree(platform.skillsPath, toolName, skill.name, logger, false);
+    }
+    filesAction = skillDirExists ? "updated" : "created";
   }
 
+  // ── Manifest write (last step, atomic) ──
+  // Skip the rewrite when files were skipped AND the existing manifest already
+  // names us correctly with matching file count — manifest is already current.
+  // Otherwise write a fresh manifest so it tracks current ownership + content.
   if (!options.dryRun) {
-    for (const file of files) {
-      const filePath = skillFilePath(skillDir, file.path);
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      atomicWriteFileSync(filePath, file.content);
+    const manifestStillCurrent =
+      filesAction === "skipped" &&
+      existingManifest !== null &&
+      findOwner(existingManifest, toolName, platform.platform) !== null &&
+      existingManifest.files.length === files.length;
+
+    if (!manifestStillCurrent) {
+      const manifest = buildManifestForInstall({
+        skill: normalizedSkill,
+        toolName,
+        augmentVersion: options.augmentVersion,
+        source: options.source ?? "local",
+        package: options.package,
+        platformId: platform.platform,
+        skillsRoot: platform.skillsPath,
+        equipVersion: options.equipVersion ?? "unknown",
+      });
+      try {
+        writeManifest(skillDir, manifest);
+      } catch (e) {
+        logger.warn("Skill manifest write failed; install proceeds without manifest", {
+          skillDir, error: (e as Error).message,
+        });
+      }
     }
-    logger.info("Skill installed", { platform: platform.platform, skill: skill.name });
-    cleanupLegacySkillSubtree(platform.skillsPath, toolName, skill.name, logger, false);
   }
 
   return makeResult("skills", {
     attempted: true,
     success: true,
-    action: skillDirExists ? "updated" : "created",
+    action: filesAction,
+  });
+}
+
+interface CollisionDecisionInput {
+  platform: string;
+  toolName: string;
+  skillName: string;
+  existingManifest: ReturnType<typeof readManifest>;
+  options: InstallSkillOptions;
+  logger: EquipLogger;
+}
+
+/**
+ * Returns an ArtifactResult representing a refusal, or null if install may proceed.
+ * Implements the decision tree from
+ * `operations/initiatives/equip-skill-ownership/work/01-manifest-schema-and-write.md`.
+ */
+function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
+  const { platform, toolName, skillName, existingManifest, options, logger } = input;
+
+  // Manifest owner cross-checks: if a manifest exists and names us, we own this dir.
+  const weOwnByManifest =
+    existingManifest !== null &&
+    findOwner(existingManifest, toolName, platform) !== null;
+  if (weOwnByManifest) return null;
+
+  // Find OTHER augments installations.json believes own this skill on this platform.
+  const otherInstalled = findAugmentsOwningSkill(platform, skillName, toolName);
+
+  // Manifest names a DIFFERENT augment.
+  if (existingManifest !== null) {
+    const sole = manifestSoleOwner(existingManifest);
+    const claimedAugment =
+      sole?.augment ??
+      existingManifest.owners.find(o => o.platform === platform)?.augment ??
+      existingManifest.owners[0]?.augment;
+    if (claimedAugment && claimedAugment !== toolName) {
+      const confirmedByInstallations = otherInstalled.includes(claimedAugment);
+      if (confirmedByInstallations) {
+        // True cross-augment collision (D)
+        if (!options.takeover) {
+          return refuse(SKILL_COLLISION_OTHER_AUGMENT,
+            `Skill "${skillName}" on ${platform} is owned by augment "${claimedAugment}". ` +
+            `Pass --takeover to overwrite.`,
+            logger);
+        }
+        logger.warn("Takeover overrides cross-augment collision", {
+          platform, skill: skillName, formerOwner: claimedAugment, newOwner: toolName,
+        });
+        return null;
+      }
+      // Manifest names an augment that installations.json doesn't confirm — forged advisory (E)
+      logger.warn("Forged manifest detected; ignoring claimed owner", {
+        platform, skill: skillName, claimedAugment,
+      });
+      // Fall through to the "no manifest" handling below.
+    }
+  }
+
+  // No (trusted) manifest. Decide based on installations.json.
+  if (otherInstalled.length > 0) {
+    // installations.json says someone else owns this — refuse without --takeover (B3).
+    if (!options.takeover) {
+      return refuse(SKILL_COLLISION_OTHER_AUGMENT,
+        `Skill "${skillName}" on ${platform} is recorded as owned by ${otherInstalled.join(", ")}. ` +
+        `Pass --takeover to overwrite.`,
+        logger);
+    }
+    logger.warn("Takeover overrides installations.json collision", {
+      platform, skill: skillName, formerOwners: otherInstalled, newOwner: toolName,
+    });
+    return null;
+  }
+
+  // No one else claims it. Did WE install it previously per installations.json?
+  const ourSkills = readInstallations().augments[toolName]?.artifacts?.[platform]?.skills;
+  const weExpectThis = Array.isArray(ourSkills) && ourSkills.includes(skillName);
+  if (weExpectThis) {
+    // Recovery case — files were installed by us in a prior run, just no manifest yet.
+    logger.debug("Recovering manifest for previously-installed skill", { platform, skill: skillName });
+    return null;
+  }
+
+  // Skill dir exists, no manifest, no one claims it. Likely user-authored. (B1)
+  if (!options.adopt) {
+    const code = existingManifest ? SKILL_COLLISION_FORGED_MANIFEST : SKILL_COLLISION_USER_AUTHORED;
+    return refuse(code,
+      `Skill directory "${skillName}" on ${platform} exists but is not tracked by Equip. ` +
+      `Pass --adopt to take ownership.`,
+      logger);
+  }
+  logger.warn("Adopt overrides user-authored skill", { platform, skill: skillName, augment: toolName });
+  return null;
+}
+
+function refuse(
+  code: typeof SKILL_COLLISION_OTHER_AUGMENT
+      | typeof SKILL_COLLISION_USER_AUTHORED
+      | typeof SKILL_COLLISION_FORGED_MANIFEST,
+  message: string,
+  logger: EquipLogger,
+): ArtifactResult {
+  logger.info("Skill install refused", { code, message });
+  return makeResult("skills", {
+    attempted: true,
+    success: false,
+    action: "skipped",
+    errorCode: code,
+    error: message,
   });
 }
 

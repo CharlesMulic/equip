@@ -130,16 +130,22 @@ export interface ParsedArgs {
   apiKey: string | null;
   nonInteractive: boolean;
   platform: string | null;
+  /** Cross-augment skill collision: overwrite an existing skill owned by another augment. */
+  takeover: boolean;
+  /** User-authored skill collision: take ownership of an untracked existing skill dir. */
+  adopt: boolean;
 }
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
     else if (a === "--dry-run") { args.dryRun = true; }
     else if (a === "--non-interactive") { args.nonInteractive = true; }
+    else if (a === "--takeover") { args.takeover = true; }
+    else if (a === "--adopt") { args.adopt = true; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
     else if (a === "--api-key-file" && i + 1 < argv.length) {
       try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }
