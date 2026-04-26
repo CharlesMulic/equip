@@ -128,9 +128,13 @@ for (const platformId of record.platforms) {
   }
 
   // Remove skills
+  const preservedAcrossSkills: string[] = [];
+  let anyTombstone = false;
   if (artifacts.skills && artifacts.skills.length > 0) {
     for (const skillName of artifacts.skills) {
-      uninstallSkill(platform, toolName, skillName, dryRun);
+      const r = uninstallSkill(platform, toolName, skillName, dryRun);
+      for (const f of r.preservedFiles) preservedAcrossSkills.push(`${skillName}/${f}`);
+      if (r.tombstone) anyTombstone = true;
     }
     results.push(`${artifacts.skills.length} skill${artifacts.skills.length === 1 ? "" : "s"}`);
   }
@@ -139,6 +143,16 @@ for (const platformId of record.platforms) {
     cli.ok(`${def.name}: removed ${results.join(" + ")}`);
     removed++;
     removedPlatforms.push(platformId);
+
+    if (preservedAcrossSkills.length > 0) {
+      cli.log(`  ${cli.DIM}Preserved user-modified files:${cli.RESET}`);
+      for (const f of preservedAcrossSkills) {
+        cli.log(`    ${cli.DIM}- ${f}${cli.RESET}`);
+      }
+    }
+    if (anyTombstone && !dryRun) {
+      cli.log(`  ${cli.DIM}Skill directory kept (tombstone manifest left behind because user content survived).${cli.RESET}`);
+    }
   } else {
     cli.info(`${def.name}: nothing to remove`);
   }

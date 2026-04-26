@@ -9,10 +9,15 @@ import { atomicWriteFileSync } from "./fs";
 import { validateRelativePath, validatePathWithinDir, validateToolName, validateSkillName } from "./validation";
 import { findAugmentsOwningSkill, readInstallations } from "./installations";
 import {
+  MANIFEST_FILENAME,
   buildManifestForInstall,
+  buildTombstoneManifest,
   findOwner,
+  isTombstone,
+  manifestPath,
   manifestSoleOwner,
   readManifest,
+  verifyFileAgainstManifest,
   writeManifest,
   type SkillManifestOwnerSource,
 } from "./skill-manifest";
@@ -399,33 +404,164 @@ function cleanupLegacySkillSubtree(
 }
 
 /**
- * Remove a skill directory from a platform.
+ * Result of an uninstallSkill call. Replaces the historical boolean return so
+ * callers can surface preserved files (user-modified or user-added content
+ * that survived the uninstall) and tombstone outcomes to the user.
+ */
+export interface UninstallSkillResult {
+  /** True if any Equip-owned content was removed (or would be in dry-run). */
+  removed: boolean;
+  /**
+   * Files Equip wrote that were preserved on uninstall because their content
+   * drifted from the manifest hash (user-modified). Paths are relative to the
+   * skill dir. Empty array on the legacy / no-manifest path even if foreign
+   * content survived (we can't tell what's foreign without a manifest).
+   */
+  preservedFiles: string[];
+  /**
+   * True if a tombstone manifest was written — the skill dir survived because
+   * preserved or foreign content remained, and the manifest now records the
+   * dir as "Equip once owned this; do not auto-wrap."
+   */
+  tombstone: boolean;
+  /**
+   * True when removal followed the manifest path (preferred). False = legacy
+   * fallback recursive delete (manifest absent or unreadable).
+   */
+  viaManifest: boolean;
+}
+
+export interface UninstallSkillOptions {
+  logger?: EquipLogger;
+}
+
+/**
+ * Remove a skill installed by `toolName` on `platform`. Behavior depends on
+ * whether a per-skill manifest is present:
  *
- * `toolName` is retained for API stability and legacy-layout cleanup, even
- * though skills now live flat at {skillsPath}/{skillName}/. Returns true if
- * either the current flat install OR a legacy wrapper install was removed.
+ * - Manifest present + names us as owner → walk manifest.files[] and unlink
+ *   only files whose current SHA-256 matches the manifest. User-modified files
+ *   are preserved. If the dir is empty after unlink, it's removed entirely;
+ *   otherwise a tombstone manifest is written.
+ * - Manifest present + names a different augment → refuse and log a warning.
+ *   We do not touch what we don't own.
+ * - Manifest absent → log a warning and fall back to recursive delete (today's
+ *   pre-Package-02 behavior). User-added files in this dir are lost — same
+ *   as before this package shipped, no regression.
+ *
+ * Legacy `{skillsPath}/{toolName}/{skillName}/` wrapper subtrees from older
+ * equip versions are also cleaned up here. Recursive delete on the legacy
+ * path is still safe because that path is unreadable by every platform's
+ * loader (the very reason Fix A flat-layout exists).
+ *
+ * `toolName` is retained for both ownership semantics (manifest cross-check)
+ * and legacy-layout cleanup.
  */
 export function uninstallSkill(
   platform: DetectedPlatform,
   toolName: string,
   skillName: string,
   dryRun: boolean = false,
-): boolean {
-  if (!platform.skillsPath) return false;
+  options: UninstallSkillOptions = {},
+): UninstallSkillResult {
+  const logger = options.logger || NOOP_LOGGER;
+  const result: UninstallSkillResult = {
+    removed: false,
+    preservedFiles: [],
+    tombstone: false,
+    viaManifest: false,
+  };
+
+  if (!platform.skillsPath) return result;
   validateToolName(toolName);
   validateSkillName(skillName);
 
-  let removed = false;
-
   const skillDir = path.join(platform.skillsPath, skillName);
-  try {
-    if (fs.statSync(skillDir).isDirectory()) {
-      if (!dryRun) fs.rmSync(skillDir, { recursive: true, force: true });
-      removed = true;
-    }
-  } catch { /* nothing to remove at flat path */ }
+  const skillDirExists = (() => {
+    try { return fs.statSync(skillDir).isDirectory(); }
+    catch { return false; }
+  })();
 
-  // Legacy: also clean up {skillsPath}/{toolName}/{skillName}/ from older equip versions.
+  if (skillDirExists) {
+    // Read the manifest. Corrupt → treat as absent and fall through to
+    // legacy recursive delete (same UX as pre-Package-02; non-regression).
+    let manifest;
+    try {
+      manifest = readManifest(skillDir);
+    } catch (e) {
+      logger.warn("Skill manifest unreadable; falling back to recursive delete", {
+        skillDir, error: (e as Error).message,
+      });
+      manifest = null;
+    }
+
+    if (manifest && !isTombstone(manifest)) {
+      const ourEntry = findOwner(manifest, toolName, platform.platform);
+      if (!ourEntry) {
+        // We're not in the owners list. Refuse — don't touch what we don't own.
+        const claimedAugments = manifest.owners.map(o => o.augment).join(", ") || "(none)";
+        logger.warn("Skill not owned by this augment; refusing to uninstall", {
+          skillDir, requestedBy: toolName, claimedOwners: claimedAugments,
+        });
+        // Still attempt legacy cleanup below.
+      } else {
+        // Manifest-driven selective uninstall.
+        result.viaManifest = true;
+        const { removed, preservedFiles, foreignFiles } = unlinkOwnedFiles(skillDir, manifest.files, dryRun);
+        result.preservedFiles = preservedFiles;
+        result.removed = removed || preservedFiles.length === 0;
+
+        if (!dryRun) {
+          // Decide: full removal vs tombstone.
+          // "Full removal" condition: nothing preserved AND no foreign content.
+          // Anything else → tombstone.
+          if (preservedFiles.length === 0 && foreignFiles.length === 0) {
+            try { fs.unlinkSync(manifestPath(skillDir)); } catch { /* may already be gone */ }
+            try { fs.rmSync(skillDir, { recursive: true, force: true }); } catch (e) {
+              logger.debug("Skill dir removal failed", { skillDir, error: (e as Error).message });
+            }
+          } else {
+            // Tombstone: dir survives, manifest records the uninstall.
+            const tombstone = buildTombstoneManifest({
+              previous: manifest,
+              uninstalledBy: toolName,
+              preservedFiles: [...preservedFiles, ...foreignFiles],
+            });
+            try {
+              writeManifest(skillDir, tombstone);
+              result.tombstone = true;
+              logger.info("Tombstone written; preserved user content", {
+                skillDir, preservedFiles: tombstone.tombstone ? (tombstone.tombstone as { preservedFiles: string[] }).preservedFiles : [],
+              });
+            } catch (e) {
+              logger.warn("Tombstone write failed; manifest may be in inconsistent state", {
+                skillDir, error: (e as Error).message,
+              });
+            }
+          }
+        }
+      }
+    } else if (manifest && isTombstone(manifest)) {
+      // Already a tombstone — nothing to remove. Treat as no-op success.
+      logger.debug("Skill is already a tombstone; nothing to uninstall", { skillDir });
+    } else {
+      // Manifest-absent fallback: legacy recursive delete with warning.
+      logger.warn("No skill manifest; falling back to recursive delete (user-modified files in this dir will be lost)", {
+        skillDir, augment: toolName,
+      });
+      if (!dryRun) {
+        try { fs.rmSync(skillDir, { recursive: true, force: true }); }
+        catch (e) {
+          logger.debug("Legacy skill dir removal failed", { skillDir, error: (e as Error).message });
+        }
+      }
+      result.removed = true;
+    }
+  }
+
+  // Legacy nested-layout cleanup ({skillsPath}/{toolName}/{skillName}/).
+  // Unchanged: that layout is unreadable by every platform loader, so recursive
+  // delete is safe. Only happens for users who never re-installed since Fix A.
   const legacySkillDir = path.join(platform.skillsPath, toolName, skillName);
   try {
     if (fs.statSync(legacySkillDir).isDirectory()) {
@@ -437,11 +573,78 @@ export function uninstallSkill(
           if (remaining.length === 0) fs.rmdirSync(legacyToolDir);
         } catch { /* not empty or doesn't exist */ }
       }
-      removed = true;
+      result.removed = true;
     }
   } catch { /* nothing to remove at legacy path */ }
 
-  return removed;
+  return result;
+}
+
+/**
+ * Walk the manifest's files[] entries and unlink the ones whose on-disk
+ * SHA-256 still matches. Drifted (user-modified) and unreadable files are
+ * preserved. Foreign content (files in the dir not listed in the manifest)
+ * is reported separately so the caller can decide tombstone vs full removal.
+ *
+ * In dry-run mode, returns what would be unlinked vs preserved without
+ * touching disk.
+ */
+function unlinkOwnedFiles(
+  skillDir: string,
+  files: ReturnType<typeof buildManifestForInstall>["files"],
+  dryRun: boolean,
+): { removed: boolean; preservedFiles: string[]; foreignFiles: string[] } {
+  const preservedFiles: string[] = [];
+  let removed = false;
+
+  // Build a Set of manifest paths for fast foreign-content detection later.
+  const ownedRelPaths = new Set(files.map(f => f.path));
+
+  for (const file of files) {
+    const filePath = path.join(skillDir, ...file.path.split("/"));
+    const status = verifyFileAgainstManifest(filePath, file.hash);
+    if (status === "match") {
+      removed = true;
+      if (!dryRun) {
+        try { fs.unlinkSync(filePath); } catch { /* may already be gone */ }
+        // Try to remove now-empty parent dirs (e.g., scripts/, references/).
+        // Stop at skillDir — we'll decide its fate at the caller level.
+        let parent = path.dirname(filePath);
+        while (parent !== skillDir && parent.startsWith(skillDir)) {
+          try { fs.rmdirSync(parent); } catch { break; /* not empty */ }
+          parent = path.dirname(parent);
+        }
+      }
+    } else if (status === "drift") {
+      preservedFiles.push(file.path);
+    }
+    // missing | unreadable → no preservation, no error (already gone or inaccessible).
+  }
+
+  // Foreign content: anything in skillDir (recursive) that's neither owned nor the manifest itself.
+  const foreignFiles = listForeignFiles(skillDir, ownedRelPaths);
+
+  return { removed, preservedFiles, foreignFiles };
+}
+
+function listForeignFiles(skillDir: string, ownedRelPaths: Set<string>): string[] {
+  const foreign: string[] = [];
+  function walk(currentDir: string, relPrefix: string): void {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(currentDir, { withFileTypes: true }); }
+    catch { return; }
+    for (const entry of entries) {
+      const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      if (relPath === MANIFEST_FILENAME) continue; // manifest itself isn't foreign
+      if (entry.isDirectory()) {
+        walk(path.join(currentDir, entry.name), relPath);
+      } else if (entry.isFile()) {
+        if (!ownedRelPaths.has(relPath)) foreign.push(relPath);
+      }
+    }
+  }
+  walk(skillDir, "");
+  return foreign;
 }
 
 /**

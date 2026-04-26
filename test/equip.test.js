@@ -1718,22 +1718,22 @@ describe("skills.ts", () => {
     const p = mockPlatform({ skillsPath: skillsDir });
     installSkill(p, "myserver", DEMO_SKILL);
     assert.ok(hasSkill(p, "myserver", "test-skill"));
-    const removed = uninstallSkill(p, "myserver", "test-skill");
-    assert.ok(removed);
+    const result = uninstallSkill(p, "myserver", "test-skill");
+    assert.ok(result.removed);
     assert.ok(!hasSkill(p, "myserver", "test-skill"));
     // Flat layout — the skill dir itself should be gone.
     assert.ok(!fs.existsSync(path.join(skillsDir, "test-skill")));
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
 
-  it("uninstallSkill returns false when skill doesn't exist", () => {
+  it("uninstallSkill returns removed:false when skill doesn't exist", () => {
     const p = mockPlatform({ skillsPath: "/tmp/nonexistent-" + Date.now() });
-    assert.equal(uninstallSkill(p, "myserver", "nope"), false);
+    assert.equal(uninstallSkill(p, "myserver", "nope").removed, false);
   });
 
-  it("uninstallSkill returns false when skillsPath is null", () => {
+  it("uninstallSkill returns removed:false when skillsPath is null", () => {
     const p = mockPlatform({ skillsPath: null });
-    assert.equal(uninstallSkill(p, "myserver", "nope"), false);
+    assert.equal(uninstallSkill(p, "myserver", "nope").removed, false);
   });
 
   it("hasSkill returns true when SKILL.md exists", () => {
@@ -1784,8 +1784,8 @@ describe("skills.ts", () => {
     fs.mkdirSync(legacy, { recursive: true });
     fs.writeFileSync(path.join(legacy, "SKILL.md"), "legacy\n");
 
-    const removed = uninstallSkill(p, "myserver", "test-skill");
-    assert.ok(removed);
+    const result = uninstallSkill(p, "myserver", "test-skill");
+    assert.ok(result.removed);
     assert.ok(!fs.existsSync(legacy));
     assert.ok(!fs.existsSync(path.join(skillsDir, "myserver")));
     fs.rmSync(skillsDir, { recursive: true, force: true });
@@ -1919,8 +1919,8 @@ describe("multi-skill support", () => {
     e.installSkill(p);
     assert.ok(e.hasSkill(p));
 
-    const removed = e.uninstallSkill(p);
-    assert.ok(removed);
+    const result = e.uninstallSkill(p);
+    assert.ok(result.removed);
     assert.ok(!fs.existsSync(path.join(skillsDir, "search")));
     assert.ok(!fs.existsSync(path.join(skillsDir, "test", "contribute")));
 

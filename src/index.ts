@@ -13,7 +13,7 @@ import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
 import * as cli from "./lib/cli";
-import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile, type InstallSkillOptions } from "./lib/skills";
+import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile, type InstallSkillOptions, type UninstallSkillResult } from "./lib/skills";
 import type { SkillManifestOwnerSource } from "./lib/skill-manifest";
 import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, type EquipWarning, type EquipLogger, type EquipErrorCode, type EquipWarningCode, type ArtifactType, type ArtifactAction } from "./lib/types";
 import type { ReadMcpResult } from "./lib/mcp";
@@ -232,13 +232,35 @@ class Augment {
     return lastResult;
   }
 
-  uninstallSkill(platform: DetectedPlatform, dryRun: boolean = false): boolean {
-    if (this.skills.length === 0) return false;
+  uninstallSkill(platform: DetectedPlatform, dryRun: boolean = false): UninstallSkillResult {
+    const empty: UninstallSkillResult = {
+      removed: false, preservedFiles: [], tombstone: false, viaManifest: false,
+    };
+    if (this.skills.length === 0) return empty;
+
     let anyRemoved = false;
+    let anyTombstone = false;
+    let allViaManifest = true;
+    let anyAttempted = false;
+    const allPreserved: string[] = [];
+
     for (const sk of this.skills) {
-      if (uninstallSkill(platform, this.name, sk.name, dryRun)) anyRemoved = true;
+      const r = uninstallSkill(platform, this.name, sk.name, dryRun, { logger: this.logger });
+      anyAttempted = true;
+      if (r.removed) anyRemoved = true;
+      if (r.tombstone) anyTombstone = true;
+      if (r.removed && !r.viaManifest) allViaManifest = false;
+      // Prefix preserved file paths with the skill name so callers can disambiguate
+      // multi-skill augments where two skills happen to ship a file with the same path.
+      for (const f of r.preservedFiles) allPreserved.push(`${sk.name}/${f}`);
     }
-    return anyRemoved;
+
+    return {
+      removed: anyRemoved,
+      preservedFiles: allPreserved,
+      tombstone: anyTombstone,
+      viaManifest: anyAttempted ? allViaManifest : false,
+    };
   }
 
   hasSkill(platform: DetectedPlatform): boolean {

@@ -80,8 +80,32 @@ export function manifestPath(skillDir: string): string {
 
 // ─── Hash primitive ─────────────────────────────────────────
 
-function sha256OfString(s: string): string {
+export function sha256OfString(s: string): string {
   return crypto.createHash("sha256").update(s, "utf-8").digest("hex");
+}
+
+/**
+ * Verify a file on disk matches a manifest hash entry.
+ * Returns:
+ *  - "match"   — file exists and content hash equals expected
+ *  - "drift"   — file exists but content hash differs (user-modified)
+ *  - "missing" — file doesn't exist (already deleted)
+ *  - "unreadable" — exists but can't be read (permission/IO error)
+ */
+export type FileVerifyStatus = "match" | "drift" | "missing" | "unreadable";
+
+export function verifyFileAgainstManifest(
+  filePath: string,
+  expected: SkillManifestHash,
+): FileVerifyStatus {
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+    return "unreadable";
+  }
+  return sha256OfString(content) === expected.value ? "match" : "drift";
 }
 
 // ─── Read / write ───────────────────────────────────────────
@@ -190,4 +214,61 @@ export function findOwner(
   return manifest.owners.find(
     (o) => o.augment === augment && o.platform === platformId,
   ) ?? null;
+}
+
+// ─── Tombstone ──────────────────────────────────────────────
+
+/**
+ * Tombstone metadata written to a manifest after uninstall preserves the dir
+ * (because user-modified or user-added files survived). The empty `owners`
+ * array marks the manifest as a tombstone; the `tombstone` field carries
+ * forensic detail.
+ *
+ * Stored under the unknown-fields-tolerant catch-all of SkillManifest;
+ * v1 readers preserve it on round-trip.
+ */
+export interface TombstoneMetadata {
+  uninstalledAt: string;
+  uninstalledBy: string;
+  preservedFiles: string[];
+}
+
+export interface BuildTombstoneArgs {
+  previous: SkillManifest;
+  uninstalledBy: string;
+  preservedFiles: string[];
+  uninstalledAt?: string;
+}
+
+/**
+ * Build a tombstone manifest from a previous (live) manifest. Preserves the
+ * skill name, schema version, and install context for forensics; clears
+ * owners[] and files[] (Equip no longer claims any file in this dir);
+ * records what was preserved and when.
+ *
+ * Tombstone marker = `owners.length === 0` AND `tombstone` field present.
+ * Use isTombstone() to detect.
+ */
+export function buildTombstoneManifest(args: BuildTombstoneArgs): SkillManifest {
+  return {
+    manifestVersion: 1,
+    skill: args.previous.skill,
+    owners: [],
+    files: [],
+    install: args.previous.install,
+    tombstone: {
+      uninstalledAt: args.uninstalledAt ?? new Date().toISOString(),
+      uninstalledBy: args.uninstalledBy,
+      preservedFiles: args.preservedFiles,
+    } satisfies TombstoneMetadata,
+  };
+}
+
+/**
+ * True if the manifest is a tombstone (empty owners + tombstone metadata).
+ * Used by reconcile / orphan-wrap paths so dirs Equip once owned aren't
+ * re-detected as user-authored skills on subsequent scans.
+ */
+export function isTombstone(manifest: SkillManifest): boolean {
+  return manifest.owners.length === 0 && Boolean(manifest.tombstone);
 }
