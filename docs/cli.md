@@ -24,7 +24,8 @@ Install an augment from the registry.
 equip prior                        # Install Prior augment
 equip demo-fetch                   # Install demo-fetch augment
 equip prior --platform claude      # Install on Claude Code only
-equip prior --api-key ask_xxx      # Provide API key (skip prompt)
+equip prior --api-key-file ./.prior.key  # Read API key from a file (recommended)
+equip prior --api-key ask_xxx      # Provide API key directly (may expose it locally)
 equip prior --dry-run              # Preview without writing
 equip prior --verbose              # Show detailed logging
 equip prior --non-interactive      # No prompts (fail if info missing)
@@ -95,7 +96,8 @@ Re-authenticate from scratch. Deletes stored credentials and re-runs the full au
 
 ```bash
 equip reauth prior                 # Re-run OAuth + key exchange
-equip reauth prior --api-key xxx   # Replace with a specific key
+equip reauth prior --api-key-file ./.prior.key  # Replace with a key from a file
+equip reauth prior --api-key xxx   # Replace with a specific key directly
 ```
 
 Use when credentials are revoked, you want to switch accounts, or `equip doctor` reports invalid credentials.
@@ -169,7 +171,8 @@ Run the built-in interactive demo that walks through building an augment.
 |------|-------------|
 | `--verbose` | Show detailed debug logging (API fetches, config reads/writes) |
 | `--dry-run` | Preview what would happen without writing any files |
-| `--api-key <key>` | Provide API key directly (skip auth prompt/OAuth) |
+| `--api-key-file <path>` | Read API key from a file. Recommended for CI and safer than putting secrets in shell history. |
+| `--api-key <key>` | Provide API key directly. Convenient, but may expose the key in shell history or process lists. |
 | `--platform <name>` | Target specific platform(s), comma-separated (e.g., `claude,cursor`) |
 | `--non-interactive` | No prompts — fail if information is missing |
 | `--help`, `-h` | Show help |
@@ -180,10 +183,15 @@ Run the built-in interactive demo that walks through building an augment.
 Equip handles authentication for augments that require it. The auth type is declared in the augment's registry definition.
 
 **Resolution order:**
-1. `--api-key` flag (explicit)
+1. `--api-key-file` or `--api-key` flag (explicit; `--api-key-file` is recommended)
 2. Stored credential (`~/.equip/credentials/<augment>.json`)
 3. Environment variable (if `keyEnvVar` is configured)
 4. Interactive flow (prompt for key, or OAuth browser flow)
+
+**Why prefer `--api-key-file`:**
+
+- Prefer `--api-key-file` in CI, scripts, and shared terminals.
+- `--api-key` is still supported, but the key can end up visible in shell history, process lists, terminal scrollback, or copied command snippets.
 
 **Credential storage:**
 

@@ -73,7 +73,8 @@ function cmdHelp(): void {
   console.log("");
   console.log("Options:");
   console.log("  --verbose        Show detailed logging");
-  console.log("  --api-key <key>  Provide API key (skip prompt)");
+  console.log("  --api-key-file <path>  Read API key from a file (recommended for CI and shell safety)");
+  console.log("  --api-key <key>        Provide API key directly (may expose it in shell history/process lists)");
   console.log("  --platform <p>   Target specific platform(s), comma-separated");
   console.log("  --dry-run        Preview without writing");
   console.log("  --help, -h       Show this help");

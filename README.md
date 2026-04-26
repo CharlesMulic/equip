@@ -124,7 +124,7 @@ See [Platforms](./docs/platforms.md) for config paths, detection, and per-platfo
 | `equip restore <platform>` | Restore platform config to a previous snapshot |
 | `equip ./script.js` | Run a local setup script (for development) |
 
-Options: `--verbose`, `--dry-run`, `--api-key <key>`, `--platform <name>`, `--non-interactive`
+Options: `--verbose`, `--dry-run`, `--api-key-file <path>`, `--api-key <key>`, `--platform <name>`, `--non-interactive`
 
 See [CLI Reference](./docs/cli.md) for details.
 
@@ -145,7 +145,7 @@ See the [Augment Author Guide](./docs/augment-author.md) for the full walkthroug
 
 Equip handles authentication for augments that require it:
 
-- **API key** — prompt or `--api-key` flag
+- **API key** — prompt, `--api-key-file <path>` (recommended for CI and shell safety), or `--api-key <key>` when you accept shell-history/process-list exposure
 - **OAuth** — browser PKCE flow with automatic token refresh
 - **OAuth + key exchange** — browser flow → API key (for augments like Prior)
 - **OIDC delegated auth** — first-party brokered token exchange that writes a short-lived delegated access token such as `PRIOR_ACCESS_TOKEN`

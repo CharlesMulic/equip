@@ -2,6 +2,14 @@
 
 All notable changes to Equip are documented here.
 
+## [Unreleased]
+
+### Added
+- CLI help text now lists `--api-key-file <path>` (the flag itself was already implemented). The README, CLI reference, and augment-author guide now surface and recommend it for CI and shell-safe usage.
+
+### Changed
+- CLI help and docs recommend `--api-key-file <path>` for safer scripted usage while keeping `--api-key <key>` available with explicit risk guidance.
+
 ## [0.17.3] — 2026-04-05
 
 ### Fixed

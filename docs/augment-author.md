@@ -180,7 +180,7 @@ The `auth` block in your registry definition declares what authentication your a
 | Type | Use case | What happens |
 |------|----------|-------------|
 | `"none"` | Public servers | No auth prompt |
-| `"api_key"` | User has a key | Prompt or `--api-key` flag |
+| `"api_key"` | User has a key | Prompt or an explicit CLI key source (`--api-key-file` recommended, `--api-key` also supported) |
 | `"oauth"` | OAuth 2.1 browser flow | PKCE flow, token in config |
 | `"oauth_to_api_key"` | OAuth + key exchange | Browser flow, exchange for long-lived key |
 | `"oidc"` | CG3 delegated user auth | Reuse Equip's CG3 session, exchange it for a short-lived delegated access token |
@@ -230,6 +230,8 @@ For `oidc` delegated auth:
 Equip resolves `oidc` auth by exchanging the signed-in user's Equip session for a short-lived delegated access token and injects that token into MCP config, typically via `PRIOR_ACCESS_TOKEN`.
 
 Equip handles the full OAuth PKCE flow, key exchange, credential storage (`~/.equip/credentials/`), and automatic token refresh.
+
+For `api_key` augments, prefer documenting `--api-key-file <path>` for CI and scripted usage. Equip still supports `--api-key <key>`, but that is easier to leak through shell history, terminal scrollback, or process inspection.
 
 ## Local Development
 

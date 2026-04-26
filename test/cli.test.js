@@ -179,6 +179,8 @@ describe("equip CLI", () => {
     assert.match(output, /Usage: equip/);
     assert.match(output, /<augment>/);
     assert.match(output, /--verbose/);
+    assert.match(output, /--api-key-file <path>/);
+    assert.match(output, /shell history\/process lists/);
     assert.match(output, /Telemetry/);
   });
 
