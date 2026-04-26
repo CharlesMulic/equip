@@ -12,6 +12,7 @@ import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { acquireLock } from "../fs";
+import { withInstallationsBatch } from "../installations";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
@@ -133,6 +134,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   const releaseLock = acquireLock();
 
   try {
+  withInstallationsBatch(() => {
 
   // MCP Server
   cli.step(++stepNum, totalSteps, "MCP Server");
@@ -231,6 +233,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
     }
   }
 
+  }); // withInstallationsBatch
   } finally {
     releaseLock();
   }

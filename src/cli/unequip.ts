@@ -8,7 +8,7 @@ import * as os from "os";
 
 import { PLATFORM_REGISTRY, createManualPlatform, platformName } from "../lib/platforms.js";
 import * as cli from "../lib/cli.js";
-import { readInstallations, trackUninstallation } from "../lib/installations.js";
+import { readInstallations, trackUninstallation, withInstallationsBatch } from "../lib/installations.js";
 import { isPlatformEnabled } from "../lib/platform-state.js";
 import { uninstallMcp } from "../lib/mcp.js";
 import { uninstallRules } from "../lib/rules.js";
@@ -84,6 +84,7 @@ let removed = 0;
 const removedPlatforms: string[] = [];
 
 try {
+withInstallationsBatch(() => {
 
 for (const platformId of record.platforms) {
   // Skip disabled platforms
@@ -163,6 +164,7 @@ if (!dryRun && removed > 0) {
   trackUninstallation(toolName, removedPlatforms);
 }
 
+}); // withInstallationsBatch
 } finally {
   releaseLock();
 }

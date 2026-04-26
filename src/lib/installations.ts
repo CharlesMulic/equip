@@ -49,10 +49,82 @@ export interface Installations {
 function equipDir(): string { return path.join(os.homedir(), ".equip"); }
 function installationsPath(): string { return path.join(equipDir(), "installations.json"); }
 
+// ─── Batched Writer (Package 05 of equip-skill-ownership) ──
+//
+// `installations.json` is rewritten by every trackInstallation/trackUninstallation
+// call. At scale (scanAllPlatforms hitting orphan-wrap across many platforms ×
+// many unmanaged augments), a single logical operation can cause dozens of
+// full-file rewrites. The batch API collapses these into one write at the end
+// of a logical operation.
+//
+// Pattern: caller wraps with `withInstallationsBatch(() => { ...do work... })`.
+// Inside that block, trackInstallation/trackUninstallation mutate an in-memory
+// buffer; readInstallations returns a clone of the buffer (so callers can't
+// accidentally mutate batch state through a non-tracking path). The buffer is
+// flushed once at the end via writeInstallations.
+//
+// Module-level state — a process can have at most one active batch. Nested
+// begin throws; commit/abort outside a batch are no-ops (idempotent so cleanup
+// in finally{} blocks is safe).
+
+let activeBatch: Installations | null = null;
+
+/**
+ * Open a batched-write context. trackInstallation / trackUninstallation calls
+ * after this point write to an in-memory buffer instead of disk.
+ *
+ * Throws if a batch is already active in this process.
+ */
+export function beginInstallationsBatch(): void {
+  if (activeBatch !== null) {
+    throw new Error("Installations batch already active — nested batches are not supported");
+  }
+  activeBatch = readFromDisk();
+}
+
+/**
+ * Flush the active batch buffer to disk and clear it. Safe to call when no
+ * batch is active (no-op).
+ */
+export function commitInstallationsBatch(): void {
+  if (activeBatch === null) return;
+  const toWrite = activeBatch;
+  activeBatch = null;
+  writeToDisk(toWrite);
+}
+
+/**
+ * Discard the active batch buffer without writing. Safe to call when no batch
+ * is active (no-op). Use in catch/finally blocks where commit hasn't run.
+ */
+export function abortInstallationsBatch(): void {
+  activeBatch = null;
+}
+
+/**
+ * Run `fn` inside a batched-write context. Single disk write at the end on
+ * success; buffer discarded on exception (and rethrown).
+ */
+export function withInstallationsBatch<T>(fn: () => T): T {
+  beginInstallationsBatch();
+  try {
+    const result = fn();
+    commitInstallationsBatch();
+    return result;
+  } catch (e) {
+    abortInstallationsBatch();
+    throw e;
+  }
+}
+
+/** True if a batched-write context is currently active in this process. */
+export function isInstallationsBatchActive(): boolean {
+  return activeBatch !== null;
+}
+
 // ─── Read / Write ───────────────────────────────────────────
 
-/** Read installations.json. Returns empty state if file doesn't exist. */
-export function readInstallations(): Installations {
+function readFromDisk(): Installations {
   const { data, status } = safeReadJsonSync(installationsPath());
   if (status !== "ok" || !data) {
     return { lastUpdated: "", augments: {} };
@@ -60,11 +132,35 @@ export function readInstallations(): Installations {
   return data as unknown as Installations;
 }
 
-/** Write installations.json atomically. */
-export function writeInstallations(inst: Installations): void {
+function writeToDisk(inst: Installations): void {
   const dir = equipDir();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   atomicWriteFileSync(installationsPath(), JSON.stringify(inst, null, 2) + "\n");
+}
+
+/**
+ * Read installations.json. During an active batch, returns a deep clone of the
+ * batch buffer so callers can read in-progress changes without being able to
+ * mutate batch state through a non-tracking path. Outside a batch, reads
+ * fresh from disk.
+ */
+export function readInstallations(): Installations {
+  if (activeBatch !== null) {
+    return JSON.parse(JSON.stringify(activeBatch)) as Installations;
+  }
+  return readFromDisk();
+}
+
+/**
+ * Write installations.json atomically. During an active batch, mutates the
+ * batch buffer instead — no disk write happens until commitInstallationsBatch.
+ */
+export function writeInstallations(inst: Installations): void {
+  if (activeBatch !== null) {
+    activeBatch = inst;
+    return;
+  }
+  writeToDisk(inst);
 }
 
 // ─── Tracking ───────────────────────────────────────────────
