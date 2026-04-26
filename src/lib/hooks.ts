@@ -6,6 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { PLATFORM_REGISTRY, type DetectedPlatform, type PlatformHookCapabilities } from "./platforms";
 import { safeReadJsonSync, atomicWriteFileSync } from "./fs";
+import { validateHookName } from "./validation";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
 
@@ -84,6 +85,7 @@ export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinitio
 
   for (const def of hookDefs) {
     if (!caps.events.includes(def.event)) continue;
+    validateHookName(def.name);
     const filePath = path.join(hookDir, def.name + ".js");
     if (!dryRun) {
       fs.writeFileSync(filePath, def.script, { mode: 0o755 });
@@ -157,6 +159,7 @@ export function uninstallHooks(platform: DetectedPlatform, hookDefs: HookDefinit
   let removed = false;
 
   for (const def of hookDefs) {
+    validateHookName(def.name);
     const filePath = path.join(hookDir, def.name + ".js");
     try {
       if (fs.statSync(filePath).isFile()) {
@@ -210,6 +213,7 @@ export function hasHooks(platform: DetectedPlatform, hookDefs: HookDefinition[],
   const hookDir = options.hookDir;
 
   for (const def of hookDefs) {
+    validateHookName(def.name);
     try {
       if (!fs.statSync(path.join(hookDir, def.name + ".js")).isFile()) return false;
     } catch { return false; }

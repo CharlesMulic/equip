@@ -14,7 +14,7 @@ import { dirExists, fileExists } from "./detect";
 import { acquireLock } from "./fs";
 import { trackInstallation, getManagedAugmentNames, type ArtifactRecord } from "./installations";
 import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
-import { syncFromRegistry } from "./augment-defs";
+import { readAugmentDef, syncFromRegistry } from "./augment-defs";
 import { markEquipUpdated } from "./equip-meta";
 import { createSnapshot, hasInitialSnapshot } from "./snapshots";
 import type { RegistryDef } from "./registry";
@@ -56,6 +56,25 @@ export function reconcileState(options: ReconcileOptions): number {
   } finally {
     releaseLock();
   }
+}
+
+/**
+ * Resolve the set of skill names declared by an augment, consulting the
+ * registry def first (freshest) and falling back to the persisted augment
+ * def file written by syncFromRegistry / local authoring.
+ */
+function collectDeclaredSkillNames(toolName: string, toolDef: RegistryDef | undefined): string[] {
+  const names = new Set<string>();
+  if (toolDef?.skills) {
+    for (const s of toolDef.skills) if (s?.name) names.add(s.name);
+  }
+  try {
+    const persisted = readAugmentDef(toolName);
+    if (persisted?.skills) {
+      for (const s of persisted.skills) if (s?.name) names.add(s.name);
+    }
+  } catch { /* persisted def may not exist */ }
+  return [...names];
 }
 
 function reconcileStateInner(
@@ -119,21 +138,30 @@ function reconcileStateInner(
       } catch { /* hook dir may not exist */ }
     }
 
-    // Check for skills
+    // Check for skills.
+    // Skills now live flat at {skillsPath}/{skillName}/SKILL.md, so we can't infer
+    // which skills belong to this augment by listing a directory. Cross-reference
+    // the augment's declared skill names (from registry def or persisted def file)
+    // and look each one up at the flat path. Also accept legacy nested installs
+    // from older equip versions so reconcile reflects what's still on disk.
     if (def.skillsPath) {
       const skillsBasePath = def.skillsPath();
-      const toolSkillDir = path.join(skillsBasePath, toolName);
-      try {
-        const skillDirs = fs.readdirSync(toolSkillDir);
-        const skillsWithMd = skillDirs.filter(s => {
-          try { return fs.statSync(path.join(toolSkillDir, s, "SKILL.md")).isFile(); }
-          catch { return false; }
-        });
-        if (skillsWithMd.length > 0) {
-          artifactRecord.skills = skillsWithMd;
-          hasAnyArtifact = true;
-        }
-      } catch { /* skill dir may not exist */ }
+      const declaredSkills = collectDeclaredSkillNames(toolName, toolDef);
+      const found: string[] = [];
+      for (const skillName of declaredSkills) {
+        const flat = path.join(skillsBasePath, skillName, "SKILL.md");
+        const legacy = path.join(skillsBasePath, toolName, skillName, "SKILL.md");
+        try {
+          if (fs.statSync(flat).isFile()) { found.push(skillName); continue; }
+        } catch { /* fall through */ }
+        try {
+          if (fs.statSync(legacy).isFile()) found.push(skillName);
+        } catch { /* not installed on this platform */ }
+      }
+      if (found.length > 0) {
+        artifactRecord.skills = found;
+        hasAnyArtifact = true;
+      }
     }
 
     if (!hasAnyArtifact) continue;

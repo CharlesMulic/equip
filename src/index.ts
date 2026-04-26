@@ -44,7 +44,7 @@ export interface AugmentConfig {
   };
   hooks?: HookDefinition[];
   hookDir?: string;
-  /** Multiple skills — each gets its own directory under {skillsPath}/{toolName}/{skillName}/ */
+  /** Multiple skills — each gets its own directory at {skillsPath}/{skillName}/ (flat per the Agent Skills spec). */
   skills?: SkillConfig[];
   logger?: EquipLogger;
 }

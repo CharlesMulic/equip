@@ -1615,9 +1615,11 @@ describe("skills.ts", () => {
     const p = mockPlatform({ skillsPath: skillsDir });
     const result = installSkill(p, "myserver", DEMO_SKILL);
     assert.equal(result.action, "created");
-    const skillMd = path.join(skillsDir, "myserver", "test-skill", "SKILL.md");
+    const skillMd = path.join(skillsDir, "test-skill", "SKILL.md");
     assert.ok(fs.existsSync(skillMd));
     assert.ok(fs.readFileSync(skillMd, "utf-8").includes("test-skill"));
+    // Flat layout — no augment-name wrapper directory should be created.
+    assert.ok(!fs.existsSync(path.join(skillsDir, "myserver")));
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
 
@@ -1640,7 +1642,7 @@ describe("skills.ts", () => {
     };
     const result = installSkill(p, "myserver", updatedSkill);
     assert.equal(result.action, "updated");
-    const content = fs.readFileSync(path.join(skillsDir, "myserver", "test-skill", "SKILL.md"), "utf-8");
+    const content = fs.readFileSync(path.join(skillsDir, "test-skill", "SKILL.md"), "utf-8");
     assert.ok(content.includes("Updated"));
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
@@ -1669,11 +1671,11 @@ describe("skills.ts", () => {
 
     assert.equal(result.action, "updated");
     assert.equal(
-      fs.readFileSync(path.join(skillsDir, "myserver", "multi", "references", "usage.md"), "utf-8"),
+      fs.readFileSync(path.join(skillsDir, "multi", "references", "usage.md"), "utf-8"),
       "new usage\n",
     );
     assert.equal(
-      fs.readFileSync(path.join(skillsDir, "myserver", "multi", "SKILL.md"), "utf-8"),
+      fs.readFileSync(path.join(skillsDir, "multi", "SKILL.md"), "utf-8"),
       "# Multi\n",
     );
     fs.rmSync(skillsDir, { recursive: true, force: true });
@@ -1692,10 +1694,10 @@ describe("skills.ts", () => {
       ],
     };
     installSkill(p, "myserver", multiSkill);
-    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "SKILL.md")));
-    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "scripts", "helper.sh")));
-    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "references", "API.md")));
-    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "assets", "example.json")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "multi", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "multi", "scripts", "helper.sh")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "multi", "references", "API.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "multi", "assets", "example.json")));
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
 
@@ -1719,8 +1721,8 @@ describe("skills.ts", () => {
     const removed = uninstallSkill(p, "myserver", "test-skill");
     assert.ok(removed);
     assert.ok(!hasSkill(p, "myserver", "test-skill"));
-    // Parent tool dir should be cleaned up too
-    assert.ok(!fs.existsSync(path.join(skillsDir, "myserver")));
+    // Flat layout — the skill dir itself should be gone.
+    assert.ok(!fs.existsSync(path.join(skillsDir, "test-skill")));
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
 
@@ -1745,6 +1747,48 @@ describe("skills.ts", () => {
   it("hasSkill returns false when SKILL.md missing", () => {
     const p = mockPlatform({ skillsPath: "/tmp/nonexistent-" + Date.now() });
     assert.ok(!hasSkill(p, "myserver", "test-skill"));
+  });
+
+  it("installSkill removes legacy {skillsPath}/{toolName}/ wrapper from older equip versions", () => {
+    const skillsDir = tmpPath("skills-legacy-cleanup");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    // Simulate an older equip version that wrote {skillsPath}/{toolName}/{skill}/SKILL.md.
+    const legacy = path.join(skillsDir, "myserver", "test-skill");
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, "SKILL.md"), "stale\n");
+
+    const result = installSkill(p, "myserver", DEMO_SKILL);
+    assert.equal(result.action, "created");
+    // New flat install lands at the spec-compliant location.
+    assert.ok(fs.existsSync(path.join(skillsDir, "test-skill", "SKILL.md")));
+    // Legacy wrapper dir is cleaned up.
+    assert.ok(!fs.existsSync(path.join(skillsDir, "myserver")));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("hasSkill detects legacy nested installs from older equip versions", () => {
+    const skillsDir = tmpPath("skills-legacy-has");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    const legacy = path.join(skillsDir, "myserver", "test-skill");
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, "SKILL.md"), "legacy\n");
+    assert.ok(hasSkill(p, "myserver", "test-skill"));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("uninstallSkill cleans up both flat and legacy nested installs", () => {
+    const skillsDir = tmpPath("skills-legacy-uninst");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    // Plant a legacy install only — no flat version.
+    const legacy = path.join(skillsDir, "myserver", "test-skill");
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, "SKILL.md"), "legacy\n");
+
+    const removed = uninstallSkill(p, "myserver", "test-skill");
+    assert.ok(removed);
+    assert.ok(!fs.existsSync(legacy));
+    assert.ok(!fs.existsSync(path.join(skillsDir, "myserver")));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
   });
 });
 
@@ -1855,10 +1899,10 @@ describe("multi-skill support", () => {
     const result = e.installSkill(p);
     assert.equal(result.action, "created");
 
-    // All three skill directories should exist
-    assert.ok(fs.existsSync(path.join(skillsDir, "test", "search", "SKILL.md")));
-    assert.ok(fs.existsSync(path.join(skillsDir, "test", "contribute", "SKILL.md")));
-    assert.ok(fs.existsSync(path.join(skillsDir, "test", "feedback", "SKILL.md")));
+    // All three skill directories should exist (flat layout, no augment-name wrapper)
+    assert.ok(fs.existsSync(path.join(skillsDir, "search", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "contribute", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "feedback", "SKILL.md")));
 
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
@@ -1877,7 +1921,7 @@ describe("multi-skill support", () => {
 
     const removed = e.uninstallSkill(p);
     assert.ok(removed);
-    assert.ok(!fs.existsSync(path.join(skillsDir, "test", "search")));
+    assert.ok(!fs.existsSync(path.join(skillsDir, "search")));
     assert.ok(!fs.existsSync(path.join(skillsDir, "test", "contribute")));
 
     fs.rmSync(skillsDir, { recursive: true, force: true });
@@ -1985,7 +2029,7 @@ describe("multi-skill support", () => {
 
     const result = e.installSkill(p);
     assert.equal(result.action, "created");
-    assert.ok(fs.existsSync(path.join(skillsDir, "test", "search", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "search", "SKILL.md")));
 
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });

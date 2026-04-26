@@ -126,9 +126,9 @@ describe("validateRelativePath", () => {
   });
 
   it("rejects parent directory traversal", () => {
-    assert.throws(() => validateRelativePath("../../../.bashrc"), /escapes parent/);
-    assert.throws(() => validateRelativePath("../../.ssh/id_rsa"), /escapes parent/);
-    assert.throws(() => validateRelativePath("../SKILL.md"), /escapes parent/);
+    assert.throws(() => validateRelativePath("../../../.bashrc"), /Invalid skill name|escapes parent/);
+    assert.throws(() => validateRelativePath("../../.ssh/id_rsa"), /Invalid skill name|escapes parent/);
+    assert.throws(() => validateRelativePath("../SKILL.md"), /Invalid skill name|escapes parent/);
   });
 
   it("rejects absolute paths (Unix)", () => {
@@ -151,7 +151,7 @@ describe("validateRelativePath", () => {
   });
 
   it("rejects normalized traversal (foo/../../bar)", () => {
-    assert.throws(() => validateRelativePath("innocent/../../.bashrc"), /escapes parent/);
+    assert.throws(() => validateRelativePath("innocent/../../.bashrc"), /Invalid skill name|escapes parent/);
   });
 });
 
@@ -255,7 +255,7 @@ describe("skill installation: path traversal attacks", () => {
         name: "../../../tmp",
         files: [{ path: "SKILL.md", content: "pwned" }],
       });
-    }, /escapes parent/);
+    }, /Invalid skill name|escapes parent/);
   });
 
   it("blocks path traversal via tool name in hasSkill", () => {
@@ -265,7 +265,7 @@ describe("skill installation: path traversal attacks", () => {
 
   it("blocks path traversal via skill name in hasSkill", () => {
     const p = mockPlatform();
-    assert.throws(() => hasSkill(p, "legit-tool", "../../../etc"), /escapes parent/);
+    assert.throws(() => hasSkill(p, "legit-tool", "../../../etc"), /Invalid skill name|escapes parent/);
   });
 
   it("blocks path traversal via tool name in uninstallSkill", () => {
@@ -275,7 +275,7 @@ describe("skill installation: path traversal attacks", () => {
 
   it("blocks path traversal via skill name in uninstallSkill", () => {
     const p = mockPlatform();
-    assert.throws(() => uninstallSkill(p, "legit-tool", "../../../tmp"), /escapes parent/);
+    assert.throws(() => uninstallSkill(p, "legit-tool", "../../../tmp"), /Invalid skill name|escapes parent/);
   });
 
   it("allows legitimate skill installation", () => {
@@ -288,8 +288,185 @@ describe("skill installation: path traversal attacks", () => {
       ],
     });
     assert.equal(result.success, true);
-    assert.ok(fs.existsSync(path.join(p.skillsPath, "my-tool", "search", "SKILL.md")));
-    assert.ok(fs.existsSync(path.join(p.skillsPath, "my-tool", "search", "scripts", "helper.sh")));
+    // Flat layout per Agent Skills spec — no augment-name wrapper directory.
+    assert.ok(fs.existsSync(path.join(p.skillsPath, "search", "SKILL.md")));
+    assert.ok(fs.existsSync(path.join(p.skillsPath, "search", "scripts", "helper.sh")));
+  });
+
+  // ─── F-1, F-2: skill-name slug validation (post-Fix A hardening) ──
+
+  it("rejects skill name containing forward slash (F-1)", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: "victim/SKILL", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+    // No file should have been written under any path the attacker could target.
+    assert.ok(!fs.existsSync(path.join(p.skillsPath, "victim")));
+  });
+
+  it("rejects skill name containing backslash (F-1)", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: "victim\\SKILL", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+  });
+
+  it("rejects skill name '.' (F-2)", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: ".", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+    // SKILL.md must NOT have been written directly at skillsPath/.
+    assert.ok(!fs.existsSync(path.join(p.skillsPath, "SKILL.md")));
+  });
+
+  it("rejects skill name '..' (path traversal)", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: "..", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+  });
+
+  it("rejects skill name with leading hyphen", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: "-evil", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+  });
+
+  it("rejects skill name with consecutive hyphens", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: "foo--bar", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+  });
+
+  it("rejects skill name with uppercase characters", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: "BadName", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+  });
+
+  it("rejects skill name longer than 64 characters", () => {
+    const p = mockPlatform();
+    const tooLong = "a".repeat(65);
+    assert.throws(
+      () => installSkill(p, "attacker", { name: tooLong, files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+  });
+
+  it("rejects empty skill name", () => {
+    const p = mockPlatform();
+    assert.throws(
+      () => installSkill(p, "attacker", { name: "", files: [{ path: "SKILL.md", content: "x" }] }),
+      /Invalid skill name/,
+    );
+  });
+
+  it("uninstallSkill rejects malicious skill name (defense in depth)", () => {
+    const p = mockPlatform();
+    assert.throws(() => uninstallSkill(p, "attacker", "victim/SKILL"), /Invalid skill name/);
+    assert.throws(() => uninstallSkill(p, "attacker", "."), /Invalid skill name/);
+  });
+
+  it("hasSkill rejects malicious skill name (defense in depth)", () => {
+    const p = mockPlatform();
+    assert.throws(() => hasSkill(p, "attacker", "victim/SKILL"), /Invalid skill name/);
+    assert.throws(() => hasSkill(p, "attacker", "."), /Invalid skill name/);
+  });
+
+  // ─── F-3: scoped legacy-wrapper cleanup ──
+
+  it("legacy-wrapper cleanup does NOT recurse into unrelated content (F-3)", () => {
+    const p = mockPlatform();
+    // Plant content from a "different augment" under the same wrapper name.
+    // Under the buggy implementation this whole tree would be rmSync'd recursively.
+    const wrapperDir = path.join(p.skillsPath, "shared-name");
+    const otherSkillDir = path.join(wrapperDir, "other-skill");
+    fs.mkdirSync(otherSkillDir, { recursive: true });
+    fs.writeFileSync(path.join(otherSkillDir, "SKILL.md"), "owned-by-other");
+    fs.writeFileSync(path.join(otherSkillDir, "important.txt"), "user-data");
+
+    // Now install OUR skill (different name) using the wrapper's name as toolName.
+    const result = installSkill(p, "shared-name", {
+      name: "our-skill",
+      files: [{ path: "SKILL.md", content: "# Ours" }],
+    });
+    assert.equal(result.success, true);
+
+    // Our flat skill landed.
+    assert.ok(fs.existsSync(path.join(p.skillsPath, "our-skill", "SKILL.md")));
+    // The OTHER augment's legacy install must remain untouched.
+    assert.ok(fs.existsSync(path.join(otherSkillDir, "SKILL.md")));
+    assert.equal(fs.readFileSync(path.join(otherSkillDir, "SKILL.md"), "utf-8"), "owned-by-other");
+    assert.ok(fs.existsSync(path.join(otherSkillDir, "important.txt")));
+  });
+
+  it("legacy-wrapper cleanup removes only matching skill subtree, then rmdir's empty parent", () => {
+    const p = mockPlatform();
+    // Plant the legacy install of OUR skill — same toolName, same skillName.
+    const wrapperDir = path.join(p.skillsPath, "myaug");
+    const ourLegacyDir = path.join(wrapperDir, "ours");
+    fs.mkdirSync(ourLegacyDir, { recursive: true });
+    fs.writeFileSync(path.join(ourLegacyDir, "SKILL.md"), "stale");
+
+    const result = installSkill(p, "myaug", {
+      name: "ours",
+      files: [{ path: "SKILL.md", content: "# fresh" }],
+    });
+    assert.equal(result.success, true);
+
+    // Flat install present.
+    assert.ok(fs.existsSync(path.join(p.skillsPath, "ours", "SKILL.md")));
+    // Legacy subtree gone.
+    assert.ok(!fs.existsSync(ourLegacyDir));
+    // Wrapper dir was empty after cleanup → rmdir'd.
+    assert.ok(!fs.existsSync(wrapperDir));
+  });
+
+  it("legacy-wrapper cleanup leaves wrapper dir intact when other skills still live there", () => {
+    const p = mockPlatform();
+    // Plant TWO legacy skills under the same wrapper, same augment.
+    const wrapperDir = path.join(p.skillsPath, "myaug");
+    fs.mkdirSync(path.join(wrapperDir, "ours"), { recursive: true });
+    fs.writeFileSync(path.join(wrapperDir, "ours", "SKILL.md"), "stale");
+    fs.mkdirSync(path.join(wrapperDir, "another"), { recursive: true });
+    fs.writeFileSync(path.join(wrapperDir, "another", "SKILL.md"), "still-legacy");
+
+    installSkill(p, "myaug", {
+      name: "ours",
+      files: [{ path: "SKILL.md", content: "# fresh" }],
+    });
+
+    // Our subtree was cleaned up.
+    assert.ok(!fs.existsSync(path.join(wrapperDir, "ours")));
+    // The other skill still lives under the wrapper — wrapper kept.
+    assert.ok(fs.existsSync(path.join(wrapperDir, "another", "SKILL.md")));
+  });
+
+  // ─── Hook-name validation (F-8) ──
+
+  it("hook name validation rejects path separators", () => {
+    const { installHooks } = require("../dist/lib/hooks");
+    const p = mockPlatform();
+    const hookDir = path.join(tempHome, "hooks");
+    assert.throws(
+      () => installHooks(p, [{ event: "PreToolUse", name: "../../etc/passwd", script: "x" }], { hookDir }),
+      /Invalid hook name/,
+    );
+    assert.throws(
+      () => installHooks(p, [{ event: "PreToolUse", name: "evil/script", script: "x" }], { hookDir }),
+      /Invalid hook name/,
+    );
   });
 });
 

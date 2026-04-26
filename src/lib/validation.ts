@@ -10,6 +10,9 @@ import * as os from "os";
 /** Valid augment/tool name: lowercase alphanumeric + hyphens, 3-100 chars */
 const SAFE_NAME_RE = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 
+/** Valid skill/hook name per Agent Skills spec: 1-64 chars, lowercase alphanumeric + hyphens, no leading/trailing/consecutive hyphens. */
+const SAFE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 /**
  * Validate a tool/augment name is safe for use in filesystem paths.
  * Throws on invalid names.
@@ -24,6 +27,37 @@ export function validateToolName(name: string): void {
   if (name.includes("..") || name.includes("/") || name.includes("\\")) {
     throw new Error(`Invalid augment name: "${name}" contains path separators`);
   }
+}
+
+/**
+ * Validate a skill name per the Agent Skills spec
+ * (https://agentskills.io/specification): 1-64 chars, lowercase
+ * alphanumeric + hyphens, no leading/trailing/consecutive hyphens, no path
+ * separators or special directory components.
+ *
+ * Stricter than {@link validateRelativePath} — a skill name is a single
+ * directory component, never a path. Reject `"prior/SKILL"`, `"."`, `".."`,
+ * `"foo/bar"`, etc. Used for skill names accepted from the registry, local
+ * augment defs, or any untrusted source.
+ */
+export function validateSkillName(name: string, context: string = "skill name"): void {
+  if (typeof name !== "string" || name.length === 0) {
+    throw new Error(`Invalid ${context}: must be a non-empty string`);
+  }
+  if (name.length > 64) {
+    throw new Error(`Invalid ${context}: must be 1-64 characters, got ${name.length}`);
+  }
+  if (!SAFE_SLUG_RE.test(name)) {
+    throw new Error(`Invalid ${context}: "${name}" must match ${SAFE_SLUG_RE} (lowercase alphanumeric + hyphens, no leading/trailing/consecutive hyphens, no path separators)`);
+  }
+}
+
+/**
+ * Validate a hook script name. Same rules as a skill name — a hook name
+ * becomes a `.js` filename in the hook directory, must be a single component.
+ */
+export function validateHookName(name: string, context: string = "hook name"): void {
+  validateSkillName(name, context);
 }
 
 // ─── Path Validation ────────────────────────────────────────

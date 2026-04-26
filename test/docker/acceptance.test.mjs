@@ -150,7 +150,8 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   assert.match(codexRules, /<!-- demo-direct-install:v1\.0\.0 -->/);
   assert.match(codexRules, /deterministic demo fixture data/);
 
-  const claudeSkillDir = path.join(homeDir, ".claude", "skills", "demo-direct-install", "registry-helper");
+  // Flat layout per Agent Skills spec: {skillsPath}/{skill-name}/SKILL.md
+  const claudeSkillDir = path.join(homeDir, ".claude", "skills", "registry-helper");
   assert.equal(
     fs.readFileSync(path.join(claudeSkillDir, "SKILL.md"), "utf-8"),
     "# Registry Helper\n\nUse this skill to inspect hermetic registry fixture responses during Docker acceptance tests.",
@@ -160,10 +161,16 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
     "Run `equip demo-direct-install --platform claude-code,codex --non-interactive` to exercise this fixture.",
   );
 
-  const codexSkillDir = path.join(homeDir, ".agents", "skills", "demo-direct-install", "registry-helper");
+  const codexSkillDir = path.join(homeDir, ".agents", "skills", "registry-helper");
   assert.equal(
     fs.readFileSync(path.join(codexSkillDir, "SKILL.md"), "utf-8"),
     "# Registry Helper\n\nUse this skill to inspect hermetic registry fixture responses during Docker acceptance tests.",
+  );
+
+  // Sanity: no augment-name wrapper directory should be created.
+  assert.ok(
+    !fs.existsSync(path.join(homeDir, ".claude", "skills", "demo-direct-install")),
+    "legacy {skillsPath}/{augment}/ wrapper should not be created",
   );
 
   const installations = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"));

@@ -184,8 +184,8 @@ for (const p of platforms) {
   it("installs both rules and skills to platform directories", () => {
     runEquip(`${scriptPath}`, { stdio: "pipe" });
 
-    // Check Claude Code skills directory
-    const skillMd = path.join(os.homedir(), ".claude", "skills", "piratehat", "pirate-speak", "SKILL.md");
+    // Check Claude Code skills directory — flat layout per Agent Skills spec.
+    const skillMd = path.join(os.homedir(), ".claude", "skills", "pirate-speak", "SKILL.md");
     if (fs.existsSync(path.join(os.homedir(), ".claude", "skills"))) {
       assert.ok(fs.existsSync(skillMd), "SKILL.md should be installed in Claude Code skills dir");
       const content = fs.readFileSync(skillMd, "utf-8");
@@ -234,8 +234,8 @@ for (const p of platforms) {
       equip.uninstallSkill(p);
     }
 
-    // Verify removal
-    const skillMd = path.join(os.homedir(), ".claude", "skills", "piratehat", "pirate-speak", "SKILL.md");
+    // Verify removal — flat layout per Agent Skills spec.
+    const skillMd = path.join(os.homedir(), ".claude", "skills", "pirate-speak", "SKILL.md");
     assert.ok(!fs.existsSync(skillMd), "skill should be removed");
   });
 

@@ -11,6 +11,7 @@ import { InstallReportBuilder } from "../types";
 import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
+import { acquireLock } from "../fs";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
@@ -123,6 +124,15 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   const totalSteps = stepList.length;
   let stepNum = 0;
 
+  // Take the equip-wide lock for the whole install. Re-entrant — reconcileState
+  // below acquires the same lock and just bumps the depth counter. Closes a
+  // TOCTOU window on the per-skill "is current" check and prevents concurrent
+  // equip processes from corrupting installations.json or stomping each other's
+  // skill writes.
+  const releaseLock = acquireLock();
+
+  try {
+
   // MCP Server
   cli.step(++stepNum, totalSteps, "MCP Server");
   const transport = toolDef.transport || "http";
@@ -203,6 +213,10 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
     } catch (e: unknown) {
       if (logger) logger.warn("State reconciliation failed", { error: (e as Error).message });
     }
+  }
+
+  } finally {
+    releaseLock();
   }
 
   // ── Introspect MCP server for accurate weight (optional) ──

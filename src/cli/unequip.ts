@@ -14,6 +14,7 @@ import { uninstallMcp } from "../lib/mcp.js";
 import { uninstallRules } from "../lib/rules.js";
 import { uninstallHooks } from "../lib/hooks.js";
 import { uninstallSkill } from "../lib/skills.js";
+import { acquireLock } from "../lib/fs.js";
 
 const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf-8"));
 
@@ -74,8 +75,15 @@ cli.log(`\n${cli.BOLD}unequip ${toolName}${cli.RESET}`);
 if (dryRun) cli.warn("Dry run — no files will be modified");
 cli.log("");
 
+// Take the equip-wide lock for the whole uninstall. Without this, a concurrent
+// `equip <other>` (or sidecar reconcile) can race against our deletes, and an
+// adversarial process could swap files between our ownership check and unlink.
+const releaseLock = acquireLock();
+
 let removed = 0;
 const removedPlatforms: string[] = [];
+
+try {
 
 for (const platformId of record.platforms) {
   // Skip disabled platforms
@@ -139,6 +147,10 @@ for (const platformId of record.platforms) {
 // Update state
 if (!dryRun && removed > 0) {
   trackUninstallation(toolName, removedPlatforms);
+}
+
+} finally {
+  releaseLock();
 }
 
 cli.log("");
