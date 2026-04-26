@@ -915,6 +915,9 @@ export async function oauthBrowserFlow(
   const codeVerifier = crypto.randomBytes(32).toString("base64url");
   const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
   const state = crypto.randomBytes(16).toString("hex");
+  // Sent unconditionally — backend requires it when `openid` is in scope (OIDC),
+  // and tolerates it otherwise. Saves us parsing scope strings client-side.
+  const nonce = crypto.randomBytes(16).toString("hex");
 
   return new Promise((resolve) => {
     const server = http.createServer(async (req, res) => {
@@ -1030,6 +1033,7 @@ export async function oauthBrowserFlow(
         code_challenge: codeChallenge,
         code_challenge_method: "S256",
         state,
+        nonce,
       });
       if (oauthConfig.scopes) params.set("scope", oauthConfig.scopes.join(" "));
       if (options?.provider) params.set("provider", options.provider);
@@ -1154,8 +1158,22 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
 function defaultOpenBrowser(url: string): void {
   try {
     if (process.platform === "win32") {
-      // Use spawn with argument array to avoid shell metacharacter injection
-      child_process.spawn("cmd", ["/c", "start", "", url], { stdio: "ignore", shell: false }).unref();
+      // OAuth URLs contain `&` query separators which `cmd.exe` parses as
+      // command separators unless the URL is quoted in the FINAL command line
+      // (Node's argv-array quoting is stripped before cmd re-parses). Solution:
+      // (1) build the cmd /c string ourselves with the URL wrapped in double
+      // quotes (escape any literal " in the URL by doubling it per cmd rules),
+      // (2) use windowsVerbatimArguments so Node passes the line through
+      // unmodified to CreateProcess. The `""` first arg to `start` is the
+      // window title — required, otherwise start interprets the URL as the
+      // title. Using `start` (not rundll32) preserves the "new window" launch
+      // semantics; rundll32 routes through Chrome IPC and opens a new tab.
+      const escapedUrl = url.replace(/"/g, '""');
+      child_process.spawn(
+        "cmd.exe",
+        ["/d", "/s", "/c", `start "" "${escapedUrl}"`],
+        { stdio: "ignore", windowsVerbatimArguments: true, detached: true },
+      ).unref();
     } else if (process.platform === "darwin") {
       child_process.spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
     } else {
