@@ -11,7 +11,7 @@ import { validateToolName, validateRelativePath, validatePathWithinDir, validate
 import { computeContentHash, extractManifest, type ContentManifest } from "./lib/content-hash";
 import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
-import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities } from "./lib/platforms";
+import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, getBrokerCapabilities, platformSupportsBroker, getBrokerStrategy, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities, type PlatformBrokerCapabilities, type PlatformBrokerStrategy, type BrokerConfigWriteResult, type BrokerEndpoint, type DiscoverySuppressionRules } from "./lib/platforms";
 import * as cli from "./lib/cli";
 import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile, type InstallSkillOptions, type UninstallSkillResult } from "./lib/skills";
 import type { SkillManifestOwnerSource } from "./lib/skill-manifest";
@@ -370,6 +370,11 @@ export {
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
+  // Platform broker capability accessors (Package 01 — see ADR
+  // equip-app/planning/ADR-cross-platform-strategy-pattern.md)
+  getBrokerCapabilities,
+  platformSupportsBroker,
+  getBrokerStrategy,
   // CLI helpers (for setup scripts)
   cli,
   // Observability
@@ -388,4 +393,29 @@ export type {
   SkillFile,
   ArtifactResult,
   EquipLogger,
+  // Broker-mode platform extensions (Package 01)
+  PlatformBrokerCapabilities,
+  PlatformBrokerStrategy,
+  BrokerConfigWriteResult,
+  BrokerEndpoint,
+  DiscoverySuppressionRules,
 };
+
+// Broker-mode auth abstractions. Re-exported for broker code in
+// Packages 02-05; see equip/src/lib/auth-broker-types.ts.
+export type {
+  Provider,
+  ProviderDescription,
+  ProviderAcquireOptions,
+  ProviderRefreshOptions,
+  ProviderValidateOptions,
+  ProviderResult,
+  DeliveryDecision,
+  DirectDelivery,
+  DirectDeliveryReason,
+  BrokerDelivery,
+  UnsupportedDelivery,
+  UnsupportedDeliveryReason,
+} from "./lib/auth-broker-types";
+
+export { assertNeverDelivery } from "./lib/auth-broker-types";
