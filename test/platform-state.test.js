@@ -551,6 +551,14 @@ describe("Auto-wrapping MCP servers during scan", () => {
     const skillsDir = path.join(claudeDir, "skills", "my-custom-skill", "do-thing");
     fs.mkdirSync(skillsDir, { recursive: true });
     fs.writeFileSync(path.join(skillsDir, "SKILL.md"), "# Do Thing\nDoes a thing.");
+    fs.mkdirSync(path.join(skillsDir, "references"), { recursive: true });
+    fs.mkdirSync(path.join(skillsDir, "scripts"), { recursive: true });
+    fs.mkdirSync(path.join(skillsDir, "assets"), { recursive: true });
+    fs.mkdirSync(path.join(skillsDir, ".private"), { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, "references", "usage.md"), "# Usage\n");
+    fs.writeFileSync(path.join(skillsDir, "scripts", "check.ps1"), "Write-Output 'ok'\n");
+    fs.writeFileSync(path.join(skillsDir, "assets", "example.json"), "{\"ok\":true}\n");
+    fs.writeFileSync(path.join(skillsDir, ".private", "secret.md"), "nope\n");
 
     const detected = [{
       platform: "claude-code",
@@ -572,9 +580,16 @@ describe("Auto-wrapping MCP servers during scan", () => {
     // Verify skill content is captured in augment def
     assert.equal(def.skills.length, 1, "Should have 1 skill");
     assert.equal(def.skills[0].name, "do-thing");
-    assert.equal(def.skills[0].files.length, 1, "Should have SKILL.md file");
-    assert.equal(def.skills[0].files[0].path, "SKILL.md");
+    assert.deepEqual(def.skills[0].files.map((file) => file.path), [
+      "SKILL.md",
+      "assets/example.json",
+      "references/usage.md",
+      "scripts/check.ps1",
+    ]);
     assert.equal(def.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
+    assert.equal(def.skills[0].files.find((file) => file.path === "references/usage.md").content, "# Usage\n");
+    assert.equal(def.skills[0].files.find((file) => file.path === "scripts/check.ps1").content, "Write-Output 'ok'\n");
+    assert.equal(def.skills[0].files.find((file) => file.path === "assets/example.json").content, "{\"ok\":true}\n");
 
     // Verify description extracted from SKILL.md heading
     assert.equal(def.description, "Do Thing");

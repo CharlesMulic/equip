@@ -157,15 +157,18 @@ class Augment {
   installSkill(platform: DetectedPlatform, options: { dryRun?: boolean } = {}): ArtifactResult {
     if (this.skills.length === 0) return makeResult("skills", { attempted: false, success: true, action: "skipped" });
     let anyCreated = false;
+    let anyUpdated = false;
     let lastResult: ArtifactResult = makeResult("skills", { attempted: false, success: true, action: "skipped" });
     for (const sk of this.skills) {
       const result = installSkill(platform, this.name, sk, { ...options, logger: this.logger });
       lastResult = result;
       if (result.action === "created") anyCreated = true;
+      if (result.action === "updated") anyUpdated = true;
       if (!result.success) return result; // fail fast on error
     }
-    // If any skill was newly created, report "created"; otherwise report last result
+    // Prefer the strongest action across skills for aggregate telemetry.
     if (anyCreated) return makeResult("skills", { attempted: true, success: true, action: "created" });
+    if (anyUpdated) return makeResult("skills", { attempted: true, success: true, action: "updated" });
     return lastResult;
   }
 

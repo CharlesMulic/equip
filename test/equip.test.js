@@ -25,7 +25,7 @@ const { parseTomlServerEntry, parseTomlSubTables, buildTomlEntry, removeTomlEntr
 const { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup, resolvePackageVersion } = require("../dist/lib/fs");
 const { reconcileState } = require("../dist/lib/reconcile");
 const { getHookCapabilities, buildHooksConfig, installHooks, uninstallHooks, hasHooks } = require("../dist/lib/hooks");
-const { installSkill, uninstallSkill, hasSkill } = require("../dist/lib/skills");
+const { installSkill, uninstallSkill, hasSkill, normalizeSkillFilePath } = require("../dist/lib/skills");
 const { buildStdioConfig } = require("../dist/lib/mcp");
 const { migrateConfigs } = require("../dist/lib/migrate");
 const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
@@ -1639,9 +1639,43 @@ describe("skills.ts", () => {
       files: [{ path: "SKILL.md", content: "---\nname: test-skill\ndescription: Updated\n---\n\n# Updated\n" }],
     };
     const result = installSkill(p, "myserver", updatedSkill);
-    assert.equal(result.action, "created");
+    assert.equal(result.action, "updated");
     const content = fs.readFileSync(path.join(skillsDir, "myserver", "test-skill", "SKILL.md"), "utf-8");
     assert.ok(content.includes("Updated"));
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("installSkill updates support files when SKILL.md is unchanged", () => {
+    const skillsDir = tmpPath("skills-support-update");
+    const p = mockPlatform({ skillsPath: skillsDir });
+    const initialSkill = {
+      name: "multi",
+      files: [
+        { path: "SKILL.md", content: "# Multi\n" },
+        { path: "references/usage.md", content: "old usage\n" },
+        { path: "scripts/check.ps1", content: "Write-Output 'old'\n" },
+        { path: "assets/example.json", content: "{\"ok\":false}\n" },
+      ],
+    };
+    const updatedSkill = {
+      ...initialSkill,
+      files: initialSkill.files.map((file) => file.path === "references/usage.md"
+        ? { ...file, content: "new usage\n" }
+        : file),
+    };
+
+    installSkill(p, "myserver", initialSkill);
+    const result = installSkill(p, "myserver", updatedSkill);
+
+    assert.equal(result.action, "updated");
+    assert.equal(
+      fs.readFileSync(path.join(skillsDir, "myserver", "multi", "references", "usage.md"), "utf-8"),
+      "new usage\n",
+    );
+    assert.equal(
+      fs.readFileSync(path.join(skillsDir, "myserver", "multi", "SKILL.md"), "utf-8"),
+      "# Multi\n",
+    );
     fs.rmSync(skillsDir, { recursive: true, force: true });
   });
 
@@ -1654,13 +1688,21 @@ describe("skills.ts", () => {
         { path: "SKILL.md", content: "# Multi\n" },
         { path: "scripts/helper.sh", content: "#!/bin/bash\necho hi\n" },
         { path: "references/API.md", content: "# API\n" },
+        { path: "assets/example.json", content: "{\"ok\":true}\n" },
       ],
     };
     installSkill(p, "myserver", multiSkill);
     assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "SKILL.md")));
     assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "scripts", "helper.sh")));
     assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "references", "API.md")));
+    assert.ok(fs.existsSync(path.join(skillsDir, "myserver", "multi", "assets", "example.json")));
     fs.rmSync(skillsDir, { recursive: true, force: true });
+  });
+
+  it("normalizes Windows-style skill file paths to forward slashes", () => {
+    assert.equal(normalizeSkillFilePath("references\\usage.md"), "references/usage.md");
+    assert.equal(normalizeSkillFilePath("scripts\\..\\assets\\example.json"), "assets/example.json");
+    assert.throws(() => normalizeSkillFilePath("references\\..\\..\\.env"), /escapes parent|hidden file/);
   });
 
   it("installSkill returns skipped when skillsPath is null", () => {

@@ -1,16 +1,14 @@
-// Skill file installation — copies SKILL.md and supporting files to platform skill directories.
-// Skills use a universal format (Agent Skills spec) — no per-platform translation needed.
+// Skill file installation: copies SKILL.md and supporting files to platform skill directories.
+// Skills use a universal format (Agent Skills spec); no per-platform translation needed.
 // Zero dependencies.
 
 import * as fs from "fs";
 import * as path from "path";
-import { type DetectedPlatform, getPlatform } from "./platforms";
+import { type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync } from "./fs";
 import { validateRelativePath, validatePathWithinDir, validateToolName } from "./validation";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
-
-// ─── Types ──────────────────────────────────────────────────
 
 export interface SkillFile {
   /** Relative path within the skill directory (e.g., "SKILL.md", "scripts/validate.sh") */
@@ -26,11 +24,48 @@ export interface SkillConfig {
   files: SkillFile[];
 }
 
-// ─── Install ────────────────────────────────────────────────
+export function normalizeSkillFilePath(filePath: string, context: string = "skill file path"): string {
+  const slashPath = filePath.replace(/\\/g, "/");
+  validateRelativePath(slashPath, context);
+  const normalized = path.posix.normalize(slashPath);
+  if (normalized === "." || normalized === "") {
+    throw new Error(`Empty ${context}`);
+  }
+  return normalized;
+}
+
+function normalizeSkillFiles(files: SkillFile[]): SkillFile[] {
+  return files.map((file) => ({
+    path: normalizeSkillFilePath(file.path),
+    content: file.content,
+  }));
+}
+
+function skillFilePath(skillDir: string, relativePath: string): string {
+  const filePath = path.join(skillDir, ...relativePath.split("/"));
+  validatePathWithinDir(filePath, skillDir, "skill file path");
+  return filePath;
+}
+
+function declaredSkillFilesAreCurrent(skillDir: string, files: SkillFile[]): boolean {
+  for (const file of files) {
+    try {
+      const existing = fs.readFileSync(skillFilePath(skillDir, file.path), "utf-8");
+      if (existing !== file.content) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
 
 /**
  * Install skill files to a platform's skills directory.
  * Layout: {skillsPath}/{toolName}/{skillName}/SKILL.md
+ *
+ * Install is add/update-only: files no longer declared by the incoming skill are
+ * left in place until managed-install metadata can distinguish stale files from
+ * user-added local files.
  *
  * @param platform - Detected platform with skillsPath
  * @param toolName - Tool name (scopes skills per tool, e.g., "prior")
@@ -52,31 +87,21 @@ export function installSkill(
     return makeResult("skills", { attempted: false, success: true, action: "skipped" });
   }
 
-  const skillDir = path.join(platform.skillsPath, toolName, skill.name);
+  validateToolName(toolName);
+  validateRelativePath(skill.name, "skill name");
+  const files = normalizeSkillFiles(skill.files);
 
-  // Check if already installed (idempotent — skip if SKILL.md exists and matches)
-  const mainFile = skill.files.find(f => f.path === "SKILL.md");
-  if (mainFile) {
-    try {
-      const existing = fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf-8");
-      if (existing === mainFile.content) {
-        logger.debug("Skill already current", { platform: platform.platform, skill: skill.name });
-        return makeResult("skills", { attempted: true, success: true, action: "skipped" });
-      }
-    } catch { /* doesn't exist yet — proceed with install */ }
+  const skillDir = path.join(platform.skillsPath, toolName, skill.name);
+  const skillDirExists = fs.existsSync(skillDir);
+
+  if (declaredSkillFilesAreCurrent(skillDir, files)) {
+    logger.debug("Skill already current", { platform: platform.platform, skill: skill.name });
+    return makeResult("skills", { attempted: true, success: true, action: "skipped" });
   }
 
   if (!options.dryRun) {
-    // Validate tool name and skill name before filesystem use
-    validateToolName(toolName);
-    validateRelativePath(skill.name, "skill name");
-
-    for (const file of skill.files) {
-      // Validate each file path to prevent directory traversal
-      validateRelativePath(file.path, "skill file path");
-      const filePath = path.join(skillDir, file.path);
-      validatePathWithinDir(filePath, skillDir, "skill file path");
-
+    for (const file of files) {
+      const filePath = skillFilePath(skillDir, file.path);
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       atomicWriteFileSync(filePath, file.content);
@@ -84,10 +109,12 @@ export function installSkill(
     logger.info("Skill installed", { platform: platform.platform, skill: skill.name });
   }
 
-  return makeResult("skills", { attempted: true, success: true, action: "created" });
+  return makeResult("skills", {
+    attempted: true,
+    success: true,
+    action: skillDirExists ? "updated" : "created",
+  });
 }
-
-// ─── Uninstall ──────────────────────────────────────────────
 
 /**
  * Remove a skill directory from a platform.
@@ -109,7 +136,6 @@ export function uninstallSkill(
 
   if (!dryRun) {
     fs.rmSync(skillDir, { recursive: true, force: true });
-    // Clean up parent tool dir if empty
     const toolDir = path.join(platform.skillsPath, toolName);
     try {
       const remaining = fs.readdirSync(toolDir);
@@ -119,8 +145,6 @@ export function uninstallSkill(
 
   return true;
 }
-
-// ─── Check ──────────────────────────────────────────────────
 
 /**
  * Check if a skill is installed on a platform.
