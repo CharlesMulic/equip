@@ -287,7 +287,7 @@ interface CollisionDecisionInput {
 /**
  * Returns an ArtifactResult representing a refusal, or null if install may proceed.
  * Implements the decision tree from
- * `operations/initiatives/equip-skill-ownership/work/01-manifest-schema-and-write.md`.
+ * `operations/initiatives/shipped/equip-skill-ownership/work/01-manifest-schema-and-write.md`.
  */
 function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
   const { platform, toolName, skillName, existingManifest, options, logger } = input;
