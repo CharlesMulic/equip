@@ -24,6 +24,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
+import { getCachedHash, setCachedHash } from "./checksum-cache";
 import type { SkillConfig } from "./skills";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -98,6 +99,14 @@ export function verifyFileAgainstManifest(
   filePath: string,
   expected: SkillManifestHash,
 ): FileVerifyStatus {
+  // Cache fast path: getCachedHash returns null if no entry, mtime/size
+  // mismatch, or stat fails. A stat failure here looks the same as a cache
+  // miss, so we still hit the read path below to disambiguate ENOENT vs
+  // other I/O errors and return the right FileVerifyStatus.
+  const cached = getCachedHash(filePath);
+  if (cached !== null) {
+    return cached === expected.value ? "match" : "drift";
+  }
   let content: string;
   try {
     content = fs.readFileSync(filePath, "utf-8");
@@ -105,7 +114,12 @@ export function verifyFileAgainstManifest(
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return "missing";
     return "unreadable";
   }
-  return sha256OfString(content) === expected.value ? "match" : "drift";
+  const hash = sha256OfString(content);
+  // Populate cache lazily so subsequent verifies on this same file are fast.
+  // Best-effort — failures inside setCachedHash log a debug line but don't
+  // affect correctness.
+  setCachedHash(filePath, hash);
+  return hash === expected.value ? "match" : "drift";
 }
 
 // ─── Read / write ───────────────────────────────────────────

@@ -21,6 +21,7 @@ import {
   writeManifest,
   type SkillManifestOwnerSource,
 } from "./skill-manifest";
+import { setCachedHashes, pruneCacheEntries } from "./checksum-cache";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
 
@@ -253,6 +254,17 @@ export function installSkill(
           skillDir, error: (e as Error).message,
         });
       }
+
+      // Seed the checksum cache from the freshly-computed manifest hashes so
+      // future verifies (uninstall, equip verify) hit the fast path. We already
+      // know the hashes (computed in buildManifestForInstall) and the files are
+      // freshly on disk — no extra read or hash needed. Best-effort: cache write
+      // failures don't affect install outcome.
+      const seeds = finalManifest.files.map(f => ({
+        filePath: path.join(skillDir, ...f.path.split("/")),
+        sha256: f.hash.value,
+      }));
+      setCachedHashes(seeds, logger);
     }
   }
 
@@ -663,6 +675,7 @@ function unlinkOwnedFiles(
   dryRun: boolean,
 ): { removed: boolean; preservedFiles: string[]; foreignFiles: string[] } {
   const preservedFiles: string[] = [];
+  const unlinkedAbsPaths: string[] = [];
   let removed = false;
 
   // Build a Set of manifest paths for fast foreign-content detection later.
@@ -675,6 +688,7 @@ function unlinkOwnedFiles(
       removed = true;
       if (!dryRun) {
         try { fs.unlinkSync(filePath); } catch { /* may already be gone */ }
+        unlinkedAbsPaths.push(filePath);
         // Try to remove now-empty parent dirs (e.g., scripts/, references/).
         // Stop at skillDir — we'll decide its fate at the caller level.
         let parent = path.dirname(filePath);
@@ -687,6 +701,13 @@ function unlinkOwnedFiles(
       preservedFiles.push(file.path);
     }
     // missing | unreadable → no preservation, no error (already gone or inaccessible).
+  }
+
+  // Drop cache entries for unlinked files. The cache wouldn't be wrong if left
+  // alone (a future stat would miss because the file is gone), but pruning
+  // keeps cache size bounded over many install/uninstall cycles.
+  if (!dryRun && unlinkedAbsPaths.length > 0) {
+    pruneCacheEntries(unlinkedAbsPaths);
   }
 
   // Foreign content: anything in skillDir (recursive) that's neither owned nor the manifest itself.
