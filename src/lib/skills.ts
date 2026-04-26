@@ -202,17 +202,28 @@ export function installSkill(
 
   // ── Manifest write (last step, atomic) ──
   // Skip the rewrite when files were skipped AND the existing manifest already
-  // names us correctly with matching file count — manifest is already current.
-  // Otherwise write a fresh manifest so it tracks current ownership + content.
+  // names us correctly with matching file count AND no shared-root owners need to
+  // be added. Otherwise write a fresh manifest so it tracks current ownership +
+  // content. Under the shared-root case (Package 03), preserve other-platform
+  // owners on rewrite so their claims survive our re-install.
   if (!options.dryRun) {
+    // The existing-manifest-already-current shortcut: skip the manifest write
+    // when files were unchanged AND the manifest's record of OUR (augment, platform)
+    // entry matches the version we'd write now. If augmentVersion changed (or
+    // anything else about our owner record drifts), force a rewrite so the manifest
+    // reflects current intent.
+    const ourExistingOwner = existingManifest
+      ? findOwner(existingManifest, toolName, platform.platform)
+      : null;
     const manifestStillCurrent =
       filesAction === "skipped" &&
       existingManifest !== null &&
-      findOwner(existingManifest, toolName, platform.platform) !== null &&
-      existingManifest.files.length === files.length;
+      ourExistingOwner !== null &&
+      existingManifest.files.length === files.length &&
+      ourExistingOwner.augmentVersion === (options.augmentVersion ?? 0);
 
     if (!manifestStillCurrent) {
-      const manifest = buildManifestForInstall({
+      const baseManifest = buildManifestForInstall({
         skill: normalizedSkill,
         toolName,
         augmentVersion: options.augmentVersion,
@@ -222,8 +233,21 @@ export function installSkill(
         skillsRoot: platform.skillsPath,
         equipVersion: options.equipVersion ?? "unknown",
       });
+
+      // Preserve shared-root co-owners — entries from the existing manifest whose
+      // (augment, platform) tuple is NOT the one we're about to write. --takeover
+      // explicitly discards everyone else's claims, so skip preservation in that mode.
+      const finalManifest = (() => {
+        if (options.takeover || !existingManifest) return baseManifest;
+        const otherOwners = existingManifest.owners.filter(
+          o => !(o.augment === toolName && o.platform === platform.platform),
+        );
+        if (otherOwners.length === 0) return baseManifest;
+        return { ...baseManifest, owners: [...baseManifest.owners, ...otherOwners] };
+      })();
+
       try {
-        writeManifest(skillDir, manifest);
+        writeManifest(skillDir, finalManifest);
       } catch (e) {
         logger.warn("Skill manifest write failed; install proceeds without manifest", {
           skillDir, error: (e as Error).message,
@@ -261,6 +285,23 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
     existingManifest !== null &&
     findOwner(existingManifest, toolName, platform) !== null;
   if (weOwnByManifest) return null;
+
+  // Shared-root case (Package 03): the manifest names US as owner for a DIFFERENT
+  // platform. This happens when an augment installs to multiple platforms whose
+  // skillsPath() resolves to the same directory (e.g., codex + windsurf + vscode
+  // all share `~/.agents/skills/`). The dir is ours; we just haven't registered
+  // ourselves for THIS platform yet. Install proceeds without refusal; the
+  // manifest write at the end of installSkill appends our new owner entry.
+  if (existingManifest !== null) {
+    const ourOtherPlatformOwnership = existingManifest.owners.find(o => o.augment === toolName);
+    if (ourOtherPlatformOwnership) {
+      logger.debug("Shared-root install — appending owner for new platform", {
+        platform, skill: skillName, augment: toolName,
+        existingPlatform: ourOtherPlatformOwnership.platform,
+      });
+      return null;
+    }
+  }
 
   // Find OTHER augments installations.json believes own this skill on this platform.
   const otherInstalled = findAugmentsOwningSkill(platform, skillName, toolName);
@@ -505,7 +546,34 @@ export function uninstallSkill(
         });
         // Still attempt legacy cleanup below.
       } else {
-        // Manifest-driven selective uninstall.
+        // Refcount check (Package 03): if other (augment, platform) owners remain,
+        // this is a shared-root install. Remove only OUR owner entry; leave files
+        // and the dir intact for the surviving owners.
+        const otherOwners = manifest.owners.filter(
+          o => !(o.augment === toolName && o.platform === platform.platform),
+        );
+        if (otherOwners.length > 0) {
+          if (!dryRun) {
+            const updatedManifest = { ...manifest, owners: otherOwners };
+            try {
+              writeManifest(skillDir, updatedManifest);
+            } catch (e) {
+              logger.warn("Manifest rewrite failed during refcount removal", {
+                skillDir, error: (e as Error).message,
+              });
+            }
+          }
+          logger.debug("Shared-root uninstall — owner entry removed; files preserved for co-owners", {
+            skillDir, removed: `${toolName}@${platform.platform}`,
+            remainingOwners: otherOwners.map(o => `${o.augment}@${o.platform}`),
+          });
+          result.removed = true;
+          result.viaManifest = true;
+          // Skip file deletion and legacy cleanup — files are still owned.
+          return result;
+        }
+
+        // Last-owner removal: fall through to Package 02's full cleanup.
         result.viaManifest = true;
         const { removed, preservedFiles, foreignFiles } = unlinkOwnedFiles(skillDir, manifest.files, dryRun);
         result.preservedFiles = preservedFiles;
