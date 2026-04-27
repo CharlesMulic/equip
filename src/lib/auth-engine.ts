@@ -507,20 +507,9 @@ function isJwtExpired(token: string): boolean {
   return false;
 }
 
-/** Check if a JWT expires within the given number of seconds. */
-function isJwtExpiringSoon(token: string, withinSeconds: number): boolean {
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  try {
-    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
-    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf-8"));
-    if (typeof payload.exp === "number") {
-      return payload.exp < Math.floor(Date.now() / 1000) + withinSeconds;
-    }
-  } catch { /* can't decode */ }
-  return false;
-}
+// `isJwtExpiringSoon` removed 2026-04-27 — was only used by the
+// retired `refreshOidcTokens`. Broker has its own JWT exp decoder
+// in CredentialManager.expiryOf.
 
 async function resolveOidc(
   toolName: string,
@@ -677,76 +666,14 @@ async function resolveOidc(
   }
 }
 
-/**
- * Refresh all stored CG3 delegated OIDC access tokens that are expiring soon.
- * Called by the background refresh daemon (Phase 1C).
- */
-export async function refreshOidcTokens(
-  options: { logger?: EquipLogger; session?: AuthResolveOptions["session"] } = {},
-): Promise<Map<string, { success: boolean; error?: string }>> {
-  const logger = options.logger || NOOP_LOGGER;
-  const results = new Map<string, { success: boolean; error?: string }>();
-
-  // List all stored credentials
-  const credDir = getCredentialsDir();
-  if (!fs.existsSync(credDir)) return results;
-
-  const files = fs.readdirSync(credDir).filter(f => f.endsWith(".json"));
-  for (const file of files) {
-    try {
-      const raw = fs.readFileSync(path.join(credDir, file), "utf-8");
-      const cred: StoredCredential = JSON.parse(raw);
-      if (cred.authType !== "oidc") continue;
-
-      // Check if token expires within 25 minutes
-      if (!isJwtExpiringSoon(cred.credential, 25 * 60)) {
-        results.set(cred.toolName, { success: true }); // still valid
-        continue;
-      }
-
-      logger.info("Refreshing expiring delegated access token", { toolName: cred.toolName });
-
-      // Read session from provided option or from disk (canonical source).
-      // Credential files no longer store session tokens (security: avoid duplicating refresh tokens).
-      let session = options.session;
-      if (!session) {
-        try {
-          const sessionPath = path.join(getEquipHome(), "app", "session.json");
-          const sessionRaw = fs.readFileSync(sessionPath, "utf-8");
-          const parsed = JSON.parse(sessionRaw);
-          if (parsed?.accessToken) {
-            session = {
-              accessToken: parsed.accessToken,
-              refreshToken: parsed.refreshToken || "",
-              expiresAt: parsed.expiresAt || "",
-              tokenUrl: parsed.tokenUrl || "https://api.cg3.io/token",
-              clientId: parsed.clientId || "equip-desktop",
-            };
-          }
-        } catch { /* no session file */ }
-      }
-      if (!session?.accessToken) {
-        results.set(cred.toolName, { success: false, error: "No session available for refresh" });
-        continue;
-      }
-
-      const authResult = await resolveOidc(cred.toolName, logger, true, false, session);
-
-      if (authResult.credential) {
-        // Rewrite MCP platform configs with the new token so AI platforms pick it up
-        const configsUpdated = updatePlatformConfigs(cred.toolName, authResult.credential, logger);
-        logger.info("Delegated OIDC access token refreshed", { toolName: cred.toolName, configsUpdated });
-        results.set(cred.toolName, { success: true });
-      } else {
-        results.set(cred.toolName, { success: false, error: authResult.error });
-      }
-    } catch (e: any) {
-      results.set(file.replace(".json", ""), { success: false, error: e.message });
-    }
-  }
-
-  return results;
-}
+// `refreshOidcTokens` and `updatePlatformConfigs` were retired here
+// 2026-04-27 with the legacy identity-refresh-daemon. The broker is now
+// the canonical refresh authority (`equip-app/sidecar/broker/`). MCP
+// config rewriting moves to per-platform writers in
+// equip-mcp-login-continuity-gate Pkg 04 + Pkg 05.
+//
+// `resolveOidc` (the immediate-acquire path used by the install command)
+// still lives here — it's not refresh, it's first-time grant.
 
 // ─── API Key Flow ─────────────────────────────────────────��
 
