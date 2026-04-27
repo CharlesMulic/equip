@@ -34,10 +34,13 @@ function setupTempHome() {
   tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-augdefs-"));
   // Override homedir to isolate tests
   os.homedir = () => tempHome;
+  process.env.EQUIP_HOME = require("path").join(tempHome, ".equip");
+  require("fs").mkdirSync(process.env.EQUIP_HOME, { recursive: true });
 }
 
 function teardownTempHome() {
   os.homedir = originalHome;
+  delete process.env.EQUIP_HOME;
   fs.rmSync(tempHome, { recursive: true, force: true });
 }
 

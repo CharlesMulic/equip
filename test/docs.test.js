@@ -10,6 +10,8 @@
 
 "use strict";
 
+require("./_isolation");
+
 const { describe, it, after } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("path");

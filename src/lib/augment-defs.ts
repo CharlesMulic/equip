@@ -310,7 +310,8 @@ export interface WrapConfig {
 // ─── Paths ──────────────────────────────────────────────────
 
 // Resolve dynamically so tests can override os.homedir()
-function getEquipDir(): string { return path.join(os.homedir(), ".equip"); }
+import { getEquipHome } from "./equip-home";
+const getEquipDir = getEquipHome;
 export function getAugmentsDir(): string { return path.join(getEquipDir(), "augments"); }
 
 function augmentPath(name: string): string {

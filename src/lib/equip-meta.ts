@@ -7,9 +7,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import * as crypto from "crypto";
 import { atomicWriteFileSync, safeReadJsonSync, resolvePackageVersion } from "./fs";
+import { getEquipHome } from "./equip-home";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -32,8 +32,7 @@ export interface EquipPreferences {
 
 // ─── Paths ──────────────────────────────────────────────────
 
-function equipDir(): string { return path.join(os.homedir(), ".equip"); }
-function metaPath(): string { return path.join(equipDir(), "equip.json"); }
+function metaPath(): string { return path.join(getEquipHome(), "equip.json"); }
 
 // ─── Defaults ───────────────────────────────────────────────
 
@@ -87,7 +86,7 @@ export function getInstallId(): string {
 }
 
 export function writeEquipMeta(meta: EquipMeta): void {
-  const dir = equipDir();
+  const dir = getEquipHome();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   atomicWriteFileSync(metaPath(), JSON.stringify(meta, null, 2) + "\n");
 }

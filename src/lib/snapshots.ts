@@ -47,8 +47,9 @@ export interface RestoreResult {
 
 // ─── Paths ──────────────────────────────────────────────────
 
+import { getEquipHome } from "./equip-home";
 function snapshotsDir(): string {
-  return path.join(os.homedir(), ".equip", "snapshots");
+  return path.join(getEquipHome(), "snapshots");
 }
 
 function platformSnapshotsDir(platformId: string): string {

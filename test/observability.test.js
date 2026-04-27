@@ -2,6 +2,8 @@
 
 "use strict";
 
+require("./_isolation");
+
 const { describe, it, before, after } = require("node:test");
 const assert = require("assert/strict");
 const fs = require("fs");

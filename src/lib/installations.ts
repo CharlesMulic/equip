@@ -6,8 +6,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
+import { getEquipHome } from "./equip-home";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -46,8 +46,7 @@ export interface Installations {
 
 // ─── Paths ──────────────────────────────────────────────────
 
-function equipDir(): string { return path.join(os.homedir(), ".equip"); }
-function installationsPath(): string { return path.join(equipDir(), "installations.json"); }
+function installationsPath(): string { return path.join(getEquipHome(), "installations.json"); }
 
 // ─── Batched Writer (Package 05 of equip-skill-ownership) ──
 //
@@ -133,7 +132,7 @@ function readFromDisk(): Installations {
 }
 
 function writeToDisk(inst: Installations): void {
-  const dir = equipDir();
+  const dir = getEquipHome();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   atomicWriteFileSync(installationsPath(), JSON.stringify(inst, null, 2) + "\n");
 }

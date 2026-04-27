@@ -110,9 +110,9 @@ export interface AuthResult {
 
 // ─── Paths ─────────────────────────────────────────────────
 
-// Resolve dynamically so tests can override os.homedir()
-function getEquipDir(): string { return path.join(os.homedir(), ".equip"); }
-function getCredentialsDir(): string { return path.join(getEquipDir(), "credentials"); }
+// Resolve dynamically so tests can override via EQUIP_HOME (see ENG-0031).
+import { getEquipHome } from "./equip-home";
+function getCredentialsDir(): string { return path.join(getEquipHome(), "credentials"); }
 
 function credentialPath(toolName: string): string {
   return path.join(getCredentialsDir(), `${toolName}.json`);
@@ -154,7 +154,7 @@ function hardenCredentialPermissions(filePath: string): void {
 
 /** Create a .gitignore in ~/.equip/ to prevent accidental credential commits. */
 function ensureEquipGitignore(): void {
-  const gitignorePath = path.join(getEquipDir(), ".gitignore");
+  const gitignorePath = path.join(getEquipHome(), ".gitignore");
   if (!fs.existsSync(gitignorePath)) {
     try {
       fs.writeFileSync(gitignorePath, "# Prevent accidental credential commits\ncredentials/\nsession.json\ncache/\n*.tmp\n");
@@ -532,7 +532,7 @@ async function resolveOidc(
   // Try reading session from disk if not provided
   if (!session) {
     try {
-      const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+      const sessionPath = path.join(getEquipHome(), "app", "session.json");
       const raw = fs.readFileSync(sessionPath, "utf-8");
       const parsed = JSON.parse(raw);
       if (parsed?.accessToken && parsed?.refreshToken && parsed?.expiresAt) {
@@ -558,7 +558,7 @@ async function resolveOidc(
     logger.info("Session token expired, re-reading from disk");
     let refreshed = false;
     try {
-      const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+      const sessionPath = path.join(getEquipHome(), "app", "session.json");
       const raw = fs.readFileSync(sessionPath, "utf-8");
       const parsed = JSON.parse(raw);
       if (parsed?.accessToken && !isJwtExpired(parsed.accessToken)) {
@@ -590,7 +590,7 @@ async function resolveOidc(
           session.expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
           // Write refreshed session to disk so other callers benefit
           try {
-            const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+            const sessionPath = path.join(getEquipHome(), "app", "session.json");
             const existing = JSON.parse(fs.readFileSync(sessionPath, "utf-8"));
             existing.accessToken = session.accessToken;
             if (data.refresh_token) existing.refreshToken = session.refreshToken;
@@ -711,7 +711,7 @@ export async function refreshOidcTokens(
       let session = options.session;
       if (!session) {
         try {
-          const sessionPath = path.join(os.homedir(), ".equip", "app", "session.json");
+          const sessionPath = path.join(getEquipHome(), "app", "session.json");
           const sessionRaw = fs.readFileSync(sessionPath, "utf-8");
           const parsed = JSON.parse(sessionRaw);
           if (parsed?.accessToken) {

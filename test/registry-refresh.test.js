@@ -15,20 +15,26 @@ const {
   resetRefreshValidationStateForTests,
 } = require("../dist/lib/registry-refresh");
 
-let originalHome;
+let originalEquipHome;
 let originalFetch;
 let tempHome;
 
+// Test isolation via EQUIP_HOME env var (ENG-0031). Pre-ENG-0031 this used
+// `os.homedir = () => tempHome` monkey-patching, which is process-global and
+// survives a thrown test before teardown — a real source of cross-test
+// contamination that contributed to the 2026-04-26 incident where a user's
+// real ~/.equip/installations.json got wiped during a test run.
 function setupTempHome() {
-  originalHome = os.homedir;
+  originalEquipHome = process.env.EQUIP_HOME;
   originalFetch = global.fetch;
   tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-refresh-"));
-  os.homedir = () => tempHome;
+  process.env.EQUIP_HOME = tempHome;
   resetRefreshValidationStateForTests();
 }
 
 function teardownTempHome() {
-  os.homedir = originalHome;
+  if (originalEquipHome === undefined) delete process.env.EQUIP_HOME;
+  else process.env.EQUIP_HOME = originalEquipHome;
   global.fetch = originalFetch;
   resetRefreshValidationStateForTests();
   fs.rmSync(tempHome, { recursive: true, force: true });

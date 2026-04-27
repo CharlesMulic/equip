@@ -21,7 +21,8 @@ const FETCH_TIMEOUT_MS = 8000;
 
 // ─── Paths ─────────────────────────────────────────────────
 
-function cacheDir(): string { return path.join(os.homedir(), ".equip", "cache"); }
+import { getEquipHome } from "./equip-home";
+function cacheDir(): string { return path.join(getEquipHome(), "cache"); }
 
 function registryCacheKey(): string {
   const normalized = (REGISTRY_API || "registry").trim().replace(/\/+$/, "") || "registry";

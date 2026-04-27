@@ -59,15 +59,23 @@ function cleanup(...paths) {
 function withTempHome(fn) {
   const tempHome = tmpPath("equip-home");
   fs.mkdirSync(tempHome, { recursive: true });
+  const tempEquip = path.join(tempHome, ".equip");
+  fs.mkdirSync(tempEquip, { recursive: true });
   const previous = {
     HOME: process.env.HOME,
     USERPROFILE: process.env.USERPROFILE,
     HOMEDRIVE: process.env.HOMEDRIVE,
     HOMEPATH: process.env.HOMEPATH,
+    EQUIP_HOME: process.env.EQUIP_HOME,
   };
 
+  // Set USERPROFILE for code that still consults os.homedir() directly (e.g.,
+  // platform-config paths owned by the platforms themselves). Set EQUIP_HOME
+  // explicitly so equip's own state resolves through getEquipHome() — the
+  // single seam introduced for ENG-0031.
   process.env.HOME = tempHome;
   process.env.USERPROFILE = tempHome;
+  process.env.EQUIP_HOME = tempEquip;
   delete process.env.HOMEDRIVE;
   delete process.env.HOMEPATH;
 
@@ -82,6 +90,8 @@ function withTempHome(fn) {
     else process.env.HOMEDRIVE = previous.HOMEDRIVE;
     if (previous.HOMEPATH === undefined) delete process.env.HOMEPATH;
     else process.env.HOMEPATH = previous.HOMEPATH;
+    if (previous.EQUIP_HOME === undefined) delete process.env.EQUIP_HOME;
+    else process.env.EQUIP_HOME = previous.EQUIP_HOME;
     fs.rmSync(tempHome, { recursive: true, force: true });
   }
 }
@@ -2481,36 +2491,45 @@ describe("config migration", () => {
   });
 
   it("handles migration of multiple tools at once", () => {
-    const def = getPlatform("cursor");
-    const configPath = def.configPath();
-    const backup = (() => { try { return fs.readFileSync(configPath, "utf-8"); } catch { return null; } })();
+    // Wrapped in withTempHome so this test no longer touches the user's real
+    // ~/.equip/installations.json. Pre-ENG-0031, this test wrote to live state
+    // and on test failures left tool-a/tool-b records lingering OR raced with
+    // other tests, contributing to the 2026-04-26 incident where a real user's
+    // cg3-internal-skills install record got wiped during a test run.
+    withTempHome(() => {
+      const def = getPlatform("cursor");
+      const configPath = def.configPath();
+      const backup = (() => { try { return fs.readFileSync(configPath, "utf-8"); } catch { return null; } })();
 
-    fs.writeFileSync(configPath, JSON.stringify({
-      mcpServers: {
-        "tool-a": { url: "https://a.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer a" } },
-        "tool-b": { url: "https://b.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer b" } }
-      }
-    }));
+      // Cursor's parent dir doesn't exist in a fresh temp home; create it.
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, JSON.stringify({
+        mcpServers: {
+          "tool-a": { url: "https://a.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer a" } },
+          "tool-b": { url: "https://b.com/mcp", type: "streamable-http", headers: { Authorization: "Bearer b" } }
+        }
+      }));
 
-    trackInstallation("tool-a", {
-      source: "registry", title: "tool-a", transport: "http",
-      platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
+      trackInstallation("tool-a", {
+        source: "registry", title: "tool-a", transport: "http",
+        platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
+      });
+      trackInstallation("tool-b", {
+        source: "registry", title: "tool-b", transport: "http",
+        platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
+      });
+
+      const results = migrateConfigs();
+      const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+      assert.equal(results.filter(r => r.action === "migrated").length, 2, "both should be migrated");
+      assert.equal(content.mcpServers["tool-a"].type, undefined, "tool-a type removed");
+      assert.equal(content.mcpServers["tool-b"].type, undefined, "tool-b type removed");
+
+      trackUninstallation("tool-a");
+      trackUninstallation("tool-b");
+      if (backup) fs.writeFileSync(configPath, backup); else try { fs.unlinkSync(configPath); } catch {}
     });
-    trackInstallation("tool-b", {
-      source: "registry", title: "tool-b", transport: "http",
-      platforms: ["cursor"], artifacts: { "cursor": { mcp: true } },
-    });
-
-    const results = migrateConfigs();
-    const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-
-    assert.equal(results.filter(r => r.action === "migrated").length, 2, "both should be migrated");
-    assert.equal(content.mcpServers["tool-a"].type, undefined, "tool-a type removed");
-    assert.equal(content.mcpServers["tool-b"].type, undefined, "tool-b type removed");
-
-    trackUninstallation("tool-a");
-    trackUninstallation("tool-b");
-    if (backup) fs.writeFileSync(configPath, backup); else try { fs.unlinkSync(configPath); } catch {}
   });
 });
 

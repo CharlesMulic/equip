@@ -57,7 +57,8 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
 const LOCK_STALE_MS = 60_000; // consider lock stale after 60 seconds
 let lockDepth = 0; // re-entrancy counter for same-process calls
 
-function lockPath(): string { return path.join(os.homedir(), ".equip", ".lock"); }
+import { getEquipHome } from "./equip-home";
+function lockPath(): string { return path.join(getEquipHome(), ".lock"); }
 
 /**
  * Acquire a simple process-level lock. Prevents concurrent equip operations
@@ -141,7 +142,7 @@ export interface SafeJsonResult {
 
 function isUnderEquipDir(filePath: string): boolean {
   const resolved = path.resolve(filePath).toLowerCase();
-  const equipRoot = path.resolve(os.homedir(), ".equip").toLowerCase();
+  const equipRoot = path.resolve(getEquipHome()).toLowerCase();
   return resolved === equipRoot || resolved.startsWith(equipRoot + path.sep.toLowerCase());
 }
 

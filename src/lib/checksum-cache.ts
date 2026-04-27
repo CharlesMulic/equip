@@ -37,9 +37,9 @@
 // Zero dependencies beyond node built-ins.
 
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
+import { getEquipHome } from "./equip-home";
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
 
@@ -58,8 +58,7 @@ export interface ChecksumCache {
 
 // ─── Paths ──────────────────────────────────────────────────
 
-function equipDir(): string { return path.join(os.homedir(), ".equip"); }
-function cachePath(): string { return path.join(equipDir(), "checksum-cache.json"); }
+function cachePath(): string { return path.join(getEquipHome(), "checksum-cache.json"); }
 
 // ─── Read / write ───────────────────────────────────────────
 
@@ -82,7 +81,7 @@ function readCache(logger: EquipLogger = NOOP_LOGGER): ChecksumCache {
 
 function writeCache(cache: ChecksumCache, logger: EquipLogger = NOOP_LOGGER): void {
   try {
-    const dir = equipDir();
+    const dir = getEquipHome();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     atomicWriteFileSync(cachePath(), JSON.stringify(cache, null, 2) + "\n");
   } catch (e) {

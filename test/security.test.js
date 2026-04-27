@@ -27,10 +27,13 @@ const origHomedir = os.homedir;
 function setupTempHome() {
   tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-sec-"));
   os.homedir = () => tempHome;
+  process.env.EQUIP_HOME = require("path").join(tempHome, ".equip");
+  require("fs").mkdirSync(process.env.EQUIP_HOME, { recursive: true });
 }
 
 function teardownTempHome() {
   os.homedir = origHomedir;
+  delete process.env.EQUIP_HOME;
   try { fs.rmSync(tempHome, { recursive: true }); } catch {}
 }
 

@@ -13,6 +13,7 @@ import { ParsedArgs, parseArgs, isLocalPath, YELLOW, DIM, RESET, BOLD, GREEN, cr
 import * as cli from "../lib/cli.js";
 import { readEquipMeta } from "../lib/equip-meta.js";
 import { fetchRegistryDef, RegistryDef } from "../lib/registry.js";
+import { getEquipHome } from "../lib/equip-home.js";
 import { validateCredential, readStoredCredential } from "../lib/auth-engine.js";
 import { runStatus } from "../lib/commands/status.js";
 import { runDoctor } from "../lib/commands/doctor.js";
@@ -116,7 +117,7 @@ async function cmdUpdate(parsedArgs: ParsedArgs): Promise<void> {
     cli.log(`\n${BOLD}equip update${RESET} ${toolName}\n`);
 
     // Clear cache to get fresh definition
-    try { fs.unlinkSync(path.join(os.homedir(), ".equip", "cache", `${toolName}.json`)); } catch {}
+    try { fs.unlinkSync(path.join(getEquipHome(), "cache", `${toolName}.json`)); } catch {}
 
     const toolDef = await fetchRegistryDef(toolName, { logger });
     if (!toolDef) {
