@@ -372,6 +372,53 @@ export function writeAugmentDef(def: AugmentDef): void {
 }
 
 /**
+ * Convert an AugmentDef (locally-stored shape with rules content inlined,
+ * stdio nested) into an AugmentConfig (the shape `new Augment(config)` expects).
+ *
+ * Mirrors `registryDefToConfig` (in registry.ts) which converts the wire-shape
+ * RegistryDef into AugmentConfig. The two shapes overlap heavily but differ in
+ * stdio handling — RegistryDef has flat `stdioCommand`/`stdioArgs` fields,
+ * AugmentDef has a nested `stdio: { command, args, envKey? }` object. This
+ * adapter is the AugmentDef-side version.
+ *
+ * Used by `writeAugmentDefAndApply` (commands/install.ts) and any other call
+ * site that needs to construct an `Augment` instance from a locally-stored def
+ * for propagation to platforms (e.g., the equip-augment-update-propagation
+ * initiative's authoring save / platform-enable backfill / CLI apply paths).
+ */
+export function augmentDefToConfig(def: AugmentDef): import("../index").AugmentConfig {
+  const config: import("../index").AugmentConfig = {
+    name: def.name,
+    source: def.source as import("./skill-manifest").SkillManifestOwnerSource,
+  };
+
+  if (def.serverUrl) config.serverUrl = def.serverUrl;
+
+  if (def.rules) {
+    config.rules = {
+      content: def.rules.content,
+      version: def.rules.version,
+      marker: def.rules.marker,
+      ...(def.rules.fileName && { fileName: def.rules.fileName }),
+    };
+  }
+
+  if (def.stdio) {
+    config.stdio = {
+      command: def.stdio.command,
+      args: def.stdio.args,
+      envKey: def.stdio.envKey ?? def.envKey ?? "",
+    };
+  }
+
+  if (def.hooks && def.hooks.length > 0) config.hooks = def.hooks;
+  if (def.hookDir) config.hookDir = def.hookDir;
+  if (def.skills && def.skills.length > 0) config.skills = def.skills;
+
+  return config;
+}
+
+/**
  * Rewrite legacy registry tracking fields to the current schema.
  * Safe to call on app startup; only dirty files are rewritten.
  */

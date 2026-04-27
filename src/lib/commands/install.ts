@@ -6,17 +6,18 @@ import * as os from "os";
 import { spawn } from "child_process";
 import { Augment, type AugmentConfig } from "../../index";
 import { registryDefToConfig, REGISTRY_API, type RegistryDef } from "../registry";
+import { createManualPlatform } from "../platforms";
 import { platformName, resolvePlatformId } from "../platforms";
 import { InstallReportBuilder } from "../types";
 import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { acquireLock } from "../fs";
-import { withInstallationsBatch } from "../installations";
+import { withInstallationsBatch, readInstallations } from "../installations";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
-import { readAugmentDef, writeAugmentDef } from "../augment-defs";
+import { readAugmentDef, writeAugmentDef, augmentDefToConfig, type AugmentDef } from "../augment-defs";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 
@@ -77,20 +78,24 @@ export interface ApplyOptions {
  */
 export function apply(
   equip: Augment,
-  toolDef: RegistryDef,
+  toolDef: RegistryDef | AugmentDef,
   platforms: ReturnType<Augment["detect"]>,
   apiKey: string | null,
   opts: ApplyOptions = {},
 ): InstallReportBuilder {
   const { dryRun = false, takeover, adopt, logger } = opts;
   const transport = toolDef.transport || "http";
-  const config = registryDefToConfig(toolDef, { logger });
   const report = opts.report ?? new InstallReportBuilder();
 
-  // Plan progress steps for CLI output.
+  // Plan progress steps for CLI output. We read fields directly off `toolDef`
+  // (rather than building an AugmentConfig adapter inside apply) so apply works
+  // for both RegistryDef inputs (registry-fetched flow via runInstall) and
+  // AugmentDef inputs (local-author edit propagation, registry-refresh
+  // propagation). The Augment instance — which actually drives per-resource
+  // writes — is the caller's responsibility.
   const stepList = ["MCP Server"];
-  if (config.rules) stepList.push("Behavioral Rules");
-  const hasSkills = config.skills && config.skills.length > 0;
+  if (toolDef.rules) stepList.push("Behavioral Rules");
+  const hasSkills = !!(toolDef.skills && toolDef.skills.length > 0);
   if (hasSkills) stepList.push("Skills");
   stepList.push("Verification");
   const totalSteps = stepList.length;
@@ -121,7 +126,7 @@ export function apply(
       }
 
       // Rules
-      if (config.rules) {
+      if (toolDef.rules) {
         cli.step(++stepNum, totalSteps, "Behavioral Rules");
         for (const p of platforms) {
           if (!p.rulesPath) {
@@ -131,7 +136,7 @@ export function apply(
           const result = equip.installRules(p, { dryRun });
           report.addResult(p.platform, result);
           if (result.action === "created" || result.action === "updated") {
-            cli.ok(`${platformName(p.platform)}   Rules v${config.rules.version} ${result.action}`);
+            cli.ok(`${platformName(p.platform)}   Rules v${toolDef.rules.version} ${result.action}`);
           } else if (result.action === "skipped" && result.attempted) {
             cli.ok(`${platformName(p.platform)}   Rules already current`);
           }
@@ -141,7 +146,7 @@ export function apply(
       // Skills
       if (hasSkills) {
         cli.step(++stepNum, totalSteps, "Skills");
-        const skillNames = (config.skills || []).map(s => s.name);
+        const skillNames = (toolDef.skills || []).map(s => s.name);
         for (const p of platforms) {
           const result = equip.installSkill(p, {
             dryRun,
@@ -187,11 +192,15 @@ export function apply(
       // ── State Reconciliation ──
       if (!dryRun) {
         try {
+          // npmPackage only exists on RegistryDef; AugmentDef lacks it. Falls
+          // back to name for both. Cast toolDef to RegistryDef for reconcile —
+          // reconcile only reads `toolDef.skills`, which both shapes have.
+          const npmPackage = "npmPackage" in toolDef ? toolDef.npmPackage : undefined;
           const changed = reconcileState({
             toolName: toolDef.name,
-            package: toolDef.npmPackage || toolDef.name,
+            package: npmPackage || toolDef.name,
             marker: toolDef.rules?.marker || toolDef.name,
-            toolDef,
+            toolDef: toolDef as RegistryDef,
             logger,
           });
           if (changed > 0 && logger) {
@@ -231,6 +240,88 @@ export function apply(
   }
 
   return report;
+}
+
+// ─── writeAugmentDefAndApply: explicit "user save" boundary ────────────────
+//
+// Use this helper instead of plain `writeAugmentDef` whenever a user-driven
+// edit lands a new def state and the change should propagate immediately to
+// installed platform copies. Examples:
+//   - equip-app authoring save (the canonical "Save" button)
+//   - future publisher draft commit-to-live flows
+//   - CLI `equip apply <augment>` (Package 04 — falls through to apply directly)
+//
+// Internal-only writes (migrations, normalizations, registry-tracking sentinel
+// stamps, draft state mutations that don't touch live resources) MUST keep
+// using plain `writeAugmentDef` and skip apply. Architect's review (2026-04-26)
+// rejected file-watcher-on-augments-dir as a trap because multiple internal
+// code paths write to the def file; the explicit write boundary in this helper
+// is the correct discipline.
+//
+// If the augment isn't equipped to any platform (no installations.json record
+// or empty platforms array), apply is skipped — there's nowhere to propagate.
+//
+// Returns the persisted def + apply report. apply report is null when apply
+// was skipped (no platforms to write to).
+
+export interface WriteAugmentDefAndApplyOptions extends ApplyOptions {
+  /**
+   * Override platform list. Default: read from installations.json — every
+   * platform the augment is currently equipped to. Pass an explicit list to
+   * apply to only specific platforms (used by Package 05 platform-enable
+   * backfill: `apply this augment to only the newly-enabled platform`).
+   *
+   * Apply NEVER writes to a disabled platform — caller must filter.
+   */
+  platforms?: string[];
+}
+
+export function writeAugmentDefAndApply(
+  def: AugmentDef,
+  opts: WriteAugmentDefAndApplyOptions = {},
+): { def: AugmentDef; applyReport: InstallReportBuilder | null } {
+  // 1. Write the def.
+  writeAugmentDef(def);
+
+  // 2. Read the persisted shape back. Mirrors Package 02's mod-preservation
+  //    discipline — apply must operate on the persisted shape, not the input,
+  //    so any normalization/merge done by writeAugmentDef is reflected.
+  const persisted = readAugmentDef(def.name);
+  if (!persisted) {
+    // Should not happen — writeAugmentDef just succeeded — but defensive.
+    return { def, applyReport: null };
+  }
+
+  // 3. Resolve target platforms.
+  let platformIds = opts.platforms;
+  if (platformIds === undefined) {
+    const installations = readInstallations();
+    const record = installations.augments[def.name];
+    platformIds = record?.platforms ?? [];
+  }
+
+  // No platforms equipped → nothing to propagate.
+  if (platformIds.length === 0) {
+    return { def: persisted, applyReport: null };
+  }
+
+  // 4. Construct Augment instance from persisted def, run apply.
+  //    apiKey is null on the update path — installMcp updates the MCP config
+  //    in-place and existing credentials persist in the platform-specific
+  //    config. First-time install via `runInstall` resolves auth before apply.
+  const config = augmentDefToConfig(persisted);
+  const equip = new Augment(config);
+  const platforms = platformIds.map((id) => createManualPlatform(id));
+
+  const applyReport = apply(equip, persisted, platforms, null, {
+    dryRun: opts.dryRun,
+    takeover: opts.takeover,
+    adopt: opts.adopt,
+    logger: opts.logger,
+    report: opts.report,
+  });
+
+  return { def: persisted, applyReport };
 }
 
 /**

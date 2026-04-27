@@ -2538,3 +2538,38 @@ describe("apply (commands/install)", () => {
     assert.equal(applyFn.length, 4, "apply expects (equip, toolDef, platforms, apiKey, opts?)");
   });
 });
+
+// ─── writeAugmentDefAndApply (commands/install): Package 03 helper ────────────
+// The explicit "user save" boundary that the equip-app authoring UI calls when
+// committing edits — writes the def AND propagates to currently-installed
+// platforms in one operation. Internal-only writes (migrations, normalizations,
+// draft-state mutations) still use plain `writeAugmentDef` and skip apply.
+describe("writeAugmentDefAndApply (commands/install)", () => {
+  const { writeAugmentDefAndApply } = require("../dist/lib/commands/install");
+
+  it("is exported as a function", () => {
+    assert.equal(typeof writeAugmentDefAndApply, "function", "writeAugmentDefAndApply should be exported as a function");
+  });
+
+  it("returns { def, applyReport: null } when augment is not equipped to any platform", () => {
+    withTempHome(() => {
+      const def = {
+        name: "test-unequipped-augment",
+        source: "local",
+        title: "Test Unequipped",
+        description: "no platforms equipped",
+        skills: [],
+        baseWeight: 0,
+        loadedWeight: 0,
+        modded: false,
+        requiresAuth: false,
+      };
+
+      const result = writeAugmentDefAndApply(def);
+
+      assert.ok(result.def, "should return persisted def");
+      assert.equal(result.def.name, "test-unequipped-augment");
+      assert.equal(result.applyReport, null, "applyReport should be null when no platforms are equipped");
+    });
+  });
+});
