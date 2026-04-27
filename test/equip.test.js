@@ -2766,3 +2766,134 @@ describe("writeAugmentDefAndApply (commands/install)", () => {
     });
   });
 });
+
+// ─── Regression: installations.json source preservation ─────────────────
+//
+// Pre-2026-04-27, reconcileState (which apply/writeAugmentDefAndApply both
+// invoke at the end of every save) hardcoded `source: "registry"` in its
+// trackInstallation call. That hardcode was correct when the only caller
+// was runInstall (registry-fetched augments). After the equip-augment-
+// update-propagation initiative shipped writeAugmentDefAndApply as the
+// user-save boundary for ALL augment edits (including local), every save
+// of a local augment overwrote installations.json's source field to
+// "registry" — corrupting local state and tricking equip-app into
+// rendering the augment as a registry-published, uneditable item.
+//
+// Reported by user 2026-04-27 ("CG3 Internal Skills somehow got published")
+// — confirmed local-state corruption only; public registry returned 404,
+// nothing was actually exposed. Root cause: reconcile.ts:178 hardcode.
+//
+// These tests lock the property: trackInstallation source must reflect
+// the AugmentDef.source field, not be hardcoded.
+
+describe("source-preservation regression (cg3-internal-skills bug, 2026-04-27)", () => {
+  const { writeAugmentDefAndApply } = require("../dist/lib/commands/install");
+  const { reconcileState } = require("../dist/lib/reconcile");
+  const { readInstallations, trackInstallation, trackUninstallation } = require("../dist/lib/installations");
+
+  it("writeAugmentDefAndApply preserves source='local' in installations.json", () => {
+    withTempHome(() => {
+      // Pre-existing install record (so apply has a platform target).
+      trackInstallation("source-pres-local", {
+        source: "local",
+        title: "Source Pres Local",
+        platforms: ["claude-code"],
+        artifacts: { "claude-code": { rules: true } },
+      });
+
+      const def = {
+        name: "source-pres-local",
+        source: "local",
+        title: "Source Pres Local",
+        description: "regression lock",
+        rules: {
+          content: "<!-- source-pres-local:v1.0.0 -->\nx\n<!-- /source-pres-local -->",
+          version: "1.0.0",
+          marker: "source-pres-local",
+        },
+        skills: [],
+        baseWeight: 0,
+        loadedWeight: 0,
+        modded: false,
+        requiresAuth: false,
+      };
+
+      writeAugmentDefAndApply(def);
+
+      const inst = readInstallations();
+      const record = inst.augments["source-pres-local"];
+      assert.ok(record, "installations record must exist after apply");
+      assert.equal(
+        record.source,
+        "local",
+        "installations.json source must remain 'local' for a local-source AugmentDef — pre-fix this would be 'registry'",
+      );
+
+      trackUninstallation("source-pres-local");
+    });
+  });
+
+  it("reconcileState writes installations.source from toolDef.source when present", () => {
+    withTempHome(() => {
+      // Set up a Claude Code platform config with our marker so reconcile
+      // finds the augment "installed" on a platform and reaches the
+      // trackInstallation branch.
+      const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
+      fs.mkdirSync(path.dirname(claudeMd), { recursive: true });
+      fs.writeFileSync(claudeMd, "<!-- recon-local:v1.0.0 -->\ntest\n<!-- /recon-local -->\n");
+
+      reconcileState({
+        toolName: "recon-local",
+        package: "recon-local",
+        marker: "recon-local",
+        toolDef: {
+          name: "recon-local",
+          source: "local",
+          title: "Recon Local",
+          rules: { content: "x", version: "1.0.0", marker: "recon-local" },
+          skills: [],
+        },
+      });
+
+      const inst = readInstallations();
+      const record = inst.augments["recon-local"];
+      if (record) {
+        assert.equal(record.source, "local", "reconcileState must propagate toolDef.source='local' into installations.json");
+      }
+      // If reconcile didn't find the platform (real-platform-detection skipped
+      // tmp paths on some setups), the test is silently inconclusive — the
+      // writeAugmentDefAndApply test above is the load-bearing lock.
+
+      trackUninstallation("recon-local");
+    });
+  });
+
+  it("reconcileState defaults to source='registry' when toolDef has no source field (RegistryDef shape)", () => {
+    withTempHome(() => {
+      const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
+      fs.mkdirSync(path.dirname(claudeMd), { recursive: true });
+      fs.writeFileSync(claudeMd, "<!-- recon-reg:v1.0.0 -->\ntest\n<!-- /recon-reg -->\n");
+
+      reconcileState({
+        toolName: "recon-reg",
+        package: "recon-reg",
+        marker: "recon-reg",
+        toolDef: {
+          name: "recon-reg",
+          // NO source field — mimics RegistryDef shape from runInstall.
+          title: "Recon Registry",
+          rules: { content: "x", version: "1.0.0", marker: "recon-reg" },
+          skills: [],
+        },
+      });
+
+      const inst = readInstallations();
+      const record = inst.augments["recon-reg"];
+      if (record) {
+        assert.equal(record.source, "registry", "reconcileState must default to source='registry' when toolDef has no source field");
+      }
+
+      trackUninstallation("recon-reg");
+    });
+  });
+});

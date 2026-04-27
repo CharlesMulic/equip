@@ -175,8 +175,17 @@ function reconcileStateInner(
   if (installedPlatforms.length > 0) {
     try {
       const transport = toolDef?.transport || (artifacts[installedPlatforms[0]]?.mcp ? "http" : "stdio");
+      // Source determination: AugmentDef carries an explicit `source` field
+      // ("local" | "registry" | "wrapped"); RegistryDef does not (registry-
+      // fetched defs are always "registry" by construction). Read from toolDef
+      // when present so a local user-save flow (writeAugmentDefAndApply ->
+      // apply -> reconcileState) preserves source="local" in installations.json
+      // instead of overwriting it. Default to "registry" when toolDef lacks
+      // the field, matching the historical behavior for runInstall callers.
+      type DefWithSource = { source?: "registry" | "local" | "wrapped" };
+      const augmentSource = (toolDef as DefWithSource | undefined)?.source ?? "registry";
       trackInstallation(toolName, {
-        source: "registry",
+        source: augmentSource,
         package: pkg,
         title: toolDef?.title || toolName,
         transport: (transport as "http" | "stdio"),
