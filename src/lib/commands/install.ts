@@ -93,7 +93,14 @@ export function apply(
   // AugmentDef inputs (local-author edit propagation, registry-refresh
   // propagation). The Augment instance — which actually drives per-resource
   // writes — is the caller's responsibility.
-  const stepList = ["MCP Server"];
+  //
+  // hasMcpServer mirrors the gate used by bridge.ts install paths: an augment
+  // is allowed to be rules-only or skills-only with no MCP server. Without
+  // this gate, equip.installMcp → buildConfig() throws "serverUrl is required
+  // for MCP installation" on the user-save propagation path.
+  const hasMcpServer = !!(equip.serverUrl || equip.stdio);
+  const stepList: string[] = [];
+  if (hasMcpServer) stepList.push("MCP Server");
   if (toolDef.rules) stepList.push("Behavioral Rules");
   const hasSkills = !!(toolDef.skills && toolDef.skills.length > 0);
   if (hasSkills) stepList.push("Skills");
@@ -111,17 +118,20 @@ export function apply(
   try {
     withInstallationsBatch(() => {
 
-      // MCP Server
-      cli.step(++stepNum, totalSteps, "MCP Server");
-      cli.log(`  Transport  ${transport}`);
+      // MCP Server (skipped when augment has no server — rules/skills-only
+      // augments are valid; matches bridge.ts install-path gating).
+      if (hasMcpServer) {
+        cli.step(++stepNum, totalSteps, "MCP Server");
+        cli.log(`  Transport  ${transport}`);
 
-      for (const p of platforms) {
-        const result = equip.installMcp(p, apiKey, { transport, dryRun });
-        report.addResult(p.platform, result);
-        if (result.success) {
-          cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);
-        } else {
-          cli.fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
+        for (const p of platforms) {
+          const result = equip.installMcp(p, apiKey, { transport, dryRun });
+          report.addResult(p.platform, result);
+          if (result.success) {
+            cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);
+          } else {
+            cli.fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
+          }
         }
       }
 

@@ -2591,4 +2591,178 @@ describe("writeAugmentDefAndApply (commands/install)", () => {
       assert.equal(result.applyReport, null, "applyReport should be null when no platforms are equipped");
     });
   });
+
+  // Regression tests for the rules-only / skills-only crash:
+  // pre-2026-04-27, apply() unconditionally called equip.installMcp(...) which
+  // throws "serverUrl is required for MCP installation" when the augment has
+  // no MCP server. The bridge.ts install paths gate on hasMcpServer; apply()
+  // had drifted from that gate when extracted (Package 02 of equip-augment-
+  // update-propagation). Reported by user 2026-04-27 saving the commit-and-
+  // release skill (rules+skills, no MCP) on an equipped platform.
+  it("does not call installMcp when augment is rules-only", () => {
+    withTempHome(() => {
+      trackInstallation("rules-only-augment", {
+        source: "local",
+        title: "Rules Only",
+        platforms: ["claude-code"],
+        artifacts: { "claude-code": { rules: true } },
+      });
+
+      const def = {
+        name: "rules-only-augment",
+        source: "local",
+        title: "Rules Only",
+        description: "no MCP, just rules",
+        rules: {
+          content: "<!-- rules-only:v1.0.0 -->\nTest rule content\n<!-- /rules-only -->",
+          version: "1.0.0",
+          marker: "rules-only",
+        },
+        skills: [],
+        baseWeight: 0,
+        loadedWeight: 0,
+        modded: false,
+        requiresAuth: false,
+      };
+
+      // Must NOT throw "serverUrl is required for MCP installation".
+      let result;
+      assert.doesNotThrow(() => {
+        result = writeAugmentDefAndApply(def);
+      });
+      assert.ok(result.applyReport, "apply should run when augment is equipped");
+
+      // Rules artifact should be present on the platform.
+      const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
+      if (fs.existsSync(claudeMd)) {
+        const content = fs.readFileSync(claudeMd, "utf-8");
+        assert.ok(content.includes("rules-only:v1.0.0"), "rules content should be installed");
+      }
+
+      trackUninstallation("rules-only-augment");
+    });
+  });
+
+  it("does not call installMcp when augment is skills-only", () => {
+    withTempHome(() => {
+      trackInstallation("skills-only-augment", {
+        source: "local",
+        title: "Skills Only",
+        platforms: ["claude-code"],
+        artifacts: { "claude-code": { skills: ["doc-helper"] } },
+      });
+
+      const def = {
+        name: "skills-only-augment",
+        source: "local",
+        title: "Skills Only",
+        description: "no MCP, no rules, just skills",
+        skills: [
+          {
+            name: "doc-helper",
+            files: [{ path: "SKILL.md", content: "---\nname: doc-helper\ndescription: Test skill\n---\nTest body" }],
+          },
+        ],
+        baseWeight: 0,
+        loadedWeight: 0,
+        modded: false,
+        requiresAuth: false,
+      };
+
+      // Must NOT throw "serverUrl is required for MCP installation".
+      let result;
+      assert.doesNotThrow(() => {
+        result = writeAugmentDefAndApply(def);
+      });
+      assert.ok(result.applyReport, "apply should run when augment is equipped");
+
+      // Skill should be present on the platform.
+      const skillMd = path.join(os.homedir(), ".claude", "skills", "doc-helper", "SKILL.md");
+      if (fs.existsSync(path.dirname(skillMd))) {
+        assert.ok(fs.existsSync(skillMd), "SKILL.md should be installed");
+      }
+
+      trackUninstallation("skills-only-augment");
+    });
+  });
+
+  it("installs MCP server when augment has serverUrl (no rules/skills)", () => {
+    withTempHome(() => {
+      trackInstallation("mcp-only-augment", {
+        source: "local",
+        title: "MCP Only",
+        transport: "http",
+        serverUrl: "https://example.com/mcp",
+        platforms: ["claude-code"],
+        artifacts: { "claude-code": { mcp: true } },
+      });
+
+      const def = {
+        name: "mcp-only-augment",
+        source: "local",
+        title: "MCP Only",
+        description: "MCP server only, no rules, no skills",
+        transport: "http",
+        serverUrl: "https://example.com/mcp",
+        skills: [],
+        baseWeight: 0,
+        loadedWeight: 0,
+        modded: false,
+        requiresAuth: false,
+      };
+
+      let result;
+      assert.doesNotThrow(() => {
+        result = writeAugmentDefAndApply(def);
+      });
+      assert.ok(result.applyReport, "apply should run when augment is equipped");
+
+      trackUninstallation("mcp-only-augment");
+    });
+  });
+
+  it("installs MCP + rules + skills together when augment has all three", () => {
+    withTempHome(() => {
+      trackInstallation("full-augment", {
+        source: "local",
+        title: "Full Augment",
+        transport: "http",
+        serverUrl: "https://example.com/mcp",
+        platforms: ["claude-code"],
+        artifacts: { "claude-code": { mcp: true, rules: true, skills: ["full-helper"] } },
+      });
+
+      const def = {
+        name: "full-augment",
+        source: "local",
+        title: "Full Augment",
+        description: "MCP + rules + skills",
+        transport: "http",
+        serverUrl: "https://example.com/mcp",
+        rules: {
+          content: "<!-- full-augment:v1.0.0 -->\nFull rules\n<!-- /full-augment -->",
+          version: "1.0.0",
+          marker: "full-augment",
+        },
+        skills: [
+          {
+            name: "full-helper",
+            files: [{ path: "SKILL.md", content: "---\nname: full-helper\ndescription: Test\n---\nBody" }],
+          },
+        ],
+        baseWeight: 0,
+        loadedWeight: 0,
+        modded: false,
+        requiresAuth: false,
+      };
+
+      let result;
+      assert.doesNotThrow(() => {
+        result = writeAugmentDefAndApply(def);
+      });
+      assert.ok(result.applyReport, "apply should run when augment is equipped");
+
+      trackUninstallation("full-augment");
+    });
+  });
 });
