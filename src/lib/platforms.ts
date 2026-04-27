@@ -327,6 +327,32 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       oauthDiscoveryProbing: false,
       mcpNeedsAuthRecovery: true,
     },
+    // Claude Code broker writer (Package 05). Stdio-only entry into
+    // ~/.claude.json's `mcpServers` map.
+    //
+    // OAuth-bypass discipline (per spike Claude Code section):
+    //   - NEVER include the `auth` field — its presence on a managed
+    //     entry triggers Claude Code's `/mcp authenticate` flow which
+    //     defeats the broker.
+    //   - NEVER include `url` or `headers` — broker entries are stdio
+    //     command + args only; the shim mediates the upstream traffic.
+    //
+    // The mcp-needs-auth-cache.json hazard (15-min TTL) is recovery-
+    // path-only and applies to entries that the platform thinks need
+    // OAuth. Stdio-shim entries are not OAuth-shaped, so the cache
+    // doesn't fire on them; broker-side cache invalidation is therefore
+    // not part of this hook (it would only matter for legacy direct-
+    // mode auth entries, out of scope for broker writers).
+    brokerStrategy: {
+      writeBrokerConfig: (augmentName, endpoint) => ({
+        entry: {
+          command: endpoint.shimBinaryPath,
+          args: ["--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+        },
+        transport: "stdio",
+        note: "broker-managed; first-time OAuth runs in equip-app",
+      }),
+    },
   }],
   ["cursor", {
     id: "cursor",
@@ -357,6 +383,31 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       supportsLoopbackHttp: true,
       oauthDiscoveryProbing: true,
       mcpNeedsAuthRecovery: false,
+    },
+    // Cursor broker writer (Package 05). Stdio-only entry into
+    // ~/.cursor/mcp.json's `mcpServers` map.
+    //
+    // OAuth-bypass discipline (per spike Cursor section):
+    //   - NEVER include `url` — Cursor probes /.well-known/oauth-* on
+    //     URL entries (see oauthDiscoveryProbing=true on capabilities).
+    //     Stdio shim entries are not URL-shaped and are therefore
+    //     discovery-probe-free.
+    //   - NEVER include `headers.Authorization` — would trigger Cursor's
+    //     OAuth flow on the discovery probe.
+    //
+    // Loopback HTTP transport for Cursor would need broker-side
+    // suppressOAuthDiscovery (404 on /.well-known/oauth-* + suppress
+    // WWW-Authenticate); deferred until loopback-HTTP is actually wanted
+    // (stdio is the strongest path; mcp-remote is exact prior art).
+    brokerStrategy: {
+      writeBrokerConfig: (augmentName, endpoint) => ({
+        entry: {
+          command: endpoint.shimBinaryPath,
+          args: ["--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+        },
+        transport: "stdio",
+        note: "broker-managed; first-time OAuth runs in equip-app",
+      }),
     },
   }],
   ["windsurf", {
