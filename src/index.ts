@@ -115,6 +115,56 @@ class Augment {
     return installMcp(platform, this.name, config, { dryRun, serverUrl: this.serverUrl, logger: this.logger });
   }
 
+  /**
+   * Broker-mode install (Package 04 of equip-mcp-login-continuity-gate).
+   *
+   * Writes a platform config entry that points at `equip-broker-shim` so the
+   * platform spawns the shim as its MCP server. The shim talks IPC to the
+   * broker daemon for credentials and proxies the upstream MCP traffic with
+   * fresh tokens injected per-request. The platform never sees an OAuth-shaped
+   * config — no `bearer_token_env_var`, no `auth`, no `oauth_resource`.
+   *
+   * The hook output for the platform is provided by
+   * `PlatformDefinition.brokerStrategy.writeBrokerConfig` (Codex first, then
+   * Claude Code + Cursor in Pkg 05). The caller (typically equip-app) injects
+   * `shimBinaryPath` at call time — equip lib does NOT know the path.
+   *
+   * Returns a `mcp` ArtifactResult with `errorCode: "BROKER_NOT_SUPPORTED"`
+   * when the platform doesn't declare broker support; the caller should fall
+   * back to direct-mode install in that case.
+   */
+  installMcpBroker(
+    platform: DetectedPlatform,
+    options: { shimBinaryPath: string; dryRun?: boolean; shimExtraArgs?: string[] },
+  ): ArtifactResult {
+    const { shimBinaryPath, dryRun = false, shimExtraArgs } = options;
+    if (!platformSupportsBroker(platform.platform)) {
+      return makeResult("mcp", {
+        errorCode: "BROKER_NOT_SUPPORTED",
+        error: `Platform "${platform.platform}" does not declare broker support — caller should fall back to direct-mode install`,
+      });
+    }
+    const strategy = getBrokerStrategy(platform.platform);
+    if (!strategy?.writeBrokerConfig) {
+      return makeResult("mcp", {
+        errorCode: "BROKER_WRITER_MISSING",
+        error: `Platform "${platform.platform}" supports broker but has no writeBrokerConfig strategy hook`,
+      });
+    }
+    const written = strategy.writeBrokerConfig(this.name, {
+      augmentName: this.name,
+      shimBinaryPath,
+      shimExtraArgs,
+    });
+    if (!written) {
+      return makeResult("mcp", {
+        errorCode: "BROKER_WRITE_DECLINED",
+        error: `writeBrokerConfig declined for "${this.name}" on ${platform.platform}; fall back to direct-mode install`,
+      });
+    }
+    return installMcp(platform, this.name, written.entry, { dryRun, logger: this.logger });
+  }
+
   uninstallMcp(platform: DetectedPlatform, dryRun: boolean = false): boolean {
     return uninstallMcp(platform, this.name, dryRun);
   }
@@ -419,3 +469,29 @@ export type {
 } from "./lib/auth-broker-types";
 
 export { assertNeverDelivery } from "./lib/auth-broker-types";
+
+// Broker-mode Provider implementations. The five auth modes (none,
+// api_key, oidc, oauth, oauth_to_api_key) live here because they're
+// pure auth-protocol logic with no equip-app-specific dependencies;
+// equip-app's broker daemon constructs and registers them at startup.
+export { NoneProvider } from "./lib/providers/provider-none";
+export {
+  ApiKeyProvider,
+  validateApiKeyCredential,
+} from "./lib/providers/provider-api-key";
+export type { ApiKeyAcquireOptions } from "./lib/providers/provider-api-key";
+export {
+  OidcProvider,
+  createDefaultSessionReader,
+} from "./lib/providers/provider-oidc";
+export type {
+  OidcProviderOptions,
+  EquipSessionFileShape,
+} from "./lib/providers/provider-oidc";
+export { OAuthProvider } from "./lib/providers/provider-oauth";
+export type {
+  OAuthProviderOptions,
+  BrowserOpener,
+} from "./lib/providers/provider-oauth";
+export { OAuthToApiKeyProvider } from "./lib/providers/provider-oauth-to-api-key";
+export type { OAuthToApiKeyProviderOptions } from "./lib/providers/provider-oauth-to-api-key";

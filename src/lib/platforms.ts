@@ -461,6 +461,30 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       oauthDiscoveryProbing: false,
       mcpNeedsAuthRecovery: false,
     },
+    // Codex broker writer (Package 04). The hook produces a stdio-only
+    // [mcp_servers.<name>] entry that points at equip-broker-shim.
+    //
+    // OAuth-bypass discipline (per spike Codex section + ENGINEERING_PLAN):
+    //   - NEVER set bearer_token_env_var → Codex would otherwise spawn
+    //     `codex mcp login` to mint that env var, defeating the whole
+    //     point of brokering.
+    //   - NEVER set scopes → presence triggers OAuth discovery probe.
+    //   - NEVER set oauth_resource → presence triggers OAuth metadata
+    //     fetch against the upstream.
+    //
+    // Codex sees only `command` + `args` for a stdio MCP server. From
+    // Codex's perspective there is no OAuth at all — the shim mediates
+    // and the broker holds credentials.
+    brokerStrategy: {
+      writeBrokerConfig: (augmentName, endpoint) => ({
+        entry: {
+          command: endpoint.shimBinaryPath,
+          args: ["--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+        },
+        transport: "stdio",
+        note: "broker-managed; first-time OAuth runs in equip-app",
+      }),
+    },
   }],
   ["gemini-cli", {
     id: "gemini-cli",

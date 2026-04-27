@@ -32,7 +32,10 @@ export type EquipErrorCode =
   | "SKILL_COLLISION_USER_AUTHORED"
   | "SKILL_COLLISION_FORGED_MANIFEST"
   | "HOOK_SCRIPT_FAILED"
-  | "BACKUP_FAILED";
+  | "BACKUP_FAILED"
+  | "BROKER_NOT_SUPPORTED"
+  | "BROKER_WRITER_MISSING"
+  | "BROKER_WRITE_DECLINED";
 
 // ─── Warning Codes ──────────────────────────────────────────
 

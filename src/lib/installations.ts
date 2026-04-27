@@ -16,6 +16,22 @@ export interface ArtifactRecord {
   rules?: string;        // version if installed
   hooks?: string[];      // hook script names
   skills?: string[];     // skill names
+  /**
+   * How the MCP entry was installed for this augment on this platform.
+   *   - "direct" or undefined: equip wrote the upstream's command/headers
+   *     directly into the platform config (legacy default; also the
+   *     non-OAuth path).
+   *   - "broker": equip wrote a broker-shim invocation; credentials live
+   *     in the broker daemon and are injected at runtime.
+   *
+   * Used by `equip doctor` to inspect the right path, and by uninstall
+   * to also drop broker-held credentials when the install was brokered.
+   *
+   * Additive (Pkg 04 of equip-mcp-login-continuity-gate). Older equip
+   * versions ignore the field; reading it back as undefined is safely
+   * interpreted as "direct" by the dispatch path.
+   */
+  installMode?: "direct" | "broker";
 }
 
 export interface InstallationRecord {
