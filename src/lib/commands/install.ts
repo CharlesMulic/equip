@@ -20,6 +20,219 @@ import { readAugmentDef, writeAugmentDef } from "../augment-defs";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 
+// ─── apply: put a def on platforms ─────────────────────────────────────────
+//
+// "Apply" is the second half of the equip refresh+apply pipeline:
+//   - refresh: network or local-author edit writes to ~/.equip/augments/<name>.json
+//   - apply: that def file → installed platform copies (this function)
+//
+// Callers are runInstall (first-time install with auth resolution + platform
+// discovery upstream of apply) and the propagation paths from
+// operations/initiatives/equip-augment-update-propagation/ (registry refresh,
+// equip-app authoring save, platform-enable backfill, equip apply CLI).
+//
+// Each caller is responsible for:
+//   - Constructing the Augment instance from a def (typically via
+//     `new Augment(registryDefToConfig(def))`).
+//   - Resolving auth (apiKey) when needed. Update flows can typically pass null —
+//     installMcp updates the MCP config in-place and existing credentials persist
+//     in the platform-specific config — but first-time install via runInstall
+//     always resolves auth before calling apply.
+//   - Filtering disabled platforms out of `platforms`. Apply trusts the
+//     caller — never writes to a platform not in the list.
+//
+// Contract for future contributors: when adding a new resource type to
+// AugmentDef (skills, rules, hooks, MCP servers today), you MUST:
+//   1. Add an installXxx method following the existing per-type pattern.
+//   2. Add its integration here in apply().
+//   3. Add a test verifying apply() correctly writes that resource type.
+//
+// If you add a resource type to the AugmentDef schema without wiring it
+// into apply, installed copies will silently miss the new resource —
+// exactly the silent-staleness bug class the equip-augment-update-propagation
+// initiative was created to fix.
+
+export interface ApplyOptions {
+  dryRun?: boolean;
+  takeover?: boolean;
+  adopt?: boolean;
+  logger?: import("../types").EquipLogger;
+  /** Optional caller-provided report builder; otherwise apply creates one. */
+  report?: InstallReportBuilder;
+}
+
+/**
+ * Apply an augment def to the named platforms. Writes MCP server config,
+ * behavioral rules, skills, runs verification, reconciles state, and
+ * re-estimates token weight from the persisted def.
+ *
+ * Acquires the equip-wide lock and wraps writes in withInstallationsBatch.
+ * Safe to call from any caller; the lock is re-entrant via reconcileState.
+ *
+ * Caller MUST have already filtered disabled platforms out of `platforms`.
+ *
+ * Returns the populated InstallReportBuilder for the caller to inspect or
+ * surface. See `operations/initiatives/equip-augment-update-propagation/work/01-apply-extraction.md`
+ * for architectural context.
+ */
+export function apply(
+  equip: Augment,
+  toolDef: RegistryDef,
+  platforms: ReturnType<Augment["detect"]>,
+  apiKey: string | null,
+  opts: ApplyOptions = {},
+): InstallReportBuilder {
+  const { dryRun = false, takeover, adopt, logger } = opts;
+  const transport = toolDef.transport || "http";
+  const config = registryDefToConfig(toolDef, { logger });
+  const report = opts.report ?? new InstallReportBuilder();
+
+  // Plan progress steps for CLI output.
+  const stepList = ["MCP Server"];
+  if (config.rules) stepList.push("Behavioral Rules");
+  const hasSkills = config.skills && config.skills.length > 0;
+  if (hasSkills) stepList.push("Skills");
+  stepList.push("Verification");
+  const totalSteps = stepList.length;
+  let stepNum = 0;
+
+  // Take the equip-wide lock for the whole apply. Re-entrant — reconcileState
+  // below acquires the same lock and just bumps the depth counter. Closes a
+  // TOCTOU window on the per-skill "is current" check and prevents concurrent
+  // equip processes from corrupting installations.json or stomping each other's
+  // skill writes.
+  const releaseLock = acquireLock();
+
+  try {
+    withInstallationsBatch(() => {
+
+      // MCP Server
+      cli.step(++stepNum, totalSteps, "MCP Server");
+      cli.log(`  Transport  ${transport}`);
+
+      for (const p of platforms) {
+        const result = equip.installMcp(p, apiKey, { transport, dryRun });
+        report.addResult(p.platform, result);
+        if (result.success) {
+          cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);
+        } else {
+          cli.fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
+        }
+      }
+
+      // Rules
+      if (config.rules) {
+        cli.step(++stepNum, totalSteps, "Behavioral Rules");
+        for (const p of platforms) {
+          if (!p.rulesPath) {
+            if (logger) logger.debug("Skipping rules — no writable rules path", { platform: p.platform });
+            continue;
+          }
+          const result = equip.installRules(p, { dryRun });
+          report.addResult(p.platform, result);
+          if (result.action === "created" || result.action === "updated") {
+            cli.ok(`${platformName(p.platform)}   Rules v${config.rules.version} ${result.action}`);
+          } else if (result.action === "skipped" && result.attempted) {
+            cli.ok(`${platformName(p.platform)}   Rules already current`);
+          }
+        }
+      }
+
+      // Skills
+      if (hasSkills) {
+        cli.step(++stepNum, totalSteps, "Skills");
+        const skillNames = (config.skills || []).map(s => s.name);
+        for (const p of platforms) {
+          const result = equip.installSkill(p, {
+            dryRun,
+            takeover,
+            adopt,
+          });
+          report.addResult(p.platform, result);
+          if (result.errorCode && (
+            result.errorCode === "SKILL_COLLISION_OTHER_AUGMENT" ||
+            result.errorCode === "SKILL_COLLISION_USER_AUTHORED" ||
+            result.errorCode === "SKILL_COLLISION_FORGED_MANIFEST"
+          )) {
+            // Partial-augment install (ENG-0011): some skills landed, some refused.
+            cli.warn(`${platformName(p.platform)}   ${result.error}`);
+            const hint = result.errorCode === "SKILL_COLLISION_USER_AUTHORED"
+              ? "Re-run with --adopt to take ownership."
+              : "Re-run with --takeover to overwrite the existing skill.";
+            cli.log(`  ${cli.DIM}${hint}${cli.RESET}`);
+          } else if (result.action === "created") {
+            cli.ok(`${platformName(p.platform)}   ${skillNames.length} skill${skillNames.length === 1 ? "" : "s"} installed (${skillNames.join(", ")})`);
+          } else if (result.action === "skipped" && result.attempted) {
+            cli.ok(`${platformName(p.platform)}   Skills already current`);
+          }
+        }
+      }
+
+      // Verification
+      cli.step(++stepNum, totalSteps, "Verification");
+      if (!dryRun) {
+        for (const p of platforms) {
+          const v = equip.verify(p);
+          if (v.ok) {
+            cli.ok(`${platformName(p.platform)}   All checks passed`);
+          } else {
+            const failed = v.checks.filter(c => !c.ok).map(c => c.detail).join(", ");
+            cli.warn(`${platformName(p.platform)}   ${failed}`);
+          }
+        }
+      }
+
+      report.complete();
+
+      // ── State Reconciliation ──
+      if (!dryRun) {
+        try {
+          const changed = reconcileState({
+            toolName: toolDef.name,
+            package: toolDef.npmPackage || toolDef.name,
+            marker: toolDef.rules?.marker || toolDef.name,
+            toolDef,
+            logger,
+          });
+          if (changed > 0 && logger) {
+            logger.debug("State reconciled", { platforms: changed });
+          }
+        } catch (e: unknown) {
+          if (logger) logger.warn("State reconciliation failed", { error: (e as Error).message });
+        }
+      }
+
+    }); // withInstallationsBatch
+  } finally {
+    releaseLock();
+  }
+
+  // ── Token Weight Recompute ──
+  // Estimate weight from the persisted def (no introspection needed).
+  // mcp-introspect and weight modules are in the desktop app sidecar, not in
+  // this package. If available (e.g., when run from the sidecar), introspection
+  // runs. If not (pure CLI), this silently skips — apply still works, just
+  // without accurate weight data. The desktop app will introspect on next load.
+  if (!dryRun) {
+    try {
+      const def = readAugmentDef(toolDef.name);
+      if (def) {
+        const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
+        const skillTokens = (def.skills || []).reduce((sum: number, s: { files?: { content?: string }[] }) =>
+          sum + (s.files || []).reduce((fsum: number, f: { content?: string }) =>
+            fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
+        if (def.baseWeight === 0 && rulesTokens > 0) {
+          def.baseWeight = rulesTokens;
+          def.loadedWeight = skillTokens;
+          writeAugmentDef(def);
+        }
+      }
+    } catch { /* best effort */ }
+  }
+
+  return report;
+}
+
 /**
  * Run a direct-mode install for an augment fetched from the registry.
  */
@@ -116,150 +329,17 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
     ensureInitialSnapshots(platforms);
   }
 
-  // ── Install Loop ──
-  const report = new InstallReportBuilder();
-  const stepList = ["MCP Server"];
-  if (config.rules) stepList.push("Behavioral Rules");
-  const hasSkills = config.skills && config.skills.length > 0;
-  if (hasSkills) stepList.push("Skills");
-  stepList.push("Verification");
-  const totalSteps = stepList.length;
-  let stepNum = 0;
-
-  // Take the equip-wide lock for the whole install. Re-entrant — reconcileState
-  // below acquires the same lock and just bumps the depth counter. Closes a
-  // TOCTOU window on the per-skill "is current" check and prevents concurrent
-  // equip processes from corrupting installations.json or stomping each other's
-  // skill writes.
-  const releaseLock = acquireLock();
-
-  try {
-  withInstallationsBatch(() => {
-
-  // MCP Server
-  cli.step(++stepNum, totalSteps, "MCP Server");
-  const transport = toolDef.transport || "http";
-  cli.log(`  Transport  ${transport}`);
-
-  for (const p of platforms) {
-    const result = equip.installMcp(p, apiKey, { transport, dryRun });
-    report.addResult(p.platform, result);
-    if (result.success) {
-      cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);
-    } else {
-      cli.fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
-    }
-  }
-
-  // Rules
-  if (config.rules) {
-    cli.step(++stepNum, totalSteps, "Behavioral Rules");
-    for (const p of platforms) {
-      if (!p.rulesPath) {
-        if (logger) logger.debug("Skipping rules — no writable rules path", { platform: p.platform });
-        continue;
-      }
-      const result = equip.installRules(p, { dryRun });
-      report.addResult(p.platform, result);
-      if (result.action === "created" || result.action === "updated") {
-        cli.ok(`${platformName(p.platform)}   Rules v${config.rules.version} ${result.action}`);
-      } else if (result.action === "skipped" && result.attempted) {
-        cli.ok(`${platformName(p.platform)}   Rules already current`);
-      }
-    }
-  }
-
-  // Skills
-  if (hasSkills) {
-    cli.step(++stepNum, totalSteps, "Skills");
-    const skillNames = (config.skills || []).map(s => s.name);
-    for (const p of platforms) {
-      const result = equip.installSkill(p, {
-        dryRun,
-        takeover: parsedArgs.takeover,
-        adopt: parsedArgs.adopt,
-      });
-      report.addResult(p.platform, result);
-      if (result.errorCode && (
-        result.errorCode === "SKILL_COLLISION_OTHER_AUGMENT" ||
-        result.errorCode === "SKILL_COLLISION_USER_AUTHORED" ||
-        result.errorCode === "SKILL_COLLISION_FORGED_MANIFEST"
-      )) {
-        // Partial-augment install (ENG-0011): some skills landed, some refused.
-        cli.warn(`${platformName(p.platform)}   ${result.error}`);
-        const hint = result.errorCode === "SKILL_COLLISION_USER_AUTHORED"
-          ? "Re-run with --adopt to take ownership."
-          : "Re-run with --takeover to overwrite the existing skill.";
-        cli.log(`  ${cli.DIM}${hint}${cli.RESET}`);
-      } else if (result.action === "created") {
-        cli.ok(`${platformName(p.platform)}   ${skillNames.length} skill${skillNames.length === 1 ? "" : "s"} installed (${skillNames.join(", ")})`);
-      } else if (result.action === "skipped" && result.attempted) {
-        cli.ok(`${platformName(p.platform)}   Skills already current`);
-      }
-    }
-  }
-
-  // Verification
-  cli.step(++stepNum, totalSteps, "Verification");
-  if (!dryRun) {
-    for (const p of platforms) {
-      const v = equip.verify(p);
-      if (v.ok) {
-        cli.ok(`${platformName(p.platform)}   All checks passed`);
-      } else {
-        const failed = v.checks.filter(c => !c.ok).map(c => c.detail).join(", ");
-        cli.warn(`${platformName(p.platform)}   ${failed}`);
-      }
-    }
-  }
-
-  report.complete();
-
-  // ── State Reconciliation ──
-  if (!dryRun) {
-    try {
-      const changed = reconcileState({
-        toolName: toolDef.name,
-        package: toolDef.npmPackage || toolDef.name,
-        marker: toolDef.rules?.marker || toolDef.name,
-        toolDef,
-        logger,
-      });
-      if (changed > 0 && logger) {
-        logger.debug("State reconciled", { platforms: changed });
-      }
-    } catch (e: unknown) {
-      if (logger) logger.warn("State reconciliation failed", { error: (e as Error).message });
-    }
-  }
-
-  }); // withInstallationsBatch
-  } finally {
-    releaseLock();
-  }
-
-  // ── Introspect MCP server for accurate weight (optional) ──
-  // mcp-introspect and weight modules are in the desktop app sidecar, not in this
-  // package. If available (e.g., when run from the sidecar), introspection runs.
-  // If not (pure CLI), this silently skips — install still works, just without
-  // accurate weight data. The desktop app will introspect on next load.
-  if (!dryRun) {
-    try {
-      const def = readAugmentDef(toolDef.name);
-      if (def) {
-        // Estimate weight from the definition (no introspection needed)
-        const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
-        const skillTokens = (def.skills || []).reduce((sum: number, s: { files?: { content?: string }[] }) =>
-          sum + (s.files || []).reduce((fsum: number, f: { content?: string }) =>
-            fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
-        if (def.baseWeight === 0 && rulesTokens > 0) {
-          def.baseWeight = rulesTokens;
-          def.loadedWeight = skillTokens;
-          writeAugmentDef(def);
-        }
-      }
-    } catch { /* best effort */ }
-  }
+  // ── Apply ──
+  // The install-loop, state-reconciliation, and token-weight-recompute half
+  // lives in `apply()` so it can be reused by registry-refresh, equip-app
+  // authoring save, platform-enable backfill, and the equip apply CLI command
+  // (operations/initiatives/equip-augment-update-propagation/).
+  const report = apply(equip, toolDef, platforms, apiKey, {
+    dryRun,
+    takeover: parsedArgs.takeover,
+    adopt: parsedArgs.adopt,
+    logger,
+  });
 
   // ── Telemetry ──
   if (!dryRun) {

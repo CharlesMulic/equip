@@ -2513,3 +2513,28 @@ describe("config migration", () => {
     if (backup) fs.writeFileSync(configPath, backup); else try { fs.unlinkSync(configPath); } catch {}
   });
 });
+
+// ─── apply (commands/install): the refresh+apply pipeline's downstream half ──
+// Extracted from runInstall on 2026-04-26 to support the propagation triggers
+// in operations/initiatives/equip-augment-update-propagation/.
+//
+// Behavior preservation is proven by the rest of this suite — every install-
+// path test routes through runInstall, which now delegates to apply. If apply
+// were broken, the install/skill/rules/MCP tests above would fail.
+//
+// This block adds a thin signature/integration smoke specifically for callers
+// that import apply directly (Package 02 registry refresh, Package 03
+// authoring save, Package 04 CLI command, Package 05 platform-enable backfill).
+describe("apply (commands/install)", () => {
+  const { apply: applyFn } = require("../dist/lib/commands/install");
+
+  it("is exported as a function from commands/install", () => {
+    assert.equal(typeof applyFn, "function", "apply should be exported as a function");
+  });
+
+  it("has signature (equip, toolDef, platforms, apiKey, opts)", () => {
+    // Function.length excludes the trailing optional opts param (default value).
+    // Required params: equip, toolDef, platforms, apiKey = 4.
+    assert.equal(applyFn.length, 4, "apply expects (equip, toolDef, platforms, apiKey, opts?)");
+  });
+});
