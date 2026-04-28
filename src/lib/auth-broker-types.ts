@@ -73,7 +73,11 @@ export interface Provider {
 
   /**
    * Probe upstream that current credentials still work. Returns ok=true
-   * with no value on success. Used by `equip doctor` health surface.
+   * with no value on success. Used by the broker-side health surface
+   * (`equip-app sidecar broker-health`). `equip doctor` does not call
+   * this directly — it would require an IPC client in equip lib, which
+   * the boundary discipline (Pkg 06c, 2026-04-27 architect review)
+   * explicitly prohibits.
    */
   validate(opts: ProviderValidateOptions): Promise<ProviderResult<void>>;
 

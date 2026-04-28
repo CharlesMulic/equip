@@ -10,6 +10,15 @@ import * as cli from "../cli";
 import { checkAuth } from "../auth";
 import { readStoredCredential, isCredentialExpired, listStoredCredentials } from "../auth-engine";
 
+/**
+ * Friendly hint for broker-managed installs. Doctor (in equip lib) does not
+ * call broker IPC — that's a downstream concern living in equip-app/sidecar.
+ * Per architectural review (06c, 2026-04-27): the boundary is a single
+ * `installMode` field on the install record; doctor reads it, the sidecar
+ * `broker-health` command consumes the live IPC surface.
+ */
+const BROKER_HEALTH_HINT = "broker-managed — run 'equip-app sidecar broker-health' for live status";
+
 export function runDoctor(): void {
   cli.log(`\n${cli.BOLD}equip doctor${cli.RESET}\n`);
 
@@ -51,6 +60,7 @@ export function runDoctor(): void {
 
       const configPath = def.configPath();
       const artifacts = record.artifacts[platformId] || {};
+      const isBrokerManaged = artifacts.installMode === "broker";
 
       // Check config file exists
       if (!fileExists(configPath)) {
@@ -68,24 +78,33 @@ export function runDoctor(): void {
           continue;
         }
 
-        // Check URL is HTTPS
-        const url = (entry as Record<string, unknown>).url || (entry as Record<string, unknown>).serverUrl || (entry as Record<string, unknown>).httpUrl;
-        if (url && typeof url === "string" && !url.startsWith("https://") && !url.startsWith("http://localhost")) {
-          checks++;
-          cli.warn(`  ${def.name}: server URL is not HTTPS (${url})`);
-          issues++;
-        }
+        if (isBrokerManaged) {
+          // Broker-managed entries are stdio-shim shape (command + args, no
+          // url, no auth headers). The URL-HTTPS and auth-header checks
+          // below would fire false-positive warnings on these. Skip them
+          // and surface the broker-health hint instead — the live status
+          // (live / refreshing / consent_revoked / etc.) lives behind the
+          // broker IPC and is rendered by `equip-app sidecar broker-health`.
+        } else {
+          // Check URL is HTTPS
+          const url = (entry as Record<string, unknown>).url || (entry as Record<string, unknown>).serverUrl || (entry as Record<string, unknown>).httpUrl;
+          if (url && typeof url === "string" && !url.startsWith("https://") && !url.startsWith("http://localhost")) {
+            checks++;
+            cli.warn(`  ${def.name}: server URL is not HTTPS (${url})`);
+            issues++;
+          }
 
-        // Check auth headers
-        if (record.transport === "http") {
-          checks++;
-          const authResult = checkAuth(entry as Record<string, unknown>);
-          if (authResult.status === "missing") {
-            cli.warn(`  ${def.name}: no auth header found in config`);
-            issues++;
-          } else if (authResult.status === "expired") {
-            cli.fail(`  ${def.name}: auth token expired (${authResult.detail})`);
-            issues++;
+          // Check auth headers
+          if (record.transport === "http") {
+            checks++;
+            const authResult = checkAuth(entry as Record<string, unknown>);
+            if (authResult.status === "missing") {
+              cli.warn(`  ${def.name}: no auth header found in config`);
+              issues++;
+            } else if (authResult.status === "expired") {
+              cli.fail(`  ${def.name}: auth token expired (${authResult.detail})`);
+              issues++;
+            }
           }
         }
       }
@@ -150,20 +169,31 @@ export function runDoctor(): void {
 
       // Summary line for this platform
       const parts: string[] = [];
-      if (artifacts.mcp) parts.push("config");
+      if (artifacts.mcp) parts.push(isBrokerManaged ? "broker-config" : "config");
       if (artifacts.rules && rulesOk) parts.push(`rules v${artifacts.rules}`);
       if (artifacts.hooks && artifacts.hooks.length > 0 && hooksOk) parts.push(`${artifacts.hooks.length} hook${artifacts.hooks.length === 1 ? "" : "s"}`);
       if (artifacts.skills && artifacts.skills.length > 0 && skillsOk) parts.push(`${artifacts.skills.length} skill${artifacts.skills.length === 1 ? "" : "s"}`);
       if (rulesOk && hooksOk && skillsOk) {
         cli.ok(`  ${def.name}: ${parts.join(" + ") || "present"}`);
+        if (isBrokerManaged) {
+          cli.log(`    ${cli.DIM}${BROKER_HEALTH_HINT}${cli.RESET}`);
+        }
       }
     }
   }
 
-  // Check 3: Stored credential health
+  // Check 3: Stored credential health (direct-mode only).
+  //
+  // `listStoredCredentials()` reads from auth-engine's direct-mode store
+  // (`~/.equip/credentials/` or equivalent). Broker-managed credentials
+  // live in the sidecar's FileCredentialStore (`~/.equip/secrets/`) and
+  // are intentionally NOT visible here — querying the broker's store from
+  // equip lib would re-introduce the boundary violation Pkg 06c was
+  // designed to avoid. Broker credential health is surfaced via
+  // `equip-app sidecar broker-health`.
   const credTools = listStoredCredentials();
   if (credTools.length > 0) {
-    cli.log(`\n${cli.BOLD}Credential health${cli.RESET}`);
+    cli.log(`\n${cli.BOLD}Credential health${cli.RESET} ${cli.DIM}(direct-mode)${cli.RESET}`);
     for (const credTool of credTools) {
       checks++;
       const cred = readStoredCredential(credTool);
