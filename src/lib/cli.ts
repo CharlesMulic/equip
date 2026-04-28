@@ -134,11 +134,13 @@ export interface ParsedArgs {
   takeover: boolean;
   /** User-authored skill collision: take ownership of an untracked existing skill dir. */
   adopt: boolean;
+  /** `equip doctor --fix-orphan-hooks` — prune settings hook entries pointing at missing scripts. */
+  fixOrphanHooks: boolean;
 }
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
@@ -146,6 +148,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === "--non-interactive") { args.nonInteractive = true; }
     else if (a === "--takeover") { args.takeover = true; }
     else if (a === "--adopt") { args.adopt = true; }
+    else if (a === "--fix-orphan-hooks") { args.fixOrphanHooks = true; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
     else if (a === "--api-key-file" && i + 1 < argv.length) {
       try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }

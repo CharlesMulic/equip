@@ -1341,10 +1341,11 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
 
   it("installs hook scripts and registers in settings", () => {
     const hookDir = tmpPath("hooks-install");
+    const settingsPath = tmpPath("hooks-settings") + ".json";
 
     const p = mockPlatform({ platform: "claude-code" });
 
-    const result = installHooks(p, hookDefs, { hookDir });
+    const result = installHooks(p, hookDefs, { hookDir, settingsPath });
     assert.ok(result.success);
     assert.equal(result.attempted, true);
     assert.deepEqual(result.scripts, ["test-hook.js"]);
@@ -1355,11 +1356,15 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
     assert.ok(fs.existsSync(scriptPath));
     assert.ok(fs.readFileSync(scriptPath, "utf-8").includes("hook ran"));
 
-    // IMPORTANT: uninstall hooks from real settings.json to avoid polluting
-    // the user's Claude Code config. installHooks writes to the real
-    // ~/.claude/settings.json because the platform registry returns it.
-    uninstallHooks(p, hookDefs, { hookDir });
+    // Verify settings landed in the temp file, NOT the real ~/.claude/settings.json
+    assert.ok(fs.existsSync(settingsPath));
+    const written = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(written.hooks?.PostToolUse);
+
+    // Cleanup temp artifacts
+    uninstallHooks(p, hookDefs, { hookDir, settingsPath });
     fs.rmSync(hookDir, { recursive: true, force: true });
+    try { fs.unlinkSync(settingsPath); } catch {}
   });
 
   it("returns skipped for platforms without hook support", () => {
@@ -1378,11 +1383,12 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
 
   it("uninstallHooks removes scripts", () => {
     const hookDir = tmpPath("hooks-uninstall");
+    const settingsPath = tmpPath("hooks-uninstall-settings") + ".json";
     fs.mkdirSync(hookDir, { recursive: true });
     fs.writeFileSync(path.join(hookDir, "test-hook.js"), "// hook");
 
     const p = mockPlatform({ platform: "claude-code" });
-    const removed = uninstallHooks(p, hookDefs, { hookDir });
+    const removed = uninstallHooks(p, hookDefs, { hookDir, settingsPath });
     assert.ok(removed);
     assert.ok(!fs.existsSync(path.join(hookDir, "test-hook.js")));
   });
@@ -1390,6 +1396,77 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
   it("uninstallHooks returns false for unsupported platform", () => {
     const p = mockPlatform({ platform: "cursor" });
     assert.equal(uninstallHooks(p, hookDefs, { hookDir: "/tmp" }), false);
+  });
+
+  it("findOrphanHookEntries detects entries with missing scripts", () => {
+    const { findOrphanHookEntries } = require("../dist/lib/hooks");
+    const settingsPath = tmpPath("orphan-settings") + ".json";
+    const missingScript = tmpPath("definitely-missing") + ".js";
+    const realScript = tmpPath("real-hook") + ".js";
+    fs.writeFileSync(realScript, "// real");
+
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          { hooks: [{ type: "command", command: `node "${missingScript}"` }] },
+          { hooks: [{ type: "command", command: `node "${realScript}"` }] },
+        ],
+      },
+    }));
+
+    // Dry scan
+    const orphans = findOrphanHookEntries("claude-code", { settingsPath });
+    assert.equal(orphans.length, 1);
+    assert.equal(orphans[0].event, "PostToolUse");
+    assert.equal(orphans[0].scriptPath, missingScript);
+    assert.equal(orphans[0].reason, "script-missing");
+
+    // File untouched on dry scan
+    const after = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(after.hooks.PostToolUse.length, 2);
+
+    // Prune mode removes orphans, leaves real entries
+    const pruned = findOrphanHookEntries("claude-code", { settingsPath, prune: true });
+    assert.equal(pruned.length, 1);
+    const final = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(final.hooks.PostToolUse.length, 1);
+    assert.ok(final.hooks.PostToolUse[0].hooks[0].command.includes(realScript));
+
+    // A second prune is a no-op
+    const second = findOrphanHookEntries("claude-code", { settingsPath, prune: true });
+    assert.equal(second.length, 0);
+
+    fs.unlinkSync(realScript);
+    fs.unlinkSync(settingsPath);
+  });
+
+  it("findOrphanHookEntries leaves mixed groups (some valid hooks) alone", () => {
+    const { findOrphanHookEntries } = require("../dist/lib/hooks");
+    const settingsPath = tmpPath("mixed-settings") + ".json";
+    const missingScript = tmpPath("missing") + ".js";
+    const realScript = tmpPath("present") + ".js";
+    fs.writeFileSync(realScript, "// present");
+
+    // Single group containing both a missing-script hook AND a present-script hook.
+    // The conservative behavior is: leave the whole group alone — user may have edited it.
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              { type: "command", command: `node "${missingScript}"` },
+              { type: "command", command: `node "${realScript}"` },
+            ],
+          },
+        ],
+      },
+    }));
+
+    const orphans = findOrphanHookEntries("claude-code", { settingsPath });
+    assert.equal(orphans.length, 0);
+
+    fs.unlinkSync(realScript);
+    fs.unlinkSync(settingsPath);
   });
 });
 

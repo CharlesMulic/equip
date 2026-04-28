@@ -65,8 +65,12 @@ export function buildHooksConfig(hookDefs: HookDefinition[], hookDir: string, pl
 
 /**
  * Install hook scripts to disk and register them in platform settings.
+ *
+ * `settingsPath` overrides the platform registry's settings location. Tests
+ * pass this to avoid writing to the real user-global settings file; production
+ * callers omit it and the registry path is used.
  */
-export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string; dryRun?: boolean; logger?: EquipLogger } = {}): ArtifactResult {
+export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string; dryRun?: boolean; logger?: EquipLogger; settingsPath?: string } = {}): ArtifactResult {
   const logger = options.logger || NOOP_LOGGER;
   const caps = getHookCapabilities(platform.platform);
   if (!caps || !hookDefs || hookDefs.length === 0) {
@@ -105,7 +109,7 @@ export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinitio
   const result = makeResult("hooks", { success: true, action: "created", scripts: installedScripts, hookDir });
 
   if (!dryRun) {
-    const settingsPath = caps.settingsPath();
+    const settingsPath = options.settingsPath ?? caps.settingsPath();
     const { data: settingsData, status, error } = safeReadJsonSync(settingsPath);
 
     if (status === "corrupt") {
@@ -148,8 +152,11 @@ export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinitio
 
 /**
  * Uninstall hook scripts and remove from platform settings.
+ *
+ * `settingsPath` overrides the platform registry's settings location. Tests
+ * pass this to avoid touching the real user-global settings file.
  */
-export function uninstallHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string; dryRun?: boolean } = {}): boolean {
+export function uninstallHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string; dryRun?: boolean; settingsPath?: string } = {}): boolean {
   const caps = getHookCapabilities(platform.platform);
   if (!caps || !hookDefs || hookDefs.length === 0) return false;
 
@@ -174,7 +181,7 @@ export function uninstallHooks(platform: DetectedPlatform, hookDefs: HookDefinit
   }
 
   if (!dryRun) {
-    const settingsPath = caps.settingsPath();
+    const settingsPath = options.settingsPath ?? caps.settingsPath();
     try {
       const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
       if (settings.hooks) {
@@ -204,8 +211,10 @@ export function uninstallHooks(platform: DetectedPlatform, hookDefs: HookDefinit
 
 /**
  * Check if hooks are installed for a platform.
+ *
+ * `settingsPath` overrides the platform registry's settings location.
  */
-export function hasHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string } = {}): boolean {
+export function hasHooks(platform: DetectedPlatform, hookDefs: HookDefinition[], options: { hookDir?: string; settingsPath?: string } = {}): boolean {
   const caps = getHookCapabilities(platform.platform);
   if (!caps || !hookDefs || hookDefs.length === 0) return false;
 
@@ -220,7 +229,7 @@ export function hasHooks(platform: DetectedPlatform, hookDefs: HookDefinition[],
   }
 
   try {
-    const settings = JSON.parse(fs.readFileSync(caps.settingsPath(), "utf-8"));
+    const settings = JSON.parse(fs.readFileSync(options.settingsPath ?? caps.settingsPath(), "utf-8"));
     if (!settings.hooks) return false;
     const hookDirNorm = hookDir.replace(/\\/g, "/");
     const hasRegistered = Object.values(settings.hooks as Record<string, Array<Record<string, unknown>>>).some(groups =>
@@ -228,4 +237,96 @@ export function hasHooks(platform: DetectedPlatform, hookDefs: HookDefinition[],
     );
     return hasRegistered;
   } catch { return false; }
+}
+
+// ─── Orphan-entry sweep ─────────────────────────────────────
+
+export interface OrphanHookEntry {
+  event: string;
+  command: string;
+  scriptPath: string | null;
+  reason: "script-missing";
+}
+
+/**
+ * Pull node-script paths out of a hook command. Tolerant of variations like
+ * `node "path"`, `node path`, and Windows backslash paths. Returns null if
+ * the command shape isn't recognized — caller treats that as "leave alone."
+ */
+function extractScriptPath(command: string): string | null {
+  const trimmed = command.trim();
+  // Match: node "..."  |  node '...'  |  node <unquoted>
+  const m = trimmed.match(/^node\s+(?:"([^"]+)"|'([^']+)'|(\S+))/i);
+  if (!m) return null;
+  return m[1] || m[2] || m[3] || null;
+}
+
+/**
+ * Scan a platform's settings file for hook entries whose script files do not
+ * exist on disk. These are typically left behind when an augment that shipped
+ * hooks is uninstalled (or transitions to `hooks: null`) without the orphan
+ * settings entries being reconciled. Test-suite leaks (writes into the real
+ * user settings) end up here too once the OS clears the temp dir they pointed
+ * at.
+ *
+ * `prune: true` removes the orphan entries (and any hook events / hooks block
+ * that becomes empty). `prune: false` (default) is a dry scan — returns the
+ * list of orphans without touching the file.
+ */
+export function findOrphanHookEntries(platformId: string, options: { settingsPath?: string; prune?: boolean } = {}): OrphanHookEntry[] {
+  const caps = getHookCapabilities(platformId);
+  if (!caps) return [];
+
+  const settingsPath = options.settingsPath ?? caps.settingsPath();
+  let settings: Record<string, unknown>;
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+  } catch {
+    return [];
+  }
+  const hooks = settings.hooks as Record<string, Array<Record<string, unknown>>> | undefined;
+  if (!hooks || typeof hooks !== "object") return [];
+
+  const orphans: OrphanHookEntry[] = [];
+  // Track which (event, groupIndex) pairs to remove if pruning.
+  const toRemove: Map<string, Set<number>> = new Map();
+
+  for (const [event, groups] of Object.entries(hooks)) {
+    if (!Array.isArray(groups)) continue;
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      const groupHooks = (group?.hooks as Array<Record<string, string>>) || [];
+      if (groupHooks.length === 0) continue;
+      // A group is orphaned only if EVERY contained hook is a node-script command
+      // and EVERY referenced script is missing. Any unparseable command, any
+      // existing file, any non-file stat result -> leave the group alone.
+      const candidates: OrphanHookEntry[] = [];
+      let safeToRemove = true;
+      for (const h of groupHooks) {
+        if (!h?.command || typeof h.command !== "string") { safeToRemove = false; break; }
+        const scriptPath = extractScriptPath(h.command);
+        if (!scriptPath) { safeToRemove = false; break; }
+        let exists = false;
+        try { exists = fs.statSync(scriptPath).isFile(); } catch { exists = false; }
+        if (exists) { safeToRemove = false; break; }
+        candidates.push({ event, command: h.command, scriptPath, reason: "script-missing" });
+      }
+      if (safeToRemove && candidates.length > 0) {
+        orphans.push(...candidates);
+        if (!toRemove.has(event)) toRemove.set(event, new Set());
+        toRemove.get(event)!.add(i);
+      }
+    }
+  }
+
+  if (options.prune && orphans.length > 0) {
+    for (const [event, indices] of toRemove) {
+      hooks[event] = (hooks[event] as Array<Record<string, unknown>>).filter((_, i) => !indices.has(i));
+      if (hooks[event].length === 0) delete hooks[event];
+    }
+    if (Object.keys(hooks).length === 0) delete settings.hooks;
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  }
+
+  return orphans;
 }

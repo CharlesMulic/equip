@@ -9,6 +9,7 @@ import { dirExists, fileExists } from "../detect";
 import * as cli from "../cli";
 import { checkAuth } from "../auth";
 import { readStoredCredential, isCredentialExpired, listStoredCredentials } from "../auth-engine";
+import { findOrphanHookEntries } from "../hooks";
 
 /**
  * Friendly hint for broker-managed installs. Doctor (in equip lib) does not
@@ -19,7 +20,12 @@ import { readStoredCredential, isCredentialExpired, listStoredCredentials } from
  */
 const BROKER_HEALTH_HINT = "broker-managed — run 'equip-app sidecar broker-health' for live status";
 
-export function runDoctor(): void {
+export interface DoctorOptions {
+  /** When true, prune orphan hook entries from platform settings files. */
+  fixOrphanHooks?: boolean;
+}
+
+export function runDoctor(options: DoctorOptions = {}): void {
   cli.log(`\n${cli.BOLD}equip doctor${cli.RESET}\n`);
 
   const installations = readInstallations();
@@ -238,6 +244,36 @@ export function runDoctor(): void {
       }
     } catch {
       cli.fail(`  ${def.name}: config file is corrupt or unparseable (${sanitizePath(configPath)})`);
+      issues++;
+    }
+  }
+
+  // Check 5: Orphan hook entries — settings hooks pointing at missing scripts.
+  // These accumulate when an augment that shipped hooks is uninstalled (or
+  // transitions to hooks: null) and the platform settings file isn't reconciled.
+  // Aborted test runs that wrote into the user's real settings show up here too.
+  let orphanHeaderShown = false;
+  for (const [id, def] of PLATFORM_REGISTRY) {
+    if (!def.hooks) continue;
+    const orphans = findOrphanHookEntries(id, { prune: options.fixOrphanHooks });
+    if (orphans.length === 0) continue;
+
+    if (!orphanHeaderShown) {
+      cli.log(`\n${cli.BOLD}Orphan hook entries${cli.RESET}`);
+      orphanHeaderShown = true;
+    }
+    checks++;
+    if (options.fixOrphanHooks) {
+      cli.ok(`  ${def.name}: pruned ${orphans.length} orphan entr${orphans.length === 1 ? "y" : "ies"}`);
+      for (const o of orphans) {
+        cli.log(`    ${cli.DIM}- ${o.event}: ${sanitizePath(o.scriptPath ?? o.command)}${cli.RESET}`);
+      }
+    } else {
+      cli.warn(`  ${def.name}: ${orphans.length} hook entr${orphans.length === 1 ? "y points" : "ies point"} at missing scripts`);
+      for (const o of orphans) {
+        cli.log(`    ${cli.DIM}- ${o.event}: ${sanitizePath(o.scriptPath ?? o.command)}${cli.RESET}`);
+      }
+      cli.log(`    ${cli.DIM}Run 'equip doctor --fix-orphan-hooks' to remove them.${cli.RESET}`);
       issues++;
     }
   }

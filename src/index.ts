@@ -10,7 +10,7 @@ import { parseRulesVersion, installRules, uninstallRules, markerPatterns, wrapRu
 import { validateToolName, validateRelativePath, validatePathWithinDir, validateHookDir, validateUrlScheme, isTrustedCredentialHost } from "./lib/validation";
 import { computeContentHash, extractManifest, type ContentManifest } from "./lib/content-hash";
 import * as fs from "fs";
-import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, type HookDefinition } from "./lib/hooks";
+import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, findOrphanHookEntries, type HookDefinition, type OrphanHookEntry } from "./lib/hooks";
 import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, getBrokerCapabilities, platformSupportsBroker, getBrokerStrategy, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities, type PlatformBrokerCapabilities, type PlatformBrokerStrategy, type BrokerConfigWriteResult, type BrokerEndpoint, type DiscoverySuppressionRules } from "./lib/platforms";
 import * as cli from "./lib/cli";
 import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile, type InstallSkillOptions, type UninstallSkillResult } from "./lib/skills";
@@ -433,12 +433,16 @@ export {
   makeResult,
   // Reconciliation (for setup scripts that need post-install state sync)
   reconcileState,
+  // Hooks orphan-entry sweep (used by `equip doctor` to surface stale hook
+  // entries left behind by old installs / aborted test runs).
+  findOrphanHookEntries,
 };
 
 export type {
   DetectedPlatform,
   PlatformDefinition,
   HookDefinition,
+  OrphanHookEntry,
   SkillConfig,
   SkillFile,
   ArtifactResult,

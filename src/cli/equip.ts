@@ -78,6 +78,7 @@ function cmdHelp(): void {
   console.log("  --api-key <key>        Provide API key directly (may expose it in shell history/process lists)");
   console.log("  --platform <p>   Target specific platform(s), comma-separated");
   console.log("  --dry-run        Preview without writing");
+  console.log("  --fix-orphan-hooks     (doctor) prune settings hook entries pointing at missing scripts");
   console.log("  --help, -h       Show this help");
   console.log("  --version, -v    Show version");
   console.log("");
@@ -316,7 +317,7 @@ async function main(): Promise<void> {
 
   switch (cmd) {
     case "status":    runStatus(); break;
-    case "doctor":    runDoctor(); break;
+    case "doctor":    runDoctor({ fixOrphanHooks: parsedArgs.fixOrphanHooks }); break;
     case "update":    await cmdUpdate(parsedArgs); break;
     case "demo":      cmdDemo(parsedArgs._); break;
     case "snapshot":  runSnapshot(parsedArgs); break;
