@@ -239,8 +239,32 @@ export interface AugmentDef {
   workingDraftEdit?: Partial<AugmentDef>;
   submittedEdit?: Partial<AugmentDef>;
   submittedRevisionId?: string;
-  submittedStatus?: "pending-review" | "rejected";
+  /**
+   * Publisher-facing submission state.
+   *
+   * - `"pending-review"` — submission is queued / under LLM review.
+   * - `"rejected"` — submission was rejected (admin or LLM verdict).
+   * - `"needs-attention"` — terminal failure on our side (e.g., review job
+   *   exhausted via Option B's worker hook). Distinct from `"rejected"`
+   *   because the publisher's draft is still recoverable; the failure is
+   *   ours, not theirs. Added by publisher-loop-foundation 2026-04-28.
+   *
+   * Bridge readers should default-case unknown values to a safe state with
+   * a logged warning — older equip-app installs won't have `"needs-attention"`
+   * in their type universe but the on-disk file may carry it after upgrade.
+   */
+  submittedStatus?: "pending-review" | "rejected" | "needs-attention";
   submittedRejectionReason?: string;
+  /**
+   * ISO-8601 timestamp the current submission (`submittedRevisionId`) was
+   * submitted to the registry. Written by the publish/update bridge handlers
+   * at submission time; used for "Submitted X minutes ago" display copy
+   * (never for reconciliation decisions — server is authoritative).
+   *
+   * Optional: existing local files written before publisher-loop-foundation
+   * lack this field. Reconciler tolerates `undefined`.
+   */
+  submittedAt?: string;
   pendingEdit?: Partial<AugmentDef>;
 
   /**
