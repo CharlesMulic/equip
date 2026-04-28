@@ -20,6 +20,7 @@ import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
 import { readAugmentDef, writeAugmentDef, augmentDefToConfig, type AugmentDef } from "../augment-defs";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
+import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
 
 // ─── apply: put a def on platforms ─────────────────────────────────────────
 //
@@ -60,6 +61,12 @@ export interface ApplyOptions {
   logger?: import("../types").EquipLogger;
   /** Optional caller-provided report builder; otherwise apply creates one. */
   report?: InstallReportBuilder;
+  /**
+   * Optional counter port for telemetry. Defaults to no-op when absent.
+   * equip-app's bridge supplies the sidecar's metrics-store counter so
+   * broker-mode installs are observable; standalone CLI omits it.
+   */
+  counter?: Counter;
 }
 
 /**
@@ -86,6 +93,7 @@ export function apply(
   const { dryRun = false, takeover, adopt, logger } = opts;
   const transport = toolDef.transport || "http";
   const report = opts.report ?? new InstallReportBuilder();
+  const counter = opts.counter ?? noopCounter;
 
   // Plan progress steps for CLI output. We read fields directly off `toolDef`
   // (rather than building an AugmentConfig adapter inside apply) so apply works
@@ -129,6 +137,11 @@ export function apply(
           report.addResult(p.platform, result);
           if (result.success) {
             cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);
+            // Telemetry: this install path is direct-mode by definition (apply
+            // doesn't dispatch to installMcpBroker). Broker-mode installs go
+            // through equip-app's bridge with its own emit site; keeping the
+            // call here ensures direct-mode is also counted.
+            if (!dryRun) counter(COUNTER_NAMES.INSTALL_MODE_TOTAL, { mode: "direct", platform: p.platform });
           } else {
             cli.fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
           }

@@ -495,3 +495,12 @@ export type {
 } from "./lib/providers/provider-oauth";
 export { OAuthToApiKeyProvider } from "./lib/providers/provider-oauth-to-api-key";
 export type { OAuthToApiKeyProviderOptions } from "./lib/providers/provider-oauth-to-api-key";
+
+// Telemetry counter port (Pkg 06b). Counter names + valid label values
+// are stable contract here; in-memory storage lives in equip-app/sidecar.
+export {
+  noopCounter,
+  COUNTER_NAMES,
+  COUNTER_LABELS,
+} from "./lib/telemetry";
+export type { Counter } from "./lib/telemetry";
