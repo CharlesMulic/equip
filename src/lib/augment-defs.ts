@@ -76,6 +76,17 @@ export interface AugmentDef {
   /** Whether the augment requires authentication */
   requiresAuth: boolean;
 
+  /**
+   * Auth flow declaration — propagated from RegistryDef.auth so
+   * downstream broker dispatch (equip-app/sidecar/bridge.ts) can decide
+   * direct vs broker mode based on auth.type without re-fetching the
+   * registry def. ENG-0052: bridge install path broker dispatch.
+   *
+   * Kept optional for backward compat with augment defs written by older
+   * equip versions; absence means "no auth flow declared."
+   */
+  auth?: import("./auth-engine").AuthConfig;
+
   /** Environment variable key for API key */
   envKey?: string;
 
@@ -527,6 +538,7 @@ export function syncFromRegistry(registryDef: RegistryDef): AugmentDef {
       ? { command: registryDef.stdioCommand, args: registryDef.stdioArgs || [], envKey: registryDef.envKey }
       : undefined,
     requiresAuth: registryDef.requiresAuth || false,
+    auth: registryDef.auth,
     envKey: registryDef.envKey,
     rules: registryDef.rules ? { ...registryDef.rules } : undefined,
     skills: registryDef.skills || [],
@@ -574,6 +586,7 @@ function updateFromRegistry(existing: AugmentDef, registryDef: RegistryDef, now:
       ? { command: registryDef.stdioCommand, args: registryDef.stdioArgs || [], envKey: registryDef.envKey }
       : existing.stdio,
     requiresAuth: registryDef.requiresAuth ?? existing.requiresAuth,
+    auth: registryDef.auth ?? existing.auth,
     envKey: registryDef.envKey || existing.envKey,
     homepage: registryDef.homepage || existing.homepage,
     repository: registryDef.repository || existing.repository,

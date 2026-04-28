@@ -12,7 +12,7 @@ import { detectPlatforms } from "./detect";
 import { readMcpEntry } from "./mcp";
 import { dirExists, fileExists } from "./detect";
 import { acquireLock } from "./fs";
-import { trackInstallation, getManagedAugmentNames, type ArtifactRecord } from "./installations";
+import { trackInstallation, getManagedAugmentNames, readInstallations, type ArtifactRecord } from "./installations";
 import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
 import { readAugmentDef, syncFromRegistry } from "./augment-defs";
 import { markEquipUpdated } from "./equip-meta";
@@ -96,6 +96,14 @@ function reconcileStateInner(
   const installedPlatforms: string[] = [];
   const artifacts: Record<string, ArtifactRecord> = {};
 
+  // Read existing record so we can preserve metadata that the on-disk
+  // scan can't infer — currently `installMode` (Pkg 04 + ENG-0052). The
+  // platform config entry for a broker-managed install looks identical
+  // to a regular stdio entry on disk (just `command`+`args` pointing at
+  // the shim), so without this preservation step every reconcile would
+  // silently downgrade installMode: "broker" back to direct.
+  const existingRecord = readInstallations().augments[toolName];
+
   for (const [id, def] of PLATFORM_REGISTRY) {
     // Quick presence check (fast fs stat)
     const dirFound = def.detection.dirs.some(fn => dirExists(fn()));
@@ -103,8 +111,11 @@ function reconcileStateInner(
     const configPath = def.configPath();
     if (!dirFound && !fileFound && !fileExists(configPath)) continue;
 
-    // Build artifact record from what's on disk.
+    // Build artifact record from what's on disk. Preserve installMode
+    // from the existing record (see comment above).
+    const existingInstallMode = existingRecord?.artifacts?.[id]?.installMode;
     const artifactRecord: ArtifactRecord = { mcp: false };
+    if (existingInstallMode) artifactRecord.installMode = existingInstallMode;
     let hasAnyArtifact = false;
 
     // Check MCP config
