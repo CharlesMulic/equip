@@ -46,11 +46,21 @@ import { writeInstall, type InstallRecord } from "./installs-store";
 //       submittedAt, pendingEdit, pendingReviewId, pendingRejectionReason).
 //       Server-side `equip_publisher_drafts` is the single source of truth
 //       for those concepts now.
+//   4 — Cleanup B (dual-write retirement): legacy ~/.equip/augments/ +
+//       installations.json deleted from disk after backup snapshot to
+//       ~/.equip/.backup-pre-cleanup-b/. The new defs/cache/installs three-
+//       store layout is the only thing on disk. SCHEMA_VERSION constant
+//       remains 3 here until Pkg 06 batch 2 (alongside legacy module
+//       deletion) — `cleanupBLegacyFiles()` is invokable but doesn't auto-
+//       fire from `migrateStorageIfNeeded()` yet, so this batch can land
+//       without breaking the dual-write writers that still exist.
 const SCHEMA_VERSION = 3;
+const CLEANUP_B_SCHEMA_VERSION = 4;
 const SCHEMA_VERSION_FILE = ".schema_version";
 const LEGACY_AUGMENTS_DIRNAME = "augments";
 const LEGACY_INSTALLATIONS_FILENAME = "installations.json";
 const BACKUP_DIRNAME = ".backup-pre-storage-refactor";
+const CLEANUP_B_BACKUP_DIRNAME = ".backup-pre-cleanup-b";
 
 // Subset of legacy AugmentDef relevant for migration. We declare it locally
 // rather than importing because augment-defs.ts will be reimplemented as a
@@ -650,4 +660,258 @@ function readJsonSilent<T = unknown>(p: string): T | null {
 
 function isDryRun(): boolean {
   return process.env.EQUIP_STORAGE_MIGRATION_DRY_RUN === "true";
+}
+
+// ─── Cleanup B (schema v4): retire legacy on-disk files ────────
+//
+// Pre-state: ~/.equip/augments/<name>.json + ~/.equip/installations.json
+// exist (legacy layout, populated by dual-write or migration). New stores
+// (defs/cache/installs) are also populated.
+//
+// Post-state: legacy augments/ directory + installations.json removed,
+// snapshot in .backup-pre-cleanup-b/, .schema_version=4. Idempotent —
+// re-running on already-cleaned state is a no-op.
+//
+// **Safety guarantees:**
+//   1. Backup snapshot is written + integrity-verified BEFORE any deletion.
+//      File count and per-file byte counts must match between source +
+//      backup. On mismatch, the helper aborts WITHOUT deleting (errors[]
+//      populated, schema marker not bumped).
+//   2. Per-file deletion errors are tolerated (logged into errors[]) but
+//      block the schema marker bump — partial cleanup leaves the helper
+//      ready to retry on next invocation.
+//   3. Windows EBUSY/EPERM/EACCES retry with backoff (12 × 250ms) — handles
+//      Tauri sidecar holding handles open during shutdown. Same pattern as
+//      `replaceWithRetry` in equip-app/scripts/build-sidecar.mjs.
+//
+// **Not auto-fired yet:** `migrateStorageIfNeeded()` does NOT call this
+// helper. The dual-write writers in augment-defs.ts / installations.ts
+// would re-create the legacy files immediately. This helper is intended
+// to be wired into `migrateStorageIfNeeded()` ONLY when Pkg 06 batch 2
+// deletes the legacy modules entirely. Until then, callers (currently:
+// the test suite) invoke it explicitly.
+//
+// The companion recovery CLI `equip --restore-pre-cleanup-b` (Pkg 06)
+// reads from `.backup-pre-cleanup-b/` to reverse the deletion.
+
+export type CleanupBStatus = "no-op" | "complete" | "no-legacy-data" | "skipped";
+
+export interface CleanupBResult {
+  status: CleanupBStatus;
+  /** Where the snapshot was written (null on no-op / no-legacy-data). */
+  backupPath: string | null;
+  /** Number of legacy augment files removed. */
+  legacyAugmentsRemoved: number;
+  /** True if installations.json was removed. */
+  legacyInstallationsRemoved: boolean;
+  /** Per-file errors encountered during deletion (non-fatal; blocks schema bump). */
+  errors: string[];
+}
+
+export function cleanupBLegacyFiles(opts?: { force?: boolean }): CleanupBResult {
+  const home = getEquipHome();
+  const legacyAugmentsDir = path.join(home, LEGACY_AUGMENTS_DIRNAME);
+  const legacyInstallationsFile = path.join(home, LEGACY_INSTALLATIONS_FILENAME);
+
+  // Idempotency: if .schema_version >= 4, this already ran (force overrides).
+  if (!opts?.force && currentSchemaVersion() >= CLEANUP_B_SCHEMA_VERSION) {
+    return {
+      status: "skipped",
+      backupPath: null,
+      legacyAugmentsRemoved: 0,
+      legacyInstallationsRemoved: false,
+      errors: [],
+    };
+  }
+
+  const hasLegacyAugments = fs.existsSync(legacyAugmentsDir);
+  const hasLegacyInstallations = fs.existsSync(legacyInstallationsFile);
+
+  // Fresh-install case: no legacy data → just stamp the version marker.
+  if (!hasLegacyAugments && !hasLegacyInstallations) {
+    writeSchemaVersion(CLEANUP_B_SCHEMA_VERSION);
+    return {
+      status: "no-legacy-data",
+      backupPath: null,
+      legacyAugmentsRemoved: 0,
+      legacyInstallationsRemoved: false,
+      errors: [],
+    };
+  }
+
+  // Step 1: snapshot legacy data into .backup-pre-cleanup-b/.
+  const backupPath = backupLegacyDataForCleanupB(home, hasLegacyAugments, hasLegacyInstallations);
+
+  // Step 2: verify backup integrity (per-file byte counts + file count).
+  const integrityErrors = verifyBackupIntegrity(home, backupPath, hasLegacyAugments, hasLegacyInstallations);
+  if (integrityErrors.length > 0) {
+    return {
+      status: "no-op",
+      backupPath,
+      legacyAugmentsRemoved: 0,
+      legacyInstallationsRemoved: false,
+      errors: integrityErrors,
+    };
+  }
+
+  // Step 3: delete legacy files. Per-file errors collected; one bad file
+  // doesn't block the rest.
+  const errors: string[] = [];
+  let augmentsRemoved = 0;
+  if (hasLegacyAugments) {
+    const removeResult = removeDirRecursiveWithRetry(legacyAugmentsDir);
+    augmentsRemoved = removeResult.removed;
+    errors.push(...removeResult.errors);
+  }
+
+  let installationsRemoved = false;
+  if (hasLegacyInstallations) {
+    try {
+      unlinkSyncWithRetry(legacyInstallationsFile);
+      installationsRemoved = true;
+    } catch (e) {
+      errors.push(`installations.json: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // Step 4: bump schema marker only if everything deleted cleanly. Partial
+  // state leaves the helper ready to retry next invocation.
+  if (errors.length === 0) {
+    writeSchemaVersion(CLEANUP_B_SCHEMA_VERSION);
+  }
+
+  return {
+    status: "complete",
+    backupPath,
+    legacyAugmentsRemoved: augmentsRemoved,
+    legacyInstallationsRemoved: installationsRemoved,
+    errors,
+  };
+}
+
+function backupLegacyDataForCleanupB(home: string, hasAugments: boolean, hasInstallations: boolean): string {
+  const backupDir = path.join(home, CLEANUP_B_BACKUP_DIRNAME);
+  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+  if (hasAugments) {
+    const src = path.join(home, LEGACY_AUGMENTS_DIRNAME);
+    const dst = path.join(backupDir, LEGACY_AUGMENTS_DIRNAME);
+    // Re-copy is intentional — if a previous attempt left a partial backup,
+    // overwrite with the current legacy state (the source of truth).
+    if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
+    copyDirRecursive(src, dst);
+  }
+  if (hasInstallations) {
+    fs.copyFileSync(
+      path.join(home, LEGACY_INSTALLATIONS_FILENAME),
+      path.join(backupDir, LEGACY_INSTALLATIONS_FILENAME),
+    );
+  }
+  return backupDir;
+}
+
+function verifyBackupIntegrity(
+  home: string,
+  backupPath: string,
+  hasAugments: boolean,
+  hasInstallations: boolean,
+): string[] {
+  const errors: string[] = [];
+
+  if (hasAugments) {
+    const src = path.join(home, LEGACY_AUGMENTS_DIRNAME);
+    const dst = path.join(backupPath, LEGACY_AUGMENTS_DIRNAME);
+    const srcFiles = listJsonFiles(src);
+    const dstFiles = listJsonFiles(dst);
+    if (srcFiles.length !== dstFiles.length) {
+      errors.push(`augments file count mismatch: source=${srcFiles.length} backup=${dstFiles.length}`);
+    } else {
+      for (const file of srcFiles) {
+        const srcSize = safeStatSize(path.join(src, file));
+        const dstSize = safeStatSize(path.join(dst, file));
+        if (srcSize !== dstSize) {
+          errors.push(`augments/${file}: byte count mismatch (source=${srcSize} backup=${dstSize})`);
+        }
+      }
+    }
+  }
+
+  if (hasInstallations) {
+    const srcSize = safeStatSize(path.join(home, LEGACY_INSTALLATIONS_FILENAME));
+    const dstSize = safeStatSize(path.join(backupPath, LEGACY_INSTALLATIONS_FILENAME));
+    if (srcSize !== dstSize) {
+      errors.push(`installations.json: byte count mismatch (source=${srcSize} backup=${dstSize})`);
+    }
+  }
+
+  return errors;
+}
+
+function listJsonFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  try {
+    return fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return [];
+  }
+}
+
+function safeStatSize(p: string): number {
+  try { return fs.statSync(p).size; } catch { return -1; }
+}
+
+function unlinkSyncWithRetry(filePath: string): void {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    try {
+      fs.unlinkSync(filePath);
+      return;
+    } catch (error) {
+      lastError = error;
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT") return;
+      if (!["EBUSY", "EPERM", "EACCES"].includes(code ?? "") || attempt === 12) break;
+      sleepMs(250);
+    }
+  }
+  throw lastError;
+}
+
+function removeDirRecursiveWithRetry(dir: string): { removed: number; errors: string[] } {
+  const errors: string[] = [];
+  if (!fs.existsSync(dir)) return { removed: 0, errors };
+
+  // Count files BEFORE deletion for the result.
+  const filesBefore = listJsonFiles(dir).length;
+
+  // Try the recursive nuke first (fast path, succeeds in tests + most cases).
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return { removed: filesBefore, errors };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT") return { removed: filesBefore, errors };
+      if (!["EBUSY", "EPERM", "EACCES"].includes(code ?? "") || attempt === 12) {
+        errors.push(`augments/: ${error instanceof Error ? error.message : String(error)}`);
+        return { removed: 0, errors };
+      }
+      sleepMs(250);
+    }
+  }
+  return { removed: 0, errors };
+}
+
+function sleepMs(ms: number): void {
+  // Synchronous sleep using Atomics.wait — matches the pattern used in
+  // equip-app/scripts/build-sidecar.mjs's replaceWithRetry. Acceptable
+  // here because cleanupBLegacyFiles runs at startup, not in the hot path.
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    // SharedArrayBuffer can be unavailable in some sandboxed contexts —
+    // fall back to a busy-wait loop. Cleanup B is a once-per-install flow,
+    // so the inefficiency is acceptable for the rare fallback case.
+    const end = Date.now() + ms;
+    while (Date.now() < end) { /* spin */ }
+  }
 }

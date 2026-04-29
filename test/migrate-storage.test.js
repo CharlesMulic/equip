@@ -448,3 +448,167 @@ test("currentSchemaVersion returns 3 after migration completes", async () => {
   migrateMod.migrateStorageIfNeeded();
   assert.equal(migrateMod.currentSchemaVersion(), 3);
 });
+
+// ─────────────────────────────────────────────────────────────
+// Cleanup B (schema v4) — legacy file deletion + backup
+// ─────────────────────────────────────────────────────────────
+//
+// `cleanupBLegacyFiles()` is invokable but not auto-fired from
+// `migrateStorageIfNeeded()` yet (Pkg 06 batch 1 — landing the helper
+// without breaking dual-write writers that still recreate legacy files).
+// These tests pin the migration semantics that Pkg 06 batch 2 will rely on
+// when the legacy modules + auto-firing land together.
+
+test("cleanupBLegacyFiles snapshots augments + installations into .backup-pre-cleanup-b/ before deletion", async () => {
+  const home = await freshHome();
+  writeLegacyAugment(home, "aug1", legacyLocalAugment("aug1"));
+  writeLegacyAugment(home, "aug2", legacyRegistryAugment("aug2"));
+  writeLegacyInstallations(home, {
+    lastUpdated: "2026-04-29T10:00:00.000Z",
+    augments: { "aug1": { source: "local", title: "aug1", transport: "http",
+      installedAt: "x", updatedAt: "y", platforms: ["claude-code"], artifacts: { "claude-code": { mcp: true } } } },
+  });
+
+  const result = migrateMod.cleanupBLegacyFiles();
+  assert.equal(result.status, "complete");
+  assert.equal(result.legacyAugmentsRemoved, 2);
+  assert.equal(result.legacyInstallationsRemoved, true);
+  assert.deepEqual(result.errors, []);
+
+  // Backup snapshot exists with both augments + installations.json.
+  assert.equal(typeof result.backupPath, "string");
+  assert.equal(fs.existsSync(path.join(result.backupPath, "augments", "aug1.json")), true);
+  assert.equal(fs.existsSync(path.join(result.backupPath, "augments", "aug2.json")), true);
+  assert.equal(fs.existsSync(path.join(result.backupPath, "installations.json")), true);
+
+  // Legacy files are gone.
+  assert.equal(fs.existsSync(path.join(home, "augments")), false);
+  assert.equal(fs.existsSync(path.join(home, "installations.json")), false);
+
+  // Schema marker bumped to 4.
+  assert.equal(fs.readFileSync(path.join(home, ".schema_version"), "utf-8").trim(), "4");
+});
+
+test("cleanupBLegacyFiles is idempotent — re-running on schema_version=4 is a skipped no-op", async () => {
+  const home = await freshHome();
+  writeLegacyAugment(home, "once", legacyLocalAugment("once"));
+
+  const first = migrateMod.cleanupBLegacyFiles();
+  assert.equal(first.status, "complete");
+
+  // Re-run: legacy files are already gone, schema marker is at 4 → skipped.
+  const second = migrateMod.cleanupBLegacyFiles();
+  assert.equal(second.status, "skipped");
+  assert.equal(second.legacyAugmentsRemoved, 0);
+  assert.equal(second.legacyInstallationsRemoved, false);
+  assert.equal(second.backupPath, null);
+});
+
+test("cleanupBLegacyFiles on fresh install (no legacy data) just stamps schema v4", async () => {
+  const home = await freshHome();
+  // No legacy files at all. Schema version not set yet.
+  const result = migrateMod.cleanupBLegacyFiles();
+  assert.equal(result.status, "no-legacy-data");
+  assert.equal(result.legacyAugmentsRemoved, 0);
+  assert.equal(result.legacyInstallationsRemoved, false);
+  assert.equal(result.backupPath, null);
+  assert.equal(fs.readFileSync(path.join(home, ".schema_version"), "utf-8").trim(), "4");
+});
+
+test("cleanupBLegacyFiles handles partial legacy state — augments only, no installations.json", async () => {
+  const home = await freshHome();
+  writeLegacyAugment(home, "lone", legacyLocalAugment("lone"));
+  // No installations.json.
+
+  const result = migrateMod.cleanupBLegacyFiles();
+  assert.equal(result.status, "complete");
+  assert.equal(result.legacyAugmentsRemoved, 1);
+  assert.equal(result.legacyInstallationsRemoved, false);
+  assert.deepEqual(result.errors, []);
+  assert.equal(fs.existsSync(path.join(home, "augments")), false);
+  assert.equal(fs.existsSync(path.join(result.backupPath, "augments", "lone.json")), true);
+});
+
+test("cleanupBLegacyFiles handles partial legacy state — installations.json only, no augments dir", async () => {
+  const home = await freshHome();
+  writeLegacyInstallations(home, {
+    lastUpdated: "2026-04-29T10:00:00.000Z",
+    augments: { "ghost": { source: "registry", title: "ghost", transport: "http",
+      installedAt: "x", updatedAt: "y", platforms: [], artifacts: {} } },
+  });
+
+  const result = migrateMod.cleanupBLegacyFiles();
+  assert.equal(result.status, "complete");
+  assert.equal(result.legacyAugmentsRemoved, 0);
+  assert.equal(result.legacyInstallationsRemoved, true);
+  assert.equal(fs.existsSync(path.join(home, "installations.json")), false);
+  assert.equal(fs.existsSync(path.join(result.backupPath, "installations.json")), true);
+});
+
+test("cleanupBLegacyFiles backup snapshot preserves byte-for-byte content of legacy files", async () => {
+  const home = await freshHome();
+  const augContent = legacyLocalAugment("byte-test", { description: "exact-content-test" });
+  writeLegacyAugment(home, "byte-test", augContent);
+
+  const originalBytes = fs.readFileSync(path.join(home, "augments", "byte-test.json"));
+  const result = migrateMod.cleanupBLegacyFiles();
+  assert.equal(result.status, "complete");
+
+  const backupBytes = fs.readFileSync(path.join(result.backupPath, "augments", "byte-test.json"));
+  assert.equal(backupBytes.equals(originalBytes), true, "snapshot must be byte-identical to source");
+});
+
+test("cleanupBLegacyFiles re-snapshot overwrites partial prior backup (recovery from previous failure)", async () => {
+  const home = await freshHome();
+  writeLegacyAugment(home, "fresh", legacyLocalAugment("fresh"));
+
+  // Simulate a previous failed attempt: a backup dir exists with a stale file
+  // that ISN'T in the current legacy state.
+  const backupDir = path.join(home, ".backup-pre-cleanup-b");
+  fs.mkdirSync(path.join(backupDir, "augments"), { recursive: true });
+  fs.writeFileSync(path.join(backupDir, "augments", "stale.json"), '{"name":"stale-from-prior-attempt"}', "utf-8");
+
+  const result = migrateMod.cleanupBLegacyFiles();
+  assert.equal(result.status, "complete");
+
+  // Backup now reflects current legacy state, not the stale prior attempt.
+  assert.equal(fs.existsSync(path.join(backupDir, "augments", "fresh.json")), true);
+  assert.equal(fs.existsSync(path.join(backupDir, "augments", "stale.json")), false,
+    "stale prior-attempt file must not survive a re-snapshot — backup reflects current state");
+});
+
+test("cleanupBLegacyFiles does NOT touch new defs/cache/installs stores", async () => {
+  const home = await freshHome();
+  writeLegacyAugment(home, "preserved", legacyLocalAugment("preserved"));
+
+  // Run the v1→v3 migration first to populate the new stores.
+  migrateMod.migrateStorageIfNeeded();
+  assert.equal(defsStoreMod.readDef("preserved")?.kind, "local");
+
+  // Now run Cleanup B.
+  const result = migrateMod.cleanupBLegacyFiles({ force: true });
+  assert.equal(result.status, "complete");
+
+  // New stores still intact — Cleanup B only touches legacy.
+  assert.equal(defsStoreMod.readDef("preserved")?.kind, "local",
+    "new defs/ store must survive cleanupBLegacyFiles untouched");
+});
+
+test("cleanupBLegacyFiles force=true overrides idempotency for redo scenarios", async () => {
+  const home = await freshHome();
+  writeLegacyAugment(home, "redo", legacyLocalAugment("redo"));
+  // Manually set schema_version=4 so the default path would skip.
+  fs.writeFileSync(path.join(home, ".schema_version"), "4", "utf-8");
+
+  // Without force: skipped.
+  const skipped = migrateMod.cleanupBLegacyFiles();
+  assert.equal(skipped.status, "skipped");
+  assert.equal(fs.existsSync(path.join(home, "augments", "redo.json")), true,
+    "default-path skipped run leaves legacy files in place");
+
+  // With force: runs the cleanup.
+  const forced = migrateMod.cleanupBLegacyFiles({ force: true });
+  assert.equal(forced.status, "complete");
+  assert.equal(forced.legacyAugmentsRemoved, 1);
+  assert.equal(fs.existsSync(path.join(home, "augments")), false);
+});
