@@ -4,15 +4,16 @@
 // Default implementation `JsonStore` (this file) uses zero deps — just
 // Node stdlib. Used by the equip CLI directly.
 //
-// Optional implementation `SqliteIndexedStore` (deferred to Phase 3 of the
-// post-spike migration) lives in equip-app's sidecar package, layers an
-// in-memory SQLite index on top of the same canonical JSON files for query
-// acceleration. CLI never sees it.
+// Optional implementation `SqliteIndexedStore` (deferred follow-up
+// initiative) would live in equip-app's sidecar package and layer an
+// in-memory SQLite index on top of the same canonical JSON files for
+// query acceleration. CLI never sees it.
 //
 // **Critical invariant: both adapters operate on the same canonical
-// on-disk files.** Sidecar appending an intent and CLI appending an intent
-// are both safe (single-line atomic appends + last-clock-wins on materialize).
-// Reads from either fold the same journal.
+// on-disk files** (`~/.equip/storage/intents.jsonl` + `content/<hash>.json`).
+// Sidecar appending an intent and CLI appending an intent are both safe
+// (single-line atomic appends; last-clock-wins on materialize). Reads from
+// either fold the same journal.
 
 import { appendIntent as appendIntentToJournal, readIntents, getNodeId, nextSeq } from "./intent-journal";
 import { putContent, getContent, hasContent, type AugmentContent } from "./content-store";
@@ -20,7 +21,7 @@ import { resolve, listResolved, type ResolvedAugment } from "./materializer";
 import type { Intent, ContentHash } from "./intent";
 
 /**
- * The single API surface for v2 storage. Both CLI and equip-app consume
+ * The single API surface for storage. Both CLI and equip-app consume
  * augment data through this interface.
  *
  * Methods come in three flavors:

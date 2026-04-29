@@ -1,4 +1,4 @@
-// Intent types — the canonical write surface for v2 storage.
+// Intent types — the canonical write surface for storage.
 //
 // Every user-facing mutation produces exactly one Intent appended to the
 // journal. Intents are immutable once written (the journal is append-only).
@@ -10,13 +10,14 @@
 // all consumers — exactly what we want for a foundational data layer.
 
 /**
- * Logical clock for sync ordering. For the spike we use a hybrid:
+ * Logical clock for sync ordering. Hybrid:
  * - `ts`: ISO timestamp from the originating machine (for human display)
  * - `seq`: monotonic counter local to this machine (advances on every append)
  * - `node`: stable machine identifier (placeholder until multi-device sync)
  *
- * Multi-device sync (deferred) will compare (seq, node) for total ordering
- * within a per-augment scope. For the spike, simple `ts` ordering suffices.
+ * Multi-device sync (deferred to a follow-up initiative) will compare
+ * (seq, node) for total ordering within a per-augment scope. For now,
+ * single-device single-writer means seq order = append order = clock order.
  */
 export interface IntentClock {
   ts: string;

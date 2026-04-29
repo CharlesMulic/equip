@@ -18,14 +18,14 @@ const path = require("node:path");
 
 let datastoreMod, journalMod, registryMod, platformMod;
 
-async function freshHome(prefix = "v2-install-") {
+async function freshHome(prefix = "storage-install-") {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   process.env.EQUIP_HOME = tmp;
   // Lazy-load v2 modules — they read EQUIP_HOME at call time.
-  if (!datastoreMod) datastoreMod = await import("../../dist/lib/v2/datastore.js");
-  if (!journalMod) journalMod = await import("../../dist/lib/v2/intent-journal.js");
-  if (!registryMod) registryMod = await import("../../dist/lib/v2/mock-registry.js");
-  if (!platformMod) platformMod = await import("../../dist/lib/v2/mock-platform.js");
+  if (!datastoreMod) datastoreMod = await import("../../dist/lib/storage/datastore.js");
+  if (!journalMod) journalMod = await import("../../dist/lib/storage/intent-journal.js");
+  if (!registryMod) registryMod = await import("../../dist/lib/storage/mock-registry.js");
+  if (!platformMod) platformMod = await import("../../dist/lib/storage/mock-platform.js");
   // Reset the in-memory seq counter so tests don't see stale state.
   journalMod._resetSeqForTests();
   return tmp;
@@ -92,7 +92,7 @@ test("install flow: fetch from registry → store content → append intent → 
   assert.match(write.fingerprint, /^[a-f0-9]{64}$/);
 
   // === Verify on-disk shape ===
-  const journalPath = path.join(home, "v2", "intents.jsonl");
+  const journalPath = path.join(home, "storage", "intents.jsonl");
   assert.ok(fs.existsSync(journalPath), "intents.jsonl created");
   const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
   assert.equal(lines.length, 1, "exactly one intent appended");
@@ -100,7 +100,7 @@ test("install flow: fetch from registry → store content → append intent → 
   assert.equal(parsed.type, "install-augment");
   assert.equal(parsed.name, "demo-tool");
 
-  const contentPath = path.join(home, "v2", "content", `${contentHash}.json`);
+  const contentPath = path.join(home, "storage", "content", `${contentHash}.json`);
   assert.ok(fs.existsSync(contentPath), "content blob created at hash-keyed path");
 });
 

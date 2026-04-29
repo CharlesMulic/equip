@@ -14,12 +14,12 @@ const path = require("node:path");
 
 let datastoreMod, journalMod, registryMod;
 
-async function freshHome(prefix = "v2-multi-") {
+async function freshHome(prefix = "storage-multi-") {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   process.env.EQUIP_HOME = tmp;
-  if (!datastoreMod) datastoreMod = await import("../../dist/lib/v2/datastore.js");
-  if (!journalMod) journalMod = await import("../../dist/lib/v2/intent-journal.js");
-  if (!registryMod) registryMod = await import("../../dist/lib/v2/mock-registry.js");
+  if (!datastoreMod) datastoreMod = await import("../../dist/lib/storage/datastore.js");
+  if (!journalMod) journalMod = await import("../../dist/lib/storage/intent-journal.js");
+  if (!registryMod) registryMod = await import("../../dist/lib/storage/mock-registry.js");
   journalMod._resetSeqForTests();
   return tmp;
 }

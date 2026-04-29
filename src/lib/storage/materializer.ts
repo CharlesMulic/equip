@@ -1,6 +1,6 @@
 // Materializer — folds intents + content blobs into the resolved view.
 //
-// This is the single read path for v2. Every consumer that wants to know
+// This is THE single read path for storage. Every consumer that wants to know
 // "what's the current state of augment X" calls `resolve(name)`. The
 // materializer:
 //   1. Reads all intents for that augment from the journal
@@ -31,7 +31,7 @@
 //   - This means a refresh that changes serverUrl picks up the new value;
 //     a refresh that changes rules has its rules overridden by an active mod
 
-import { readIntentsFor } from "./intent-journal";
+import { readIntentsFor, readIntents } from "./intent-journal";
 import { getContent, type AugmentContent } from "./content-store";
 import type {
   Intent,
@@ -135,7 +135,7 @@ export function resolveFromIntents(
     // Content blob missing — could indicate GC ran prematurely or a journal
     // referencing a deleted blob. Defensive: surface as null + log.
     // eslint-disable-next-line no-console
-    console.warn(`[equip v2 materializer] content blob missing for ${name} (hash=${state.contentHash})`);
+    console.warn(`[equip storage] content blob missing for ${name} (hash=${state.contentHash})`);
     return null;
   }
 
@@ -250,13 +250,12 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
  * List all augments with any non-empty resolved state. Useful for the UI
  * library view + the doctor's "what's installed" check.
  *
- * Implementation reads the full journal, groups by name, and resolves each
- * group. Spike-grade — production needs an index.
+ * Reads the full journal once, groups by name, resolves each group. For
+ * very large journals this becomes O(N) per call — acceleration via
+ * SqliteIndexedStore (deferred follow-up) maintains a per-name index.
  */
 export function listResolved(): ResolvedAugment[] {
-  // Inline a one-time full-journal read; group by name; resolve each.
-  // (Mirror of resolve() but batched.)
-  const allIntents = require("./intent-journal").readIntents() as Intent[];
+  const allIntents = readIntents();
   const byName = new Map<string, Intent[]>();
   for (const intent of allIntents) {
     const existing = byName.get(intent.name);

@@ -1,17 +1,17 @@
-// Content-addressed blob store for v2 spike.
+// Content-addressed blob store.
 //
 // Stores immutable augment content (rules, skills, hooks, mcp config, etc.)
 // keyed by SHA-256 hash of the canonical JSON serialization. Two augments
 // with identical content collapse to the same blob — desirable for
 // deduplication of registry-fetched + locally-authored content.
 //
-// File layout: ~/.equip/v2/content/<hash>.json
+// File layout: ~/.equip/storage/content/<hash>.json
 // Writes are atomic (temp + rename). Reads parse JSON directly.
 // Hashing is content-only (the contentHash field, if present on input, is
 // stripped before hashing to keep hashes idempotent under round-trip).
 //
-// GC is out-of-scope for the spike — references from non-superseded intents
-// keep blobs alive. Sweeper lands in Phase 4 of post-spike migration.
+// GC: references from non-superseded intents keep blobs alive. Sweeper
+// lands when telemetry shows blob-store growth needs reclaiming.
 
 import * as fs from "fs";
 import * as path from "path";
@@ -20,9 +20,11 @@ import { getEquipHome } from "../equip-home";
 import type { ContentHash } from "./intent";
 
 /**
- * Augment content. Spike shape — minimum viable to exercise install + mod +
- * refresh flows. Production version will absorb the full set of fields
- * currently on AugmentDef / CachedDef.
+ * Augment content — the immutable shape of an augment at a point in time
+ * (one version's worth of publisher content, OR a locally-authored draft
+ * that's been promoted to a content blob). All publisher-authored fields
+ * + behavioral content (rules/skills/hooks) live here. User mods + install
+ * state + freshness metadata live elsewhere (in intents).
  */
 export interface AugmentContent {
   /** Augment name (denormalized for convenience; primary key is contentHash). */
@@ -47,10 +49,10 @@ export interface AugmentContent {
   hooks?: { type: string; command: string }[];
 }
 
-const V2_CONTENT_DIRNAME = "v2/content";
+const STORAGE_CONTENT_DIRNAME = "storage/content";
 
 function getContentDir(): string {
-  return path.join(getEquipHome(), V2_CONTENT_DIRNAME);
+  return path.join(getEquipHome(), STORAGE_CONTENT_DIRNAME);
 }
 
 function ensureContentDir(): void {
