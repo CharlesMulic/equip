@@ -13,7 +13,8 @@ import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { acquireLock } from "../fs";
-import { withInstallationsBatch, readInstallations } from "../installations";
+import { withInstallationsBatch } from "../installations";
+import { readInstall } from "../installs-store";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
@@ -318,8 +319,8 @@ export function writeAugmentDefAndApply(
   // 3. Resolve target platforms.
   let platformIds = opts.platforms;
   if (platformIds === undefined) {
-    const installations = readInstallations();
-    const record = installations.augments[def.name];
+    // Cleanup B Pkg 03: read via per-augment installs-store (was readInstallations).
+    const record = readInstall(def.name);
     platformIds = record?.platforms ?? [];
   }
 
