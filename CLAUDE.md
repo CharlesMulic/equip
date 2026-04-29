@@ -21,7 +21,7 @@ Install entry points (`equip-app/sidecar/bridge.ts:equipAugment`, `equip/src/cli
 
 ## Schema-v4 cutover helpers (Cleanup B Pkg 06 batch 1)
 
-`equip/src/lib/migrate-storage.ts` exposes `cleanupBLegacyFiles({ force? })` — the schema-v4 disk migration. Snapshots `~/.equip/augments/` + `~/.equip/installations.json` to `~/.equip/.backup-pre-cleanup-b/`, integrity-verifies file count + per-file byte counts, deletes legacy files (Windows EBUSY-retry), bumps `.schema_version=4`. Idempotent. **Not auto-fired yet** — `migrateStorageIfNeeded()` does not call it. The dual-write writers in `augment-defs.ts` / `installations.ts` would re-create the legacy files immediately. Auto-firing lands in Pkg 06 batch 2 alongside legacy module deletion.
+`equip/src/lib/migrate-storage.ts` exposes `cleanupBLegacyFiles({ force?, requireNewStoresPopulated? })` — the schema-v4 disk migration. Snapshots `~/.equip/augments/` + `~/.equip/installations.json` to `~/.equip/.backup-pre-cleanup-b/`, integrity-verifies file count + per-file byte counts, deletes legacy files (Windows EBUSY-retry), bumps `.schema_version=4`. Idempotent. **Not auto-fired yet** — `migrateStorageIfNeeded()` does not call it. The dual-write writers in `augment-defs.ts` / `installations.ts` would re-create the legacy files immediately. Auto-firing lands in Pkg 06 batch 2 alongside legacy module deletion. Pkg 06 batch 2's wiring should set `requireNewStoresPopulated: true` to guard against running cleanup before the v1→v2 migration has populated `defs/` + `cache/`.
 
 Companion CLIs (also from Pkg 06 batch 1):
 
