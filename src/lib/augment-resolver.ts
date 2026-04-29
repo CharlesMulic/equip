@@ -495,6 +495,57 @@ function resolveCacheOnly(cache: CachedDef): ResolvedAugment {
   };
 }
 
+// ─── Legacy compatibility helpers (Cleanup B Pkg 06 batch 2 prep) ──
+//
+// The legacy `AugmentDef.source` vocabulary used three values:
+// "local" | "registry" | "wrapped". The resolver introduces a fourth
+// value "overlay" (modded registry augment) — but downstream code that
+// still needs to ask "is this a registry augment?" should treat "registry"
+// and "overlay" as equivalent. These helpers encode that mapping so the
+// Pkg 06 batch 2 migration of bridge.ts source-discriminator sites can
+// switch from `def.source === X` (legacy) to a clear semantic check on
+// the resolver result.
+
+/**
+ * The legacy `AugmentDef.source` vocabulary. Three values, used by
+ * pre-Cleanup-B code paths to discriminate augment provenance.
+ */
+export type LegacySource = "local" | "registry" | "wrapped";
+
+/**
+ * Returns true if the resolved augment's effective provenance matches the
+ * given legacy source value. Translation:
+ *
+ *   - legacy "local"    ↔ resolver source "local"
+ *   - legacy "wrapped"  ↔ resolver source "wrapped"
+ *   - legacy "registry" ↔ resolver source "registry" OR "overlay"
+ *     (overlay is "modded registry augment" — still considered a registry
+ *     augment for the purpose of legacy checks like "can this be retracted?")
+ *
+ * Use this in bridge.ts handlers migrated from `def.source === X` checks
+ * to keep the semantic intent explicit instead of inlining the OR.
+ */
+export function isLegacySourceMatch(resolved: ResolvedAugment, legacySource: LegacySource): boolean {
+  if (legacySource === "local") return resolved.source === "local";
+  if (legacySource === "wrapped") return resolved.source === "wrapped";
+  // "registry" matches both pure-registry (cache-only) and modded-overlay
+  // (defs/ kind=overlay merged with cache/) per the legacy vocabulary.
+  return resolved.source === "registry" || resolved.source === "overlay";
+}
+
+/**
+ * Returns the resolved augment's provenance translated to the legacy
+ * `AugmentDef.source` vocabulary. Inverse of `isLegacySourceMatch` —
+ * useful when downstream code passes the result through to APIs / wire
+ * shapes that still use the legacy three-value enum.
+ */
+export function legacySourceOf(resolved: ResolvedAugment): LegacySource {
+  if (resolved.source === "local") return "local";
+  if (resolved.source === "wrapped") return "wrapped";
+  // "registry" + "overlay" both flatten to legacy "registry".
+  return "registry";
+}
+
 // ─── Default singleton (production-wired) ──────────────────
 
 /**

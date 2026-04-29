@@ -306,3 +306,99 @@ test("resolve is referentially transparent — same input produces deeply-equal 
   const b = r.resolve("pure");
   assert.deepEqual(a, b);
 });
+
+// ─────────────────────────────────────────────────────────────
+// Legacy compatibility helpers (Cleanup B Pkg 06 batch 2 prep)
+// ─────────────────────────────────────────────────────────────
+//
+// `isLegacySourceMatch` and `legacySourceOf` translate between the
+// resolver's 4-value `source` ("local"|"overlay"|"wrapped"|"registry")
+// and the legacy AugmentDef's 3-value `source` ("local"|"registry"|
+// "wrapped"). The translation collapses "overlay" + "registry" → legacy
+// "registry" because the legacy code treated modded-registry as just
+// another registry augment with mods.
+
+const { isLegacySourceMatch, legacySourceOf } = await import("../dist/lib/augment-resolver.js");
+
+test("isLegacySourceMatch: legacy 'local' matches resolver source 'local' only", () => {
+  const stores = mockStores();
+  stores._defs.set("local-aug", localDef("local-aug"));
+  stores._defs.set("wrapped-aug", wrappedDef("wrapped-aug"));
+  stores._defs.set("overlay-aug", overlayDef("overlay-aug"));
+  stores._caches.set("overlay-aug", cacheDef("overlay-aug"));
+  stores._caches.set("registry-aug", cacheDef("registry-aug"));
+  const r = createResolver(stores);
+
+  assert.equal(isLegacySourceMatch(r.resolve("local-aug"), "local"), true);
+  assert.equal(isLegacySourceMatch(r.resolve("wrapped-aug"), "local"), false);
+  assert.equal(isLegacySourceMatch(r.resolve("overlay-aug"), "local"), false);
+  assert.equal(isLegacySourceMatch(r.resolve("registry-aug"), "local"), false);
+});
+
+test("isLegacySourceMatch: legacy 'wrapped' matches resolver source 'wrapped' only", () => {
+  const stores = mockStores();
+  stores._defs.set("local-aug", localDef("local-aug"));
+  stores._defs.set("wrapped-aug", wrappedDef("wrapped-aug"));
+  stores._defs.set("overlay-aug", overlayDef("overlay-aug"));
+  stores._caches.set("overlay-aug", cacheDef("overlay-aug"));
+  stores._caches.set("registry-aug", cacheDef("registry-aug"));
+  const r = createResolver(stores);
+
+  assert.equal(isLegacySourceMatch(r.resolve("wrapped-aug"), "wrapped"), true);
+  assert.equal(isLegacySourceMatch(r.resolve("local-aug"), "wrapped"), false);
+  assert.equal(isLegacySourceMatch(r.resolve("overlay-aug"), "wrapped"), false);
+  assert.equal(isLegacySourceMatch(r.resolve("registry-aug"), "wrapped"), false);
+});
+
+test("isLegacySourceMatch: legacy 'registry' matches BOTH resolver source 'registry' AND 'overlay'", () => {
+  // The load-bearing semantic — modded-registry-overlay is still a registry
+  // augment for the legacy vocabulary. bridge.ts's "can this be retracted?"
+  // / "is this already published?" checks must match both.
+  const stores = mockStores();
+  stores._defs.set("overlay-aug", overlayDef("overlay-aug"));
+  stores._caches.set("overlay-aug", cacheDef("overlay-aug"));
+  stores._caches.set("registry-aug", cacheDef("registry-aug"));
+  stores._defs.set("local-aug", localDef("local-aug"));
+  stores._defs.set("wrapped-aug", wrappedDef("wrapped-aug"));
+  const r = createResolver(stores);
+
+  assert.equal(isLegacySourceMatch(r.resolve("overlay-aug"), "registry"), true,
+    "modded-overlay must match legacy 'registry' for retract/publish-update preconditions");
+  assert.equal(isLegacySourceMatch(r.resolve("registry-aug"), "registry"), true);
+  assert.equal(isLegacySourceMatch(r.resolve("local-aug"), "registry"), false);
+  assert.equal(isLegacySourceMatch(r.resolve("wrapped-aug"), "registry"), false);
+});
+
+test("legacySourceOf: maps each resolver source value to the legacy 3-value vocabulary", () => {
+  const stores = mockStores();
+  stores._defs.set("local-aug", localDef("local-aug"));
+  stores._defs.set("wrapped-aug", wrappedDef("wrapped-aug"));
+  stores._defs.set("overlay-aug", overlayDef("overlay-aug"));
+  stores._caches.set("overlay-aug", cacheDef("overlay-aug"));
+  stores._caches.set("registry-aug", cacheDef("registry-aug"));
+  const r = createResolver(stores);
+
+  assert.equal(legacySourceOf(r.resolve("local-aug")), "local");
+  assert.equal(legacySourceOf(r.resolve("wrapped-aug")), "wrapped");
+  // overlay + registry both flatten to legacy "registry".
+  assert.equal(legacySourceOf(r.resolve("overlay-aug")), "registry");
+  assert.equal(legacySourceOf(r.resolve("registry-aug")), "registry");
+});
+
+test("legacySourceOf + isLegacySourceMatch are mutually consistent", () => {
+  // Property: for any resolved augment R, isLegacySourceMatch(R, legacySourceOf(R)) is true.
+  const stores = mockStores();
+  stores._defs.set("local-aug", localDef("local-aug"));
+  stores._defs.set("wrapped-aug", wrappedDef("wrapped-aug"));
+  stores._defs.set("overlay-aug", overlayDef("overlay-aug"));
+  stores._caches.set("overlay-aug", cacheDef("overlay-aug"));
+  stores._caches.set("registry-aug", cacheDef("registry-aug"));
+  const r = createResolver(stores);
+
+  for (const name of ["local-aug", "wrapped-aug", "overlay-aug", "registry-aug"]) {
+    const resolved = r.resolve(name);
+    const legacy = legacySourceOf(resolved);
+    assert.equal(isLegacySourceMatch(resolved, legacy), true,
+      `${name}: resolver source "${resolved.source}" → legacy "${legacy}" must round-trip via isLegacySourceMatch`);
+  }
+});
