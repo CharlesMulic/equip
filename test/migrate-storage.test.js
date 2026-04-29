@@ -612,3 +612,76 @@ test("cleanupBLegacyFiles force=true overrides idempotency for redo scenarios", 
   assert.equal(forced.legacyAugmentsRemoved, 1);
   assert.equal(fs.existsSync(path.join(home, "augments")), false);
 });
+
+test("cleanupBLegacyFiles requireNewStoresPopulated=true: aborts when legacy populated but new stores empty", async () => {
+  const home = await freshHome();
+  // Write legacy augment WITHOUT triggering the v1→v2 migration. To bypass
+  // the dual-write mirror that runs on writeAugmentDef, write the JSON file
+  // directly.
+  fs.mkdirSync(path.join(home, "augments"), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, "augments", "lonely.json"),
+    JSON.stringify(legacyLocalAugment("lonely"), null, 2),
+    "utf-8",
+  );
+  // Confirm new stores are NOT populated.
+  assert.equal(fs.existsSync(path.join(home, "defs")), false);
+  assert.equal(fs.existsSync(path.join(home, "cache")), false);
+
+  const result = migrateMod.cleanupBLegacyFiles({ requireNewStoresPopulated: true });
+  assert.equal(result.status, "precondition-failed");
+  assert.equal(result.legacyAugmentsRemoved, 0);
+  assert.equal(result.legacyInstallationsRemoved, false);
+  assert.equal(result.backupPath, null, "no snapshot taken on precondition failure");
+  assert.match(result.errors[0], /precondition failed/);
+  assert.match(result.errors[0], /1 augment file/);
+  assert.match(result.errors[0], /Run migrateStorageIfNeeded/);
+
+  // Legacy file still on disk — protective.
+  assert.equal(fs.existsSync(path.join(home, "augments", "lonely.json")), true);
+  // .schema_version NOT bumped.
+  assert.equal(fs.existsSync(path.join(home, ".schema_version")), false);
+});
+
+test("cleanupBLegacyFiles requireNewStoresPopulated=true: proceeds when new stores populated (after migration)", async () => {
+  const home = await freshHome();
+  // Write legacy augment as raw JSON.
+  writeLegacyAugment(home, "happy-path", legacyLocalAugment("happy-path"));
+  // Run the v1→v2 migration to populate new stores from legacy.
+  migrateMod.migrateStorageIfNeeded();
+  // Now new stores have content.
+  assert.equal(defsStoreMod.readDef("happy-path")?.kind, "local");
+
+  // Force-bump back the schema marker so cleanup-B doesn't skip on idempotency.
+  fs.writeFileSync(path.join(home, ".schema_version"), "3", "utf-8");
+
+  const result = migrateMod.cleanupBLegacyFiles({ requireNewStoresPopulated: true });
+  assert.equal(result.status, "complete");
+  assert.equal(result.legacyAugmentsRemoved, 1);
+});
+
+test("cleanupBLegacyFiles requireNewStoresPopulated=true with NO legacy data: precondition skipped (no-legacy-data path)", async () => {
+  const home = await freshHome();
+  // No legacy files at all → the precondition isn't reached; takes the
+  // "no-legacy-data" path and stamps the schema marker.
+  const result = migrateMod.cleanupBLegacyFiles({ requireNewStoresPopulated: true });
+  assert.equal(result.status, "no-legacy-data");
+  assert.equal(fs.readFileSync(path.join(home, ".schema_version"), "utf-8").trim(), "4");
+});
+
+test("cleanupBLegacyFiles requireNewStoresPopulated default behavior unchanged (false by default)", async () => {
+  const home = await freshHome();
+  // Write legacy augment directly without dual-write — would fail precondition.
+  fs.mkdirSync(path.join(home, "augments"), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, "augments", "no-precond.json"),
+    JSON.stringify(legacyLocalAugment("no-precond"), null, 2),
+    "utf-8",
+  );
+
+  // Without the precondition flag: cleanup runs even though new stores are empty.
+  const result = migrateMod.cleanupBLegacyFiles();
+  assert.equal(result.status, "complete",
+    "default behavior (no precondition check) — cleanup runs regardless of new-store state");
+  assert.equal(fs.existsSync(path.join(home, "augments")), false);
+});

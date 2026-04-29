@@ -694,11 +694,11 @@ function isDryRun(): boolean {
 // The companion recovery CLI `equip --restore-pre-cleanup-b` (Pkg 06)
 // reads from `.backup-pre-cleanup-b/` to reverse the deletion.
 
-export type CleanupBStatus = "no-op" | "complete" | "no-legacy-data" | "skipped";
+export type CleanupBStatus = "no-op" | "complete" | "no-legacy-data" | "skipped" | "precondition-failed";
 
 export interface CleanupBResult {
   status: CleanupBStatus;
-  /** Where the snapshot was written (null on no-op / no-legacy-data). */
+  /** Where the snapshot was written (null on no-op / no-legacy-data / precondition-failed). */
   backupPath: string | null;
   /** Number of legacy augment files removed. */
   legacyAugmentsRemoved: number;
@@ -708,7 +708,27 @@ export interface CleanupBResult {
   errors: string[];
 }
 
-export function cleanupBLegacyFiles(opts?: { force?: boolean }): CleanupBResult {
+export interface CleanupBOptions {
+  /** Override idempotency check + skip-on-already-bumped behavior. */
+  force?: boolean;
+  /**
+   * When true, refuse to delete legacy if the new stores look empty
+   * (defs + cache combined contain zero entries despite legacy having
+   * augments). Defense against running cleanup before the v1→v2 migration
+   * has populated the new stores.
+   *
+   * Default false — the test suite invokes the helper in isolation
+   * (legacy populated, but the test author knows what they're doing).
+   * Production wiring in Pkg 06 batch 2 (auto-firing from
+   * `migrateStorageIfNeeded()`) will set this true.
+   *
+   * On precondition failure, returns status "precondition-failed" with
+   * an explanatory error message; nothing is deleted, no snapshot taken.
+   */
+  requireNewStoresPopulated?: boolean;
+}
+
+export function cleanupBLegacyFiles(opts?: CleanupBOptions): CleanupBResult {
   const home = getEquipHome();
   const legacyAugmentsDir = path.join(home, LEGACY_AUGMENTS_DIRNAME);
   const legacyInstallationsFile = path.join(home, LEGACY_INSTALLATIONS_FILENAME);
@@ -737,6 +757,30 @@ export function cleanupBLegacyFiles(opts?: { force?: boolean }): CleanupBResult 
       legacyInstallationsRemoved: false,
       errors: [],
     };
+  }
+
+  // Optional precondition: when opts.requireNewStoresPopulated is true,
+  // verify the new stores have content before deleting legacy. Catches the
+  // failure mode where someone invokes cleanupBLegacyFiles on a fresh
+  // install that has legacy files but never ran the v1→v2 migration.
+  if (opts?.requireNewStoresPopulated && hasLegacyAugments) {
+    const legacyAugmentCount = listJsonFiles(legacyAugmentsDir).length;
+    if (legacyAugmentCount > 0) {
+      const newStoreEntryCount = countNewStoreEntries(home);
+      if (newStoreEntryCount === 0) {
+        return {
+          status: "precondition-failed",
+          backupPath: null,
+          legacyAugmentsRemoved: 0,
+          legacyInstallationsRemoved: false,
+          errors: [
+            `precondition failed: legacy has ${legacyAugmentCount} augment file(s) but new stores ` +
+            `(defs/ + cache/) are empty. Run migrateStorageIfNeeded() first to populate the new ` +
+            `stores via dual-write before retiring legacy.`,
+          ],
+        };
+      }
+    }
   }
 
   // Step 1: snapshot legacy data into .backup-pre-cleanup-b/.
@@ -853,6 +897,19 @@ function listJsonFiles(dir: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Count entries across the new stores' directories. Used by the optional
+ * `requireNewStoresPopulated` precondition. Combines defs/ + cache/ —
+ * either alone is sufficient evidence the v1→v2 migration ran (every
+ * legacy augment routes to AT LEAST one of these via the dual-write
+ * mirror, regardless of source/modded state).
+ */
+function countNewStoreEntries(home: string): number {
+  const defsDir = path.join(home, "defs");
+  const cacheDir = path.join(home, "cache");
+  return listJsonFiles(defsDir).length + listJsonFiles(cacheDir).length;
 }
 
 function safeStatSize(p: string): number {
