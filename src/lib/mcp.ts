@@ -8,7 +8,7 @@ import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } from "./fs";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
-import { readInstallations } from "./installations";
+import { readInstall } from "./installs-store";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -291,7 +291,9 @@ export function installMcpForReplaceAdopt(
 }
 
 function hasManagedInstallOnPlatform(serverName: string, platformId: string): boolean {
-  const record = readInstallations().augments[serverName];
+  // Cleanup B Pkg 03: read from new installs-store directly. readInstall is a
+  // per-augment wrapper over installs/<name>.json (same on-disk shape via mirror).
+  const record = readInstall(serverName);
   return !!record && Array.isArray(record.platforms) && record.platforms.includes(platformId);
 }
 

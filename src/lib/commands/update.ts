@@ -3,7 +3,7 @@
 import { execSync } from "child_process";
 import { resolvePackageVersion } from "../fs";
 import { migrateConfigs } from "../migrate";
-import { readInstallations } from "../installations";
+import { listInstalls } from "../installs-store";
 import { markEquipUpdated } from "../equip-meta";
 import * as cli from "../cli";
 
@@ -35,8 +35,8 @@ export function runUpdate(): void {
 
   // Step 2: Migrate configs
   cli.log(`\n${cli.BOLD}[2/2] Migrating configs${cli.RESET}`);
-  const installations = readInstallations();
-  const augmentCount = Object.keys(installations.augments).length;
+  // Cleanup B Pkg 03: count via installs-store (was readInstallations).
+  const augmentCount = listInstalls().length;
 
   if (augmentCount === 0) {
     cli.ok("No tracked augments — nothing to migrate");

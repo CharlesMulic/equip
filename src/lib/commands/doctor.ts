@@ -4,7 +4,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { PLATFORM_REGISTRY } from "../platforms";
 import { readMcpEntry } from "../mcp";
-import { readInstallations } from "../installations";
+import { listInstalls, readInstall } from "../installs-store";
+import { augmentResolver } from "../augment-resolver";
 import { dirExists, fileExists } from "../detect";
 import * as cli from "../cli";
 import { checkAuth } from "../auth";
@@ -28,13 +29,18 @@ export interface DoctorOptions {
 export function runDoctor(options: DoctorOptions = {}): void {
   cli.log(`\n${cli.BOLD}equip doctor${cli.RESET}\n`);
 
-  const installations = readInstallations();
+  // Cleanup B Pkg 03: read installs via new per-augment store. The legacy
+  // `installations.lastUpdated` global timestamp doesn't exist in the per-file
+  // layout — replaced with an empty-records check (semantic equivalent for
+  // the user-visible "no equip state found" warning). Title falls back to the
+  // resolver's content view (was denormalized on the legacy install record).
+  const installRecords = listInstalls();
   let issues = 0;
   let checks = 0;
 
-  // Check 1: Installations file exists
+  // Check 1: Any installs tracked
   checks++;
-  if (!installations.lastUpdated && Object.keys(installations.augments).length === 0) {
+  if (installRecords.length === 0) {
     cli.warn("No equip state found — run 'equip update' to initialize");
     issues++;
   } else {
@@ -42,8 +48,7 @@ export function runDoctor(options: DoctorOptions = {}): void {
   }
 
   // Check 2: For each tracked augment × platform, verify config exists
-  const augmentNames = Object.keys(installations.augments);
-  if (augmentNames.length === 0) {
+  if (installRecords.length === 0) {
     cli.log(`\n  ${cli.DIM}No tracked augments to check.${cli.RESET}`);
     cli.log(`  ${cli.DIM}Install an augment (e.g. 'equip prior') to start tracking.${cli.RESET}\n`);
     return;
@@ -51,9 +56,13 @@ export function runDoctor(options: DoctorOptions = {}): void {
 
   cli.log(`\n${cli.BOLD}Checking tracked augments${cli.RESET}`);
 
-  for (const augmentName of augmentNames) {
-    const record = installations.augments[augmentName];
-    cli.log(`\n  ${cli.BOLD}${augmentName}${cli.RESET} ${cli.DIM}(${record.title})${cli.RESET}`);
+  for (const record of installRecords) {
+    const augmentName = record.name;
+    // Cleanup B Pkg 03: title + transport are content fields (live on def/cache),
+    // not install metadata. Resolve once per augment + reuse below.
+    const augContent = augmentResolver.resolve(augmentName);
+    const title = augContent?.title ?? augmentName;
+    cli.log(`\n  ${cli.BOLD}${augmentName}${cli.RESET} ${cli.DIM}(${title})${cli.RESET}`);
 
     for (const platformId of record.platforms) {
       checks++;
@@ -101,7 +110,7 @@ export function runDoctor(options: DoctorOptions = {}): void {
           }
 
           // Check auth headers
-          if (record.transport === "http") {
+          if (augContent?.transport === "http") {
             checks++;
             const authResult = checkAuth(entry as Record<string, unknown>);
             if (authResult.status === "missing") {

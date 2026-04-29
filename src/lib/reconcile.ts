@@ -12,9 +12,11 @@ import { detectPlatforms } from "./detect";
 import { readMcpEntry } from "./mcp";
 import { dirExists, fileExists } from "./detect";
 import { acquireLock } from "./fs";
-import { trackInstallation, getManagedAugmentNames, readInstallations, type ArtifactRecord } from "./installations";
+import { trackInstallation, getManagedAugmentNames, type ArtifactRecord } from "./installations";
+import { readInstall } from "./installs-store";
 import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
 import { readAugmentDef, syncFromRegistry } from "./augment-defs";
+import { augmentResolver } from "./augment-resolver";
 import { markEquipUpdated } from "./equip-meta";
 import { createSnapshot, hasInitialSnapshot } from "./snapshots";
 import type { RegistryDef } from "./registry";
@@ -69,7 +71,10 @@ function collectDeclaredSkillNames(toolName: string, toolDef: RegistryDef | unde
     for (const s of toolDef.skills) if (s?.name) names.add(s.name);
   }
   try {
-    const persisted = readAugmentDef(toolName);
+    // Cleanup B Pkg 03: read via resolver (was readAugmentDef). The
+    // resolver returns ResolvedAugment merged from defs + cache; .skills
+    // exposes the same array regardless of which store contributed.
+    const persisted = augmentResolver.resolve(toolName);
     if (persisted?.skills) {
       for (const s of persisted.skills) if (s?.name) names.add(s.name);
     }
@@ -102,7 +107,8 @@ function reconcileStateInner(
   // to a regular stdio entry on disk (just `command`+`args` pointing at
   // the shim), so without this preservation step every reconcile would
   // silently downgrade installMode: "broker" back to direct.
-  const existingRecord = readInstallations().augments[toolName];
+  // Cleanup B Pkg 03: read via per-augment installs-store wrapper.
+  const existingRecord = readInstall(toolName);
 
   for (const [id, def] of PLATFORM_REGISTRY) {
     // Quick presence check (fast fs stat)

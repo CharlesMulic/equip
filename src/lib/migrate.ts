@@ -13,7 +13,7 @@
 import * as fs from "fs";
 import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 import { readMcpEntry, buildHttpConfig, buildHttpConfigWithAuth } from "./mcp";
-import { readInstallations } from "./installations";
+import { listInstalls } from "./installs-store";
 import { safeReadJsonSync, atomicWriteFileSync } from "./fs";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -34,10 +34,12 @@ export interface MigrationResult {
  * Returns a list of migration actions taken.
  */
 export function migrateConfigs(): MigrationResult[] {
-  const installations = readInstallations();
+  // Cleanup B Pkg 03: iterate via new installs-store (was readInstallations + Object.entries).
+  const installs = listInstalls();
   const results: MigrationResult[] = [];
 
-  for (const [toolName, augment] of Object.entries(installations.augments)) {
+  for (const augment of installs) {
+    const toolName = augment.name;
     for (const platformId of augment.platforms) {
       const def = PLATFORM_REGISTRY.get(platformId);
       if (!def) continue;

@@ -7,7 +7,8 @@ import * as path from "path";
 import { type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync } from "./fs";
 import { validateRelativePath, validatePathWithinDir, validateToolName, validateSkillName } from "./validation";
-import { findAugmentsOwningSkill, readInstallations } from "./installations";
+import { findAugmentsOwningSkill } from "./installations";
+import { readInstall } from "./installs-store";
 import {
   MANIFEST_FILENAME,
   buildManifestForInstall,
@@ -363,8 +364,10 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
     return null;
   }
 
-  // No one else claims it. Did WE install it previously per installations.json?
-  const ourSkills = readInstallations().augments[toolName]?.artifacts?.[platform]?.skills;
+  // No one else claims it. Did WE install it previously per the installs store?
+  // Cleanup B Pkg 03: read from new installs-store directly (was readInstallations().augments[toolName]).
+  // Same on-disk shape via dual-write mirror; readInstall is a thin per-augment wrapper.
+  const ourSkills = readInstall(toolName)?.artifacts?.[platform]?.skills;
   const weExpectThis = Array.isArray(ourSkills) && ourSkills.includes(skillName);
   if (weExpectThis) {
     // Recovery case — files were installed by us in a prior run, just no manifest yet.
