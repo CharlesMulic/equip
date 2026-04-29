@@ -47,6 +47,12 @@ export const COUNTER_NAMES = {
   BROKER_REQUEST_TOTAL: "equip_broker_request_total",
   /** Equip MCP installs, by mode + platform. Emitted from install.ts via the port. */
   INSTALL_MODE_TOTAL: "equip_install_mode_total",
+  /** Cache-store reads, by freshness outcome. Emitted from cache-store.ts. */
+  CACHE_READ_TOTAL: "equip_cache_read_total",
+  /** Cache refresh outcomes (200/304/error). Emitted from registry-refresh.ts. */
+  CACHE_REFRESH_TOTAL: "equip_cache_refresh_total",
+  /** Install-time hard-TTL block events. Emitted from cache-store.ts ensureCacheFresh. */
+  CACHE_INSTALL_BLOCK_TOTAL: "equip_cache_install_block_total",
 } as const;
 
 /** Valid label values per counter — closed enums, no free-form strings. */
@@ -62,5 +68,16 @@ export const COUNTER_LABELS = {
     // platform values are the platform IDs in PLATFORM_REGISTRY; not enumerated
     // here because the registry is the source of truth and grows additively.
     // Tests assert against the registry's keys, not a hardcoded list.
+  },
+  [COUNTER_NAMES.CACHE_READ_TOTAL]: {
+    result: ["hit", "miss", "stale_revalidating"] as const,
+  },
+  [COUNTER_NAMES.CACHE_REFRESH_TOTAL]: {
+    // 200=content updated; 304=not modified (etag round-trip succeeded);
+    // error=network or backend failure during refresh.
+    result: ["200", "304", "error"] as const,
+  },
+  [COUNTER_NAMES.CACHE_INSTALL_BLOCK_TOTAL]: {
+    reason: ["hard_ttl_expired", "fetch_failed"] as const,
   },
 } as const;

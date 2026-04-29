@@ -17,6 +17,7 @@ import { validateAgainstRegistry } from "./registry";
 import { mirrorRetractFromRegistry } from "./dual-write-mirror";
 import { acquireLock } from "./fs";
 import { NOOP_LOGGER, type EquipLogger } from "./types";
+import { type Counter, noopCounter } from "./telemetry";
 
 export type RefreshAugmentStatus = "skipped" | "match" | "mutated" | "retracted" | "missing-local";
 export type RefreshValidationMode =
@@ -72,9 +73,10 @@ async function acquireMutationLock(): Promise<() => void> {
 
 export async function refreshAugmentFromRegistry(
   name: string,
-  options: { logger?: EquipLogger } = {},
+  options: { logger?: EquipLogger; counter?: Counter } = {},
 ): Promise<RefreshAugmentResult> {
   const logger = options.logger || NOOP_LOGGER;
+  const counter = options.counter || noopCounter;
   const startedAt = Date.now();
 
   logger.debug("refresh.start", { name });
@@ -210,6 +212,7 @@ export async function refreshAugmentFromRegistry(
         existingDef?.registryContentHash,
         existingDef?.registryVersionNumber,
       );
+      counter("equip_cache_refresh_total", { result: "304" });
       logger.debug("refresh.match", {
         name,
         durationMs: Date.now() - startedAt,
@@ -266,6 +269,9 @@ export async function refreshAugmentFromRegistry(
       }
 
       rememberValidatedSnapshot(name, registryDef.contentHash, registryDef.version);
+      // Server returned 200 + content but content hash matches what we already
+      // have locally — count as 200 (network round-trip, unlike the 304 fast path).
+      counter("equip_cache_refresh_total", { result: "200" });
       logger.debug("refresh.match", {
         name,
         durationMs: Date.now() - startedAt,
@@ -290,6 +296,7 @@ export async function refreshAugmentFromRegistry(
     nextDef.updatedAt = now;
     writeAugmentDef(nextDef);
     rememberValidatedSnapshot(name, nextDef.registryContentHash, nextDef.registryVersionNumber);
+    counter("equip_cache_refresh_total", { result: "200" });
 
     if (installRecord) {
       const updatedArtifacts = rewriteInstalledArtifacts(name, installRecord, existingDef, nextDef, logger);
@@ -324,6 +331,7 @@ export async function refreshAugmentFromRegistry(
       validationMode: "mutated",
     };
   } catch (error) {
+    counter("equip_cache_refresh_total", { result: "error" });
     logger.warn("refresh.error", {
       name,
       durationMs: Date.now() - startedAt,

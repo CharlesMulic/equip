@@ -12,9 +12,23 @@
 // File layout: ~/.equip/cache/<name>.json. One file per registry augment
 // the user has touched (installed, browsed-to-detail, etc.).
 //
-// Freshness discipline (TTL gates + ETag conditional refresh) lands in
-// Pkg 03. This package (Pkg 01) ships the storage primitive without freshness
-// gates — reads are unconditional, writes happen on registry-refresh.
+// **Freshness discipline (Pkg 03):**
+//   - **Soft TTL (default 5min):** `readCacheWithFreshness` returns cached
+//     content immediately; if older than soft TTL, fires a fire-and-forget
+//     refresh callback. Content returned now may be slightly stale; the next
+//     read picks up the refresh.
+//   - **Hard TTL (default 24h):** `ensureCacheFresh` blocks until refresh
+//     completes when fetchedAt is older than hard TTL. Used by install paths
+//     to prevent applying stale registry content.
+//   - **ETag round-trip (Pkg 01 + 03):** `cachedFromRegistry` captures the
+//     server's ETag on every refresh; `registry-refresh.ts` echoes it via
+//     `If-None-Match` on the next conditional refresh. 304 responses skip
+//     content rewrite.
+//   - **No SSE in v1.** TTL + ETag is the architectural baseline; SSE is
+//     deferred to ENG-0058 if telemetry warrants.
+//   - **Configurable via env vars:** EQUIP_CACHE_SOFT_TTL_MS (default 300_000),
+//     EQUIP_CACHE_HARD_TTL_MS (default 86_400_000),
+//     EQUIP_CACHE_DISCIPLINE_DISABLED=true → fresh-always (one release escape).
 
 import * as fs from "fs";
 import * as path from "path";
@@ -22,6 +36,7 @@ import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
 import { getEquipHome } from "./equip-home";
 import { validateToolName } from "./validation";
 import type { RegistryDef } from "./registry";
+import { type Counter, noopCounter } from "./telemetry";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -244,4 +259,182 @@ export function listCache(): CachedDef[] {
     if (cached) out.push(cached);
   }
   return out;
+}
+
+// ─── Freshness discipline (Pkg 03) ──────────────────────────
+
+const DEFAULT_SOFT_TTL_MS = 300_000;       // 5 minutes
+const DEFAULT_HARD_TTL_MS = 86_400_000;    // 24 hours
+
+function parsePositiveInt(s: string | undefined, fallback: number): number {
+  if (!s) return fallback;
+  const n = Number.parseInt(s, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/** Soft TTL config. Reads EQUIP_CACHE_SOFT_TTL_MS each call (test-friendly). */
+export function getSoftTtlMs(): number {
+  return parsePositiveInt(process.env.EQUIP_CACHE_SOFT_TTL_MS, DEFAULT_SOFT_TTL_MS);
+}
+
+/** Hard TTL config. Reads EQUIP_CACHE_HARD_TTL_MS each call (test-friendly). */
+export function getHardTtlMs(): number {
+  return parsePositiveInt(process.env.EQUIP_CACHE_HARD_TTL_MS, DEFAULT_HARD_TTL_MS);
+}
+
+/** One-release escape hatch — bypasses TTL discipline entirely. */
+export function isDisciplineDisabled(): boolean {
+  return process.env.EQUIP_CACHE_DISCIPLINE_DISABLED === "true";
+}
+
+export type CacheFreshness = "fresh" | "soft-stale" | "hard-stale" | "missing-fetched-at";
+
+/**
+ * Classify a cached entry's freshness against the configured TTLs.
+ *   - fresh                 — fetchedAt within soft TTL.
+ *   - soft-stale            — older than soft TTL but within hard TTL.
+ *   - hard-stale            — older than hard TTL.
+ *   - missing-fetched-at    — legacy/corrupt entry with no/invalid fetchedAt;
+ *                              treated as infinitely stale.
+ */
+export function classifyFreshness(
+  cached: CachedDef,
+  options: { now?: number; softTtlMs?: number; hardTtlMs?: number } = {},
+): CacheFreshness {
+  const now = options.now ?? Date.now();
+  const softTtl = options.softTtlMs ?? getSoftTtlMs();
+  const hardTtl = options.hardTtlMs ?? getHardTtlMs();
+
+  const fetchedAtMs = Date.parse(cached.fetchedAt);
+  if (!Number.isFinite(fetchedAtMs) || fetchedAtMs <= 0) return "missing-fetched-at";
+
+  const ageMs = now - fetchedAtMs;
+  if (ageMs > hardTtl) return "hard-stale";
+  if (ageMs > softTtl) return "soft-stale";
+  return "fresh";
+}
+
+export interface ReadWithFreshnessResult {
+  cached: CachedDef | null;
+  freshness: CacheFreshness | "missing";
+  /** True if a background revalidation was kicked off as a result of this read. */
+  revalidating: boolean;
+}
+
+/**
+ * Soft-TTL aware read.
+ *
+ * Returns the cached entry immediately (no blocking). If the entry exists
+ * AND is older than the configured soft TTL, fires `revalidate(name)` as
+ * a fire-and-forget background promise. The returned content may be stale
+ * by up to `hardTtlMs` (caller's job to gate on hard TTL via `ensureCacheFresh`
+ * before applying the content to user state — see install paths).
+ *
+ * `revalidate` errors are swallowed (logged via Counter). Caller must NOT
+ * await this — the function returns synchronously.
+ */
+export function readCacheWithFreshness(
+  name: string,
+  options: {
+    revalidate?: (name: string) => Promise<unknown>;
+    counter?: Counter;
+    now?: number;
+    softTtlMs?: number;
+    hardTtlMs?: number;
+  } = {},
+): ReadWithFreshnessResult {
+  const counter = options.counter ?? noopCounter;
+  const cached = readCache(name);
+
+  if (!cached) {
+    counter("equip_cache_read_total", { result: "miss" });
+    return { cached: null, freshness: "missing", revalidating: false };
+  }
+
+  if (isDisciplineDisabled()) {
+    counter("equip_cache_read_total", { result: "hit" });
+    return { cached, freshness: "fresh", revalidating: false };
+  }
+
+  const freshness = classifyFreshness(cached, options);
+  let revalidating = false;
+
+  if (freshness !== "fresh" && options.revalidate) {
+    revalidating = true;
+    counter("equip_cache_read_total", { result: "stale_revalidating" });
+    Promise.resolve()
+      .then(() => options.revalidate!(name))
+      .catch(() => {
+        // Async revalidate failure is non-fatal — content already returned to
+        // caller. Counter on registry-refresh side records the refresh outcome.
+      });
+  } else if (freshness === "fresh") {
+    counter("equip_cache_read_total", { result: "hit" });
+  } else {
+    // Stale but no revalidate callback supplied — record as a hit (caller
+    // accepted "stale is OK for this read").
+    counter("equip_cache_read_total", { result: "hit" });
+  }
+
+  return { cached, freshness, revalidating };
+}
+
+export type EnsureFreshOutcome =
+  | { status: "fresh"; cached: CachedDef }
+  | { status: "refreshed"; cached: CachedDef }
+  | { status: "missing"; cached: null }
+  | { status: "refresh-failed"; cached: CachedDef | null; error: Error };
+
+/**
+ * Hard-TTL gate for install paths. Blocks until the cached entry is fresher
+ * than the configured hard TTL.
+ *
+ * Behavior:
+ *   - cache fresh (within hard TTL)   → returns immediately, status "fresh".
+ *   - cache stale (or missing/invalid fetchedAt) → awaits `refresh(name)`,
+ *     re-reads cache, returns status "refreshed" (or "refresh-failed" with
+ *     the underlying error and best-effort cached content).
+ *   - cache missing entirely AND no refresh callback → returns status "missing".
+ *
+ * `EQUIP_CACHE_DISCIPLINE_DISABLED=true` skips the gate (treats any cached
+ * entry as fresh). Used to revert in an emergency without a redeploy.
+ */
+export async function ensureCacheFresh(
+  name: string,
+  refresh: (name: string) => Promise<unknown>,
+  options: {
+    counter?: Counter;
+    now?: number;
+    hardTtlMs?: number;
+  } = {},
+): Promise<EnsureFreshOutcome> {
+  const counter = options.counter ?? noopCounter;
+  const cached = readCache(name);
+
+  if (isDisciplineDisabled()) {
+    if (cached) return { status: "fresh", cached };
+    return { status: "missing", cached: null };
+  }
+
+  if (cached) {
+    const hardTtl = options.hardTtlMs ?? getHardTtlMs();
+    const freshness = classifyFreshness(cached, { now: options.now, hardTtlMs: hardTtl, softTtlMs: 0 });
+    if (freshness === "fresh" || freshness === "soft-stale") {
+      return { status: "fresh", cached };
+    }
+  }
+
+  counter("equip_cache_install_block_total", { reason: "hard_ttl_expired" });
+
+  try {
+    await refresh(name);
+  } catch (error) {
+    counter("equip_cache_install_block_total", { reason: "fetch_failed" });
+    const err = error instanceof Error ? error : new Error(String(error));
+    return { status: "refresh-failed", cached, error: err };
+  }
+
+  const refreshed = readCache(name);
+  if (!refreshed) return { status: "missing", cached: null };
+  return { status: "refreshed", cached: refreshed };
 }
