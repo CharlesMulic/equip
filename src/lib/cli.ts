@@ -136,11 +136,13 @@ export interface ParsedArgs {
   adopt: boolean;
   /** `equip doctor --fix-orphan-hooks` — prune settings hook entries pointing at missing scripts. */
   fixOrphanHooks: boolean;
+  /** `equip --restore-pre-cleanup-b --force` — overwrite existing legacy files during recovery. */
+  force: boolean;
 }
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
@@ -149,6 +151,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === "--takeover") { args.takeover = true; }
     else if (a === "--adopt") { args.adopt = true; }
     else if (a === "--fix-orphan-hooks") { args.fixOrphanHooks = true; }
+    else if (a === "--force") { args.force = true; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
     else if (a === "--api-key-file" && i + 1 < argv.length) {
       try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }
