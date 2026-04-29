@@ -275,13 +275,18 @@ test("orphaned installations.json entry (no augment file) creates installs entry
 // Publisher state DROPPED locally
 // ─────────────────────────────────────────────────────────────
 
-test("publisher state on legacy augment is DROPPED locally + reported in result", async () => {
+test("publisher state on legacy augment is DROPPED locally + reported in result + stripped from legacy file (Cleanup A schema v3)", async () => {
   const home = await freshHome();
   writeLegacyAugment(home, "with-publisher-state", legacyRegistryAugment("with-publisher-state", {
     submittedRevisionId: "version:5",
     submittedStatus: "pending-review",
     submittedAt: "2026-04-27T20:00:00.000Z",
     workingDraftEdit: { description: "in-flight edits" },
+    submittedEdit: { description: "submitted snapshot" },
+    submittedRejectionReason: "WAS_REJECTED",
+    pendingEdit: { description: "legacy compat" },
+    pendingReviewId: "review-7",
+    pendingRejectionReason: "WAS_REJECTED",
   }));
 
   const result = migrateMod.migrateStorageIfNeeded();
@@ -292,6 +297,47 @@ test("publisher state on legacy augment is DROPPED locally + reported in result"
   assert.equal("submittedRevisionId" in (cache ?? {}), false);
   assert.equal("submittedStatus" in (cache ?? {}), false);
   assert.equal("workingDraftEdit" in (cache ?? {}), false);
+
+  // Cleanup A schema v3: legacy ~/.equip/augments/<name>.json is rewritten
+  // to drop publisher-state fields too (server-side equip_publisher_drafts is
+  // now the single source of truth). All 9 fields must be gone.
+  const legacyOnDisk = JSON.parse(
+    fs.readFileSync(path.join(home, "augments", "with-publisher-state.json"), "utf-8"),
+  );
+  for (const field of [
+    "workingDraftEdit", "submittedEdit", "submittedRevisionId", "submittedStatus",
+    "submittedRejectionReason", "submittedAt", "pendingEdit", "pendingReviewId",
+    "pendingRejectionReason",
+  ]) {
+    assert.equal(field in legacyOnDisk, false, `legacy file must not contain ${field} after schema v3 migration`);
+  }
+});
+
+test("schema v2 → v3 bump strips publisher state from legacy files even when v2 already ran", async () => {
+  const home = await freshHome();
+  writeLegacyAugment(home, "v2-already", legacyRegistryAugment("v2-already", {
+    workingDraftEdit: { description: "ancient draft" },
+    pendingReviewId: "review-stuck",
+  }));
+  // Simulate a previously-migrated v2 install — schema marker present + new
+  // stores already populated, legacy file still has publisher fields.
+  fs.writeFileSync(path.join(home, ".schema_version"), "2", "utf-8");
+
+  const result = migrateMod.migrateStorageIfNeeded();
+  assert.equal(result.status, "complete");
+
+  const legacyOnDisk = JSON.parse(
+    fs.readFileSync(path.join(home, "augments", "v2-already.json"), "utf-8"),
+  );
+  assert.equal("workingDraftEdit" in legacyOnDisk, false, "v2→v3 bump strips workingDraftEdit");
+  assert.equal("pendingReviewId" in legacyOnDisk, false, "v2→v3 bump strips pendingReviewId");
+
+  // Schema marker is now at v3.
+  assert.equal(fs.readFileSync(path.join(home, ".schema_version"), "utf-8").trim(), "3");
+
+  // Re-running is a no-op.
+  const second = migrateMod.migrateStorageIfNeeded();
+  assert.equal(second.status, "skipped");
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -388,7 +434,7 @@ test("fresh install (no legacy data) just stamps schema version", async () => {
   const result = migrateMod.migrateStorageIfNeeded();
   assert.equal(result.status, "no-legacy-data");
   assert.equal(fs.existsSync(path.join(home, ".schema_version")), true);
-  assert.equal(fs.readFileSync(path.join(home, ".schema_version"), "utf-8").trim(), "2");
+  assert.equal(fs.readFileSync(path.join(home, ".schema_version"), "utf-8").trim(), "3");
 });
 
 test("currentSchemaVersion returns 1 when marker missing (legacy install)", async () => {
@@ -396,9 +442,9 @@ test("currentSchemaVersion returns 1 when marker missing (legacy install)", asyn
   assert.equal(migrateMod.currentSchemaVersion(), 1);
 });
 
-test("currentSchemaVersion returns 2 after migration completes", async () => {
+test("currentSchemaVersion returns 3 after migration completes", async () => {
   const home = await freshHome();
   writeLegacyAugment(home, "schema-test", legacyLocalAugment("schema-test"));
   migrateMod.migrateStorageIfNeeded();
-  assert.equal(migrateMod.currentSchemaVersion(), 2);
+  assert.equal(migrateMod.currentSchemaVersion(), 3);
 });

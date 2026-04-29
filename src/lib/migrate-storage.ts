@@ -35,7 +35,18 @@ import { writeDef, type LocalDef, type OverlayDef, type WrappedDef } from "./def
 import { writeCache, type CachedDef } from "./cache-store";
 import { writeInstall, type InstallRecord } from "./installs-store";
 
-const SCHEMA_VERSION = 2;
+// SCHEMA_VERSION history:
+//   1 — pre-storage-refactor legacy single-store layout.
+//   2 — Pkg 01 of equip-storage-refactor: defs/cache/installs/ stores
+//       populated from legacy ~/.equip/augments/<name>.json + installations.json
+//       via dual-write. Legacy files retained.
+//   3 — Cleanup A (post-Pkg-04): legacy augment files rewritten to strip
+//       removed publisher-state fields (workingDraftEdit, submittedEdit,
+//       submittedRevisionId, submittedStatus, submittedRejectionReason,
+//       submittedAt, pendingEdit, pendingReviewId, pendingRejectionReason).
+//       Server-side `equip_publisher_drafts` is the single source of truth
+//       for those concepts now.
+const SCHEMA_VERSION = 3;
 const SCHEMA_VERSION_FILE = ".schema_version";
 const LEGACY_AUGMENTS_DIRNAME = "augments";
 const LEGACY_INSTALLATIONS_FILENAME = "installations.json";
@@ -214,14 +225,27 @@ export function migrateStorageIfNeeded(opts?: { force?: boolean }): MigrationRes
   // KEEP the legacy files in place — they remain authoritative for reads
   // until Pkgs 02-04 migrate consumers to the resolver. Backup is still
   // written for safety + revert capability.
-  const backupPath = backupLegacyData(home, hasLegacyAugments, hasLegacyInstallations);
-  applyMigration(plan, legacyAugmentsDir);
+  const previousVersion = currentSchemaVersion();
+  const backupPath = (previousVersion < 2)
+    ? backupLegacyData(home, hasLegacyAugments, hasLegacyInstallations)
+    : null;
+  if (previousVersion < 2) {
+    applyMigration(plan, legacyAugmentsDir);
+  }
+  // Schema 3 (Cleanup A): strip removed publisher-state fields from any
+  // pre-existing legacy file. Idempotent — running on already-stripped files
+  // is a no-op. Runs whether we just did the v1→v2 conversion above OR are
+  // bumping a previously-migrated v2 install up to v3.
+  if (previousVersion < 3 && hasLegacyAugments) {
+    stripPublisherStateFromLegacyFiles(legacyAugmentsDir);
+  }
   writeSchemaVersion(SCHEMA_VERSION);
 
   // NOTE: legacy ~/.equip/augments/ and ~/.equip/installations.json are
-  // NOT deleted in Pkg 01. Ongoing dual-write hooks (in augment-defs.ts +
-  // installations.ts) keep both stores in sync. Legacy cleanup lands as a
-  // final commit after Pkgs 02-04 switch all consumers to the resolver.
+  // NOT deleted here. Ongoing dual-write hooks (in augment-defs.ts +
+  // installations.ts) keep both stores in sync. Legacy file deletion lands
+  // in the dual-write-retirement initiative (Cleanup B), after every reader
+  // migrates to the resolver.
 
   return {
     status: "complete",
@@ -230,6 +254,60 @@ export function migrateStorageIfNeeded(opts?: { force?: boolean }): MigrationRes
     backupPath,
     plan: plan.actions,
   };
+}
+
+/**
+ * Cleanup A (schema v3): rewrite each legacy `~/.equip/augments/<name>.json`
+ * to drop the removed publisher-state fields. Pure on-disk maintenance —
+ * the in-memory AugmentDef type already excludes these fields, so subsequent
+ * `JSON.stringify(def)` writes wouldn't carry them, but pre-existing files
+ * still contain them. This step normalizes them out in one pass.
+ *
+ * **Data note:** if a user had unsaved working drafts in `def.workingDraftEdit`
+ * that were never opened on the publisher edit page since Pkg 04 shipped
+ * (which auto-syncs to server-side `equip_publisher_drafts`), those drafts
+ * are dropped without a server-side migration. Acceptable trade — the user
+ * is the only consumer at this stage and the drafts are recoverable by
+ * re-editing.
+ */
+function stripPublisherStateFromLegacyFiles(legacyAugmentsDir: string): void {
+  if (!fs.existsSync(legacyAugmentsDir)) return;
+  const files = fs.readdirSync(legacyAugmentsDir).filter((f) => f.endsWith(".json"));
+  const PUBLISHER_FIELDS = [
+    "workingDraftEdit",
+    "submittedEdit",
+    "submittedRevisionId",
+    "submittedStatus",
+    "submittedRejectionReason",
+    "submittedAt",
+    "pendingEdit",
+    "pendingReviewId",
+    "pendingRejectionReason",
+  ];
+  for (const file of files) {
+    const filePath = path.join(legacyAugmentsDir, file);
+    const raw = readJsonSilent<Record<string, unknown>>(filePath);
+    if (!raw) continue;
+    let mutated = false;
+    for (const field of PUBLISHER_FIELDS) {
+      if (field in raw) {
+        delete raw[field];
+        mutated = true;
+      }
+    }
+    if (mutated) {
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(raw, null, 2) + "\n");
+      } catch {
+        // Best effort — failure leaves the field on disk; next sidecar
+        // boot retries (currentSchemaVersion stays < 3 because we'll skip
+        // writeSchemaVersion if any individual file fails... actually we
+        // don't, we still bump the marker. Trade: getting stuck retrying
+        // forever on one corrupt file is worse than leaving extra JSON
+        // fields on disk that the type system already ignores.).
+      }
+    }
+  }
 }
 
 /**

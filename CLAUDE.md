@@ -4,21 +4,20 @@ Cross-platform divergence (capability flags vs. strategy hooks on `PLATFORM_REGI
 
 The 1207-line `src/lib/auth-engine.ts` is direct-mode code; broker-mode abstractions live in the sibling `src/lib/auth-broker-types.ts`. Comprehensive refactor of `auth-engine.ts` is broker plan Phase 1 — out of scope for the broker MVP initiative.
 
-## Publisher submission state — single-clearer rule (2026-04-28)
+## Publisher submission state — server-side authoritative
 
-`AugmentDef.submitted*` fields (`submittedRevisionId`, `submittedStatus`, `submittedEdit`, `submittedRejectionReason`, `submittedAt`) are governed by a strict ownership contract. Closes the bug observed 2026-04-28 where backend approval never reached equip-app and publishers stayed stuck in "Pending first publish."
+Publisher draft + submission state lives **server-side only** in `equip_publisher_drafts` (queryable via `PublisherDraftService.getDraft`). The local `AugmentDef` carries no draft fields — no `workingDraftEdit`, no `submittedEdit`, no `submitted*` of any kind.
 
-**Writers (two-place pattern):**
-- **SETTERS** — `equip-app/sidecar/bridge.ts` `augmentPublish` and `augmentPublishUpdate`. Write `submittedRevisionId`, `submittedStatus`, `submittedEdit`, `submittedRejectionReason`, `submittedAt` at submission time.
-- **CLEARER + UPDATER** — `equip-app/sidecar/bridge.ts` `reconcileSubmissionState`. The ONLY function that clears these fields or rewrites their terminal classification. Backed by the pure-logic `src/lib/submitted-draft-reconcile.ts` reconciler.
+**Writers:**
+- `equip-app/sidecar/bridge.ts` `augmentSaveDraft` → PUT `/equip/augments/{name}/draft`
+- `equip-app/sidecar/bridge.ts` `augmentDiscardDraft` → DELETE `/equip/augments/{name}/draft`
+- `equip-app/sidecar/bridge.ts` `augmentPublish` / `augmentPublishUpdate` → backend's publish endpoint auto-calls `discardDraft` and records `pendingVersionId` on the augment row
+- Backend `LlmReviewHandler` + `ReviewSweeper` transition the version row's `review_status` per the Option B worker contract
 
-**Forbidden:** `src/lib/registry-refresh.ts` may NOT touch `def.submitted*`. Pinned by `test/registry-refresh-single-clearer.test.js`. Refresh updates registry-side fields (`registryStatus`, `registryContentHash`, etc.) only.
+**Reads:**
+- `equip-app/sidecar/bridge.ts` `augmentGetDraft` → GET `/equip/augments/{name}/draft`, returns the server's view verbatim
+- cg3-ui's `AugmentEditPage` polls `api.getDraft` every 10s while state is non-terminal and re-derives `publishingStatus` from the response
 
-**Reconciler architecture:**
-- Pure logic in `src/lib/submitted-draft-reconcile.ts`. No I/O. Five decision rules (no-op / approved / rejected / superseded / needs-attention) over `(local AugmentDef, server PublisherDraftView)`. **No TTL synthesis** — server is authoritative (Option B worker contract on the backend guarantees every terminal job outcome produces an observable state change).
-- Bridge wraps with the HTTP fetch (`fetchPublisherDraftView`), persists via `clearSubmittedDraftState` / `writeSubmittedDraftState`, and exposes the RPC `augment.reconcileSubmissionState`.
-- `augment.getDraft` calls the reconciler as a page-open lazy refresh; cg3-ui's `AugmentEditPage` polls the explicit RPC at 10s while state is non-terminal.
+**Forbidden:** `src/lib/registry-refresh.ts` may NOT touch publisher state. Refresh updates registry-side fields (`registryStatus`, `registryContentHash`, etc.) only.
 
-If you need a new writer of `def.submitted*` (rare — most publisher state changes are read-only display work), audit the contract first: is this an originating SET (publish flow) or a CLEAR (reconciliation outcome)? Anything else is almost certainly the wrong place.
-
-See `operations/initiatives/shipped/equip-publisher-submission-loop-closure/` for the foundation work.
+**History:** Pre-Pkg-04 of the equip-storage-refactor initiative, publisher state mirrored locally on `~/.equip/augments/<name>.json` via a five-rule reconciler (`submitted-draft-reconcile.ts`). The reconciler + the local mirror were retired in the cleanup commit because they were a redundant cache layer over server-authoritative state. See `operations/initiatives/shipped/equip-publisher-submission-loop-closure/` for the foundation work and `operations/initiatives/shipped/equip-storage-refactor/` for the retirement.

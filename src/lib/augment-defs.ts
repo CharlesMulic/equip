@@ -226,72 +226,20 @@ export interface AugmentDef {
    */
   registryLatestSecurityAdvisory?: boolean;
 
-  // ── Publisher draft state (Phase 2 of MANUAL_UPDATE_PLAN) ──
-
-  /**
-   * Publisher's in-flight edits that haven't been submitted (or have
-   * been submitted and are in review). Stored alongside the approved
-   * def on `~/.equip/augments/<name>.json` rather than in a separate
-   * drafts directory — the sidecar already owns the per-augment def
-   * file, so drafts are a new dimension of that existing state rather
-   * than a parallel store.
-   *
-   * Shape is a partial AugmentDef-compatible object: only the fields
-   * the publisher has edited. The approved-state fields elsewhere on
-   * this def stay authoritative for what's running on platforms.
-   *
-   * Cleared on successful publish-and-approve (the sidecar's accept-
-   * update flow migrates pending → approved). Survives on admin
-   * rejection so the publisher can revise and re-publish.
-   */
-  workingDraftEdit?: Partial<AugmentDef>;
-  submittedEdit?: Partial<AugmentDef>;
-  submittedRevisionId?: string;
-  /**
-   * Publisher-facing submission state.
-   *
-   * - `"pending-review"` — submission is queued / under LLM review.
-   * - `"rejected"` — submission was rejected (admin or LLM verdict).
-   * - `"needs-attention"` — terminal failure on our side (e.g., review job
-   *   exhausted via Option B's worker hook). Distinct from `"rejected"`
-   *   because the publisher's draft is still recoverable; the failure is
-   *   ours, not theirs. Added by publisher-loop-foundation 2026-04-28.
-   *
-   * Bridge readers should default-case unknown values to a safe state with
-   * a logged warning — older equip-app installs won't have `"needs-attention"`
-   * in their type universe but the on-disk file may carry it after upgrade.
-   */
-  submittedStatus?: "pending-review" | "rejected" | "needs-attention";
-  submittedRejectionReason?: string;
-  /**
-   * ISO-8601 timestamp the current submission (`submittedRevisionId`) was
-   * submitted to the registry. Written by the publish/update bridge handlers
-   * at submission time; used for "Submitted X minutes ago" display copy
-   * (never for reconciliation decisions — server is authoritative).
-   *
-   * Optional: existing local files written before publisher-loop-foundation
-   * lack this field. Reconciler tolerates `undefined`.
-   */
-  submittedAt?: string;
-  pendingEdit?: Partial<AugmentDef>;
-
-  /**
-   * Server-side review row ID correlating a submitted [pendingEdit]
-   * to the open review queue entry. Set on successful publish POST;
-   * cleared on accepted update or explicit discard.
-   *
-   * `undefined` → no active review (local draft only, not submitted).
-   * Non-null → review is open server-side; frontend surfaces a
-   * "pending review" badge.
-   */
-  pendingReviewId?: string;
-
-  /**
-   * Most recent admin rejection reason for a prior submission of this
-   * draft, if any. Cleared on next successful submission. Surfaces
-   * on the publisher edit UI so they know what to revise.
-   */
-  pendingRejectionReason?: string;
+  // ── Publisher draft state — REMOVED ──
+  //
+  // Publisher submission state lives entirely on the backend in
+  // `equip_publisher_drafts` (queryable via `PublisherDraftService.getDraft`).
+  // The bridge's `augment.getDraft` RPC is the read surface; `augment.saveDraft`
+  // and `augment.discardDraft` are the write surfaces. No local mirror.
+  //
+  // Removed during the equip-storage-refactor cleanup (post-Pkg-04 closeout):
+  //   workingDraftEdit, submittedEdit, submittedRevisionId, submittedStatus,
+  //   submittedRejectionReason, submittedAt, pendingEdit, pendingReviewId,
+  //   pendingRejectionReason.
+  //
+  // The migrate-storage one-shot at SCHEMA_VERSION 3 strips these fields from
+  // any pre-existing legacy file on first run.
 
   /**
    * Timestamp of the most recent explicit user interaction with this
@@ -365,10 +313,11 @@ function augmentPath(name: string): string {
 function ensureAugmentsDir(): void {
   const dir = getAugmentsDir();
   if (!fs.existsSync(dir)) {
-    // Phase 2: create with 0700 so draft content (publisher's
-    // unreviewed edits stored in `pendingEdit`) isn't world-readable.
-    // A co-resident process with a different user would otherwise
-    // be able to exfiltrate unreviewed content from this dir.
+    // 0700 was historically chosen to protect publisher draft content
+    // (when stored locally pre-Pkg-04). Drafts now live server-side,
+    // but the directory perms stay tight as defense in depth — the
+    // legacy files (~/.equip/augments/<name>.json) still hold sidecar
+    // state until Cleanup B retires them entirely.
     // Best-effort — on Windows `mkdir` ignores the mode and the
     // ACL-restriction happens via filesystem default (user home
     // directory inherits user-only access on typical NTFS setups).
