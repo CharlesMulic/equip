@@ -15,6 +15,12 @@ import { installSkill, uninstallSkill } from "./skills";
 import type { RegistryDef } from "./registry";
 import { validateAgainstRegistry } from "./registry";
 import { mirrorRetractFromRegistry } from "./dual-write-mirror";
+// Spike Package 01 prototype (Cleanup B): replace the dual-write mirror call
+// for retraction with the new orchestrator. The orchestrator IS what
+// `mirrorRetractFromRegistry` was — extracted into a sanctioned cross-store
+// API. Retain `mirrorRetractFromRegistry` import as a fallback toggle until
+// Package 06 retires it.
+import { retractRegistryAugment } from "./store-orchestrator";
 import { acquireLock } from "./fs";
 import { NOOP_LOGGER, type EquipLogger } from "./types";
 import { type Counter, noopCounter } from "./telemetry";
@@ -437,13 +443,16 @@ export async function applyRegistryRetraction(
       writeAugmentDef(existingDef);
     }
 
-    // Pkg 02 of equip-storage-refactor: route the retraction through the
-    // new three-store layout. If the user has an active overlay (their
-    // personal mod of this registry augment), promote it to a frozen
-    // `kind: "local"` def with a frozen_from_retraction marker — preserves
-    // their mods even when upstream goes away. Otherwise the cache entry
-    // is just deleted.
-    const retractionAction = mirrorRetractFromRegistry(name, now);
+    // Cleanup B Spike (Package 01): route the retraction through the new
+    // store-orchestrator instead of the legacy dual-write-mirror. Behavior
+    // parity preserved — the orchestrator handles overlay-promote-to-frozen
+    // OR cache-delete + install-record cleanup, with the architect's
+    // ordering rule (side effects → derived state → durable marker).
+    //
+    // The legacy install-record removal at line ~423 above + the legacy
+    // writeAugmentDef at line ~430 above continue to dual-write the legacy
+    // files until Cleanup B Package 06 retires them.
+    const retractionAction = await retractRegistryAugment(name, { retractedAt: now });
     logger.debug("refresh.retracted", {
       name,
       durationMs: Date.now() - startedAt,

@@ -29,21 +29,27 @@ const SRC_LIB_DIR = path.resolve(__dirname, "..", "src", "lib");
  * files including the implementation.
  */
 const DEFS_WRITER_ALLOWLIST = [
-  "defs-store.ts",       // the module itself
-  "dual-write-mirror.ts", // Pkg 01 dual-write hook
+  "defs-store.ts",        // the module itself
+  "dual-write-mirror.ts", // Pkg 01 dual-write hook (retired in Cleanup B Pkg 06)
   "migrate-storage.ts",   // one-time migration
+  "store-writers.ts",     // Cleanup B (dual-write retirement) — new sanctioned write surface
+  "store-orchestrator.ts", // Cleanup B — cross-store orchestrators (call store-writers, not raw store fns)
 ];
 
 const CACHE_WRITER_ALLOWLIST = [
   "cache-store.ts",
   "dual-write-mirror.ts",
   "migrate-storage.ts",
+  "store-writers.ts",
+  "store-orchestrator.ts",
 ];
 
 const INSTALLS_WRITER_ALLOWLIST = [
   "installs-store.ts",
   "dual-write-mirror.ts",
   "migrate-storage.ts",
+  "store-writers.ts",
+  "store-orchestrator.ts",
 ];
 
 /**
