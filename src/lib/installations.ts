@@ -2,12 +2,20 @@
 //
 // File: ~/.equip/installations.json
 //
-// Zero dependencies.
+// **Pkg 01 of equip-storage-refactor (2026-04-28):** this file remains the
+// LEGACY install-tracking layer for back-compat during the storage refactor.
+// Every public read/write triggers `ensureStorageMigrated()` (idempotent)
+// and every write mirrors per-augment to `~/.equip/installs/<name>.json`
+// via `dual-write-mirror.ts`. Reads stay legacy in Pkg 01; Pkgs 02-04
+// migrate consumers to read via `installsStore`. After all consumers
+// migrate, this file can be deleted.
 
 import * as fs from "fs";
 import * as path from "path";
 import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
 import { getEquipHome } from "./equip-home";
+import { ensureStorageMigrated } from "./migration-trigger";
+import { mirrorWriteInstallations } from "./dual-write-mirror";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -140,6 +148,7 @@ export function isInstallationsBatchActive(): boolean {
 // ─── Read / Write ───────────────────────────────────────────
 
 function readFromDisk(): Installations {
+  ensureStorageMigrated();
   const { data, status } = safeReadJsonSync(installationsPath());
   if (status !== "ok" || !data) {
     return { lastUpdated: "", augments: {} };
@@ -148,9 +157,12 @@ function readFromDisk(): Installations {
 }
 
 function writeToDisk(inst: Installations): void {
+  ensureStorageMigrated();
   const dir = getEquipHome();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   atomicWriteFileSync(installationsPath(), JSON.stringify(inst, null, 2) + "\n");
+  // Pkg 01 dual-write: mirror per-augment to ~/.equip/installs/<name>.json.
+  mirrorWriteInstallations(inst);
 }
 
 /**

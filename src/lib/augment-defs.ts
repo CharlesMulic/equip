@@ -5,7 +5,13 @@
 // Modded augments preserve the user's behavioral customizations (rules, hooks, skills)
 // while tracking the upstream version for diff/reset.
 //
-// Zero dependencies.
+// **Pkg 01 of equip-storage-refactor (2026-04-28):** this file remains the
+// LEGACY storage layer for back-compat during the storage refactor. Every
+// public read/write triggers `ensureStorageMigrated()` (idempotent) and every
+// write mirrors to the new three-store layout (defs/cache/installs) via
+// `dual-write-mirror.ts`. Reads stay legacy in Pkg 01; Pkgs 02-04 migrate
+// consumers to read via `augmentResolver.resolve()` from the new stores.
+// After all consumers migrate, this file can be deleted in a final cleanup.
 
 import * as fs from "fs";
 import * as path from "path";
@@ -15,6 +21,8 @@ import { validateToolName } from "./validation";
 import type { SkillConfig } from "./skills";
 import type { HookDefinition } from "./hooks";
 import type { RegistryDef } from "./registry";
+import { ensureStorageMigrated } from "./migration-trigger";
+import { mirrorWriteAugmentDef, mirrorDeleteAugmentDef } from "./dual-write-mirror";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -376,6 +384,7 @@ function ensureAugmentsDir(): void {
 
 /** Read an augment definition by name. Returns null if not found. */
 export function readAugmentDef(name: string): AugmentDef | null {
+  ensureStorageMigrated();
   const filePath = augmentPath(name);
   const { data, status } = safeReadJsonSync(filePath);
 
@@ -403,8 +412,12 @@ export function promoteWrappedToLocal(name: string): AugmentDef | null {
 
 /** Write an augment definition. Creates the augments directory if needed. */
 export function writeAugmentDef(def: AugmentDef): void {
+  ensureStorageMigrated();
   ensureAugmentsDir();
   atomicWriteFileSync(augmentPath(def.name), JSON.stringify(def, null, 2) + "\n");
+  // Pkg 01 dual-write: mirror to the new three-store layout. Failures are
+  // logged + swallowed so the legacy write isn't blocked by a new-store hiccup.
+  mirrorWriteAugmentDef(def);
 }
 
 /**
@@ -487,6 +500,7 @@ export function migrateLegacyRegistryTrackingFields(): { migrated: number } {
 
 /** List all augment definitions. */
 export function listAugmentDefs(): AugmentDef[] {
+  ensureStorageMigrated();
   ensureAugmentsDir();
 
   const defs: AugmentDef[] = [];
@@ -508,9 +522,12 @@ export function listAugmentDefs(): AugmentDef[] {
 
 /** Delete an augment definition. Returns true if the file existed. */
 export function deleteAugmentDef(name: string): boolean {
+  ensureStorageMigrated();
   const filePath = augmentPath(name);
   try {
     fs.unlinkSync(filePath);
+    // Pkg 01 dual-write: mirror the deletion into the new stores.
+    mirrorDeleteAugmentDef(name);
     return true;
   } catch {
     return false;
