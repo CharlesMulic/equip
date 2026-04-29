@@ -235,8 +235,13 @@ describe("refreshAugmentFromRegistry", () => {
   });
 
   it("marks the snapshot retracted and removes the installation record when local state already expects retraction", async () => {
+    // Setup: cache already in retracted state (e.g., a previous refresh
+    // round-trip retracted it but kept the cache as a tombstone-equivalent).
+    // Pre-Pkg-06: this scenario was expressed via source=local + registryStatus
+    // =retracted on the legacy AugmentDef. Post-Pkg-06: the registry-tracking
+    // fields live on cache; the same logical state is `cache.registryStatus =
+    // "retracted"` with cleared hash/version.
     writeRegistryDef({
-      source: "local",
       registryStatus: "retracted",
       registryContentHash: undefined,
       registryVersionNumber: undefined,

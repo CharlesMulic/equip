@@ -1,22 +1,18 @@
 "use strict";
 
-// Cross-store routing characterization tests for refreshAugmentFromRegistry.
+// Cache-state assertions for refreshAugmentFromRegistry per branch.
 //
-// Companion to test/dual-write-registry-state-routing.test.js (which pins
-// the dual-write mirror's per-field routing in isolation) and to
-// test/registry-refresh.test.js (which pins the legacy AugmentDef state
-// after each refresh branch).
+// **Pkg 06 batch 2a rewrite (2026-04-29):** previously these tests asserted
+// the dual-write mirror routed legacy → cache correctly. After the
+// migration, refreshAugmentFromRegistry writes directly to cache via
+// mutateCache — the mirror is no longer the path. Tests now assert the
+// post-refresh cache state per branch (which is what users + the resolver
+// actually see).
 //
-// **What this test pins (Pkg 06 batch 2 prep):** for every refresh branch
-// that mutates registry-tracking fields, the NEW cache-store entry must
-// reflect those changes via the dual-write mirror. After Pkg 06 batch 2
-// migrates refreshAugmentFromRegistry's writes to go DIRECTLY to the
-// cache-store via mutateCache, the same end-state must be observable.
-// These tests are the regression contract: if batch 2 changes the routing
-// rules, the migration must update both the production code AND these
-// tests in lock-step.
+// Companion to registry-refresh.test.js (per-branch return-value
+// assertions). This file focuses on cache state mutations.
 //
-// Test isolation via EQUIP_HOME (ENG-0031), same pattern as registry-refresh.test.js.
+// Test isolation via EQUIP_HOME (ENG-0031).
 
 const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("assert/strict");
@@ -25,8 +21,11 @@ const path = require("path");
 const os = require("os");
 
 const { computeContentHash, extractManifest } = require("../dist/lib/content-hash");
-const { readAugmentDef, writeAugmentDef } = require("../dist/lib/augment-defs");
-const { readInstallations, writeInstallations } = require("../dist/lib/installations");
+// Setup helpers below still call writeAugmentDef + writeInstallations during
+// the dual-write era (pre-batch-2g). Once batch 2g deletes those modules,
+// this file's setup helpers will be migrated to writeCache + writeInstall.
+const { writeAugmentDef } = require("../dist/lib/augment-defs");
+const { writeInstallations } = require("../dist/lib/installations");
 const { readCache } = require("../dist/lib/cache-store");
 const {
   refreshAugmentFromRegistry,
@@ -131,27 +130,18 @@ describe("refreshAugmentFromRegistry — cross-store routing characterization", 
   beforeEach(setupTempHome);
   afterEach(teardownTempHome);
 
-  it("304 not-modified branch: cache.fetchedAt updated alongside def.lastValidatedAt", async () => {
+  it("304 not-modified branch: cache.fetchedAt advances + registryStatus stays active", async () => {
     writeRegistryDef();
-    const def = readAugmentDef("demo-tool");
-    global.fetch = async () => notModifiedResponse(`"${def.registryEtag}"`);
+    const initialCache = readCache("demo-tool");
+    global.fetch = async () => notModifiedResponse(`"${initialCache.etag}"`);
 
-    const before = readCache("demo-tool");
-    const beforeFetchedAt = before?.fetchedAt;
+    const beforeFetchedAt = initialCache?.fetchedAt;
 
     await refreshAugmentFromRegistry("demo-tool");
 
-    const updatedDef = readAugmentDef("demo-tool");
     const updatedCache = readCache("demo-tool");
 
-    // Legacy file got the timestamp.
-    assert.ok(updatedDef.lastValidatedAt, "def.lastValidatedAt must be set after 304");
-    assert.equal(updatedDef.registryStatus, "active");
-
-    // Mirror propagates to cache.fetchedAt — the load-bearing assertion for batch 2.
     assert.ok(updatedCache?.fetchedAt, "cache.fetchedAt must be present after 304");
-    assert.equal(updatedCache.fetchedAt, updatedDef.lastValidatedAt,
-      "mirror routes def.lastValidatedAt → cache.fetchedAt 1:1");
     assert.notEqual(updatedCache.fetchedAt, beforeFetchedAt,
       "cache.fetchedAt must advance on each refresh");
     assert.equal(updatedCache.registryStatus, "active");
@@ -159,8 +149,8 @@ describe("refreshAugmentFromRegistry — cross-store routing characterization", 
 
   it("304 not-modified: cache.etag, cache.contentHash, cache.version preserved (not overwritten with undefined)", async () => {
     writeRegistryDef();
-    const def = readAugmentDef("demo-tool");
-    global.fetch = async () => notModifiedResponse(`"${def.registryEtag}"`);
+    const initialCache = readCache("demo-tool");
+    global.fetch = async () => notModifiedResponse(`"${initialCache.etag}"`);
 
     const before = readCache("demo-tool");
 
@@ -196,24 +186,18 @@ describe("refreshAugmentFromRegistry — cross-store routing characterization", 
 
     await refreshAugmentFromRegistry("demo-tool");
 
-    const updatedDef = readAugmentDef("demo-tool");
     const updatedCache = readCache("demo-tool");
-
-    // Def + cache both reflect the new identity.
-    assert.equal(updatedDef.registryContentHash, newBody.contentHash);
-    assert.equal(updatedDef.registryVersionNumber, 2);
 
     assert.notEqual(updatedCache.contentHash, beforeContentHash,
       "cache.contentHash must advance on content change");
     assert.equal(updatedCache.contentHash, newBody.contentHash,
       "cache.contentHash matches new registry hash");
     assert.equal(updatedCache.version, 2);
-    // etag is mirrored from def.registryEtag → cache.etag.
-    assert.equal(updatedCache.etag, updatedDef.registryEtag,
-      "cache.etag mirrors def.registryEtag");
+    // validateAgainstRegistry strips the surrounding quotes from the ETag header.
+    assert.equal(updatedCache.etag, "new-etag-v2", "cache.etag stored without surrounding quotes");
   });
 
-  it("missing-content-hash skip branch: cache.etag cleared when def.registryEtag is cleared", async () => {
+  it("missing-content-hash skip branch: cache.etag cleared (so next refresh forces a body fetch)", async () => {
     // Publisher returns content without a hash — skipped path; etag is reset
     // so the next refresh sends without If-None-Match (forces a fresh body).
     writeRegistryDef();
@@ -223,22 +207,19 @@ describe("refreshAugmentFromRegistry — cross-store routing characterization", 
 
     await refreshAugmentFromRegistry("demo-tool");
 
-    const updatedDef = readAugmentDef("demo-tool");
     const updatedCache = readCache("demo-tool");
 
-    assert.equal(updatedDef.registryEtag, undefined,
-      "def.registryEtag cleared on missing-content-hash");
     assert.equal(updatedCache?.etag, undefined,
-      "mirror propagates the etag-clear to cache.etag");
+      "cache.etag cleared on missing-content-hash so next refresh sends without If-None-Match");
   });
 
-  it("short-circuit branch: cache.fetchedAt updates even though no network call happened", async () => {
+  it("short-circuit branch: cache.fetchedAt advances even though no network call happened", async () => {
     writeRegistryDef();
-    const def = readAugmentDef("demo-tool");
+    const initialCache = readCache("demo-tool");
     let fetchCount = 0;
     global.fetch = async () => {
       fetchCount += 1;
-      return notModifiedResponse(`"${def.registryEtag}"`);
+      return notModifiedResponse(`"${initialCache.etag}"`);
     };
 
     // First call hits the network, primes the short-circuit cache.
@@ -248,17 +229,18 @@ describe("refreshAugmentFromRegistry — cross-store routing characterization", 
     // Wait a beat so timestamps are different.
     await new Promise((r) => setTimeout(r, 10));
 
-    // Second call short-circuits — but the def + cache timestamps still advance.
+    // Second call short-circuits — but cache.fetchedAt still advances
+    // (the freshness signal updates regardless of whether network was hit).
     await refreshAugmentFromRegistry("demo-tool");
     const afterSecond = readCache("demo-tool");
 
     assert.equal(fetchCount, 1, "second call short-circuited (no network)");
     assert.notEqual(afterSecond.fetchedAt, afterFirst.fetchedAt,
-      "cache.fetchedAt advances even on short-circuit (mirrored from def.lastValidatedAt update)");
+      "cache.fetchedAt advances even on short-circuit");
   });
 
-  it("non-public registry status branch: def.lastValidatedAt + cache.fetchedAt both update on skipped path", async () => {
-    // pending-review augments still touch lastValidatedAt to keep the doctor's
+  it("non-public registry status branch: cache.fetchedAt updates on skipped path; registryStatus preserved", async () => {
+    // pending-review augments still touch fetchedAt to keep the doctor's
     // freshness signal accurate, even though the registry isn't queried.
     writeRegistryDef({ registryStatus: "pending-review" });
     let fetchCount = 0;
@@ -268,12 +250,9 @@ describe("refreshAugmentFromRegistry — cross-store routing characterization", 
 
     assert.equal(fetchCount, 0, "non-public status skips the network");
 
-    const updatedDef = readAugmentDef("demo-tool");
     const updatedCache = readCache("demo-tool");
 
-    assert.ok(updatedDef.lastValidatedAt, "def.lastValidatedAt updates on non-public skip");
-    assert.equal(updatedCache?.fetchedAt, updatedDef.lastValidatedAt,
-      "cache.fetchedAt mirrors def.lastValidatedAt on non-public skip");
+    assert.ok(updatedCache?.fetchedAt, "cache.fetchedAt updates on non-public skip");
     // registryStatus preserved (was "pending-review").
     assert.equal(updatedCache.registryStatus, "pending-review",
       "non-public status preserved through skipped refresh");

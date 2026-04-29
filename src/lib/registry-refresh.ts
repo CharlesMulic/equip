@@ -1,25 +1,22 @@
-import type { ArtifactRecord, InstallationRecord } from "./installations";
-import { readInstallations, writeInstallations } from "./installations";
+import type { ArtifactRecord } from "./installs-store";
 import { buildHttpConfig, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp } from "./mcp";
 import { readStoredCredential } from "./auth-engine";
-import {
-  readAugmentDef,
-  syncFromRegistry,
-  writeAugmentDef,
-  type AugmentDef,
-  type RegistryLifecycleStatus,
-} from "./augment-defs";
+import { type RegistryLifecycleStatus } from "./augment-defs";
 import { createManualPlatform } from "./platforms";
 import { installRules, uninstallRules } from "./rules";
 import { installSkill, uninstallSkill } from "./skills";
 import type { RegistryDef } from "./registry";
 import { validateAgainstRegistry } from "./registry";
-import { mirrorRetractFromRegistry } from "./dual-write-mirror";
-// Spike Package 01 prototype (Cleanup B): replace the dual-write mirror call
-// for retraction with the new orchestrator. The orchestrator IS what
-// `mirrorRetractFromRegistry` was — extracted into a sanctioned cross-store
-// API. Retain `mirrorRetractFromRegistry` import as a fallback toggle until
-// Package 06 retires it.
+// Cleanup B Pkg 06 batch 2a: migrate registry-refresh's RMW writes from the
+// legacy writeAugmentDef + writeInstallations path to direct new-store
+// writes via store-writers' mutateCache + mutateInstall. The dual-write
+// mirror's reverse direction (new → legacy) was never implemented — to
+// keep test invariants stable through this migration window, the test
+// suite was rewritten in phase 1 (commit eb4a50f) to read from the new
+// stores rather than via readAugmentDef.
+import { mutateCache, deleteCache, writeCache, mutateInstall, deleteInstall } from "./store-writers";
+import { cachedFromRegistry, readCache, type CachedDef } from "./cache-store";
+import { readInstall } from "./installs-store";
 import { retractRegistryAugment } from "./store-orchestrator";
 import { acquireLock } from "./fs";
 import { NOOP_LOGGER, type EquipLogger } from "./types";
@@ -94,12 +91,20 @@ export async function refreshAugmentFromRegistry(
     releaseLock = await acquireMutationLock();
 
     const now = new Date().toISOString();
-    const existingDef = readAugmentDef(name);
-    const installations = readInstallations();
-    const installRecord = installations.augments[name];
-    const shouldValidateRegistry = existingDef?.source === "registry" || installRecord?.source === "registry";
+    // Cleanup B Pkg 06 batch 2a: read from new stores. The cache is the
+    // registry-tracking source of truth (registry augments live in cache;
+    // modded ones additionally have an overlay in defs/, but refresh only
+    // touches cache fields — the overlay stays untouched and the resolver
+    // merges them at read time).
+    const existingCache = readCache(name);
+    const installRecord = readInstall(name);
+    // "shouldValidateRegistry" applied to: cache exists (= registry-known
+    // augment) OR install record exists. The new InstallRecord shape doesn't
+    // carry a `source` discriminator (denormalized fields lived on legacy
+    // InstallationRecord); cache-existence IS the registry-known signal.
+    const shouldValidateRegistry = !!existingCache || !!installRecord;
 
-    if (!existingDef && !installRecord) {
+    if (!existingCache && !installRecord) {
       clearRecentValidatedSnapshot(name);
       return {
         name,
@@ -121,38 +126,38 @@ export async function refreshAugmentFromRegistry(
       };
     }
 
-    if (isNonPublicRegistryStatus(existingDef?.registryStatus)) {
+    if (isNonPublicRegistryStatus(existingCache?.registryStatus)) {
       clearRecentValidatedSnapshot(name);
-      if (existingDef) {
-        existingDef.lastValidatedAt = now;
-        writeAugmentDef(existingDef);
+      if (existingCache) {
+        mutateCache(name, (c) => { c.fetchedAt = now; });
       }
 
       logger.debug("refresh.skipped", {
         name,
         durationMs: Date.now() - startedAt,
         reason: "non-public-status",
-        registryStatus: existingDef?.registryStatus,
+        registryStatus: existingCache?.registryStatus,
       });
       return {
         name,
         status: "skipped",
         changed: false,
         retracted: false,
-        registryContentHash: existingDef?.registryContentHash,
-        registryVersionNumber: existingDef?.registryVersionNumber,
+        registryContentHash: existingCache?.contentHash,
+        registryVersionNumber: existingCache?.version,
         lastValidatedAt: now,
         validationMode: "skipped",
       };
     }
 
-    const shortCircuit = getRecentValidatedSnapshot(name, existingDef);
+    const shortCircuit = getRecentValidatedSnapshotFromCache(name, existingCache);
     if (shortCircuit) {
-      const statusChanged = existingDef?.registryStatus !== "active";
-      if (existingDef) {
-        existingDef.registryStatus = "active";
-        existingDef.lastValidatedAt = now;
-        writeAugmentDef(existingDef);
+      const statusChanged = existingCache?.registryStatus !== "active";
+      if (existingCache) {
+        mutateCache(name, (c) => {
+          c.registryStatus = "active";
+          c.fetchedAt = now;
+        });
       }
 
       logger.debug("refresh.short-circuit", {
@@ -166,7 +171,7 @@ export async function refreshAugmentFromRegistry(
         changed: statusChanged,
         retracted: false,
         registryContentHash: shortCircuit.contentHash,
-        registryVersionNumber: shortCircuit.registryVersionNumber ?? existingDef?.registryVersionNumber,
+        registryVersionNumber: shortCircuit.registryVersionNumber ?? existingCache?.version,
         lastValidatedAt: now,
         validationMode: "short-circuit",
       };
@@ -174,29 +179,28 @@ export async function refreshAugmentFromRegistry(
 
     const validation = await validateAgainstRegistry(name, {
       logger,
-      ifNoneMatch: existingDef?.registryEtag,
+      ifNoneMatch: existingCache?.etag,
     });
     if (validation.status === "missing") {
       clearRecentValidatedSnapshot(name);
-      if (!shouldTreatNotFoundAsRetraction(existingDef)) {
-        if (existingDef) {
-          existingDef.lastValidatedAt = now;
-          writeAugmentDef(existingDef);
+      if (!shouldTreatNotFoundAsRetractionFromCache(existingCache)) {
+        if (existingCache) {
+          mutateCache(name, (c) => { c.fetchedAt = now; });
         }
 
         logger.warn("refresh.skipped", {
           name,
           durationMs: Date.now() - startedAt,
           reason: "ambiguous-not-found",
-          registryStatus: existingDef?.registryStatus,
+          registryStatus: existingCache?.registryStatus,
         });
         return {
           name,
           status: "skipped",
           changed: false,
           retracted: false,
-          registryContentHash: existingDef?.registryContentHash,
-          registryVersionNumber: existingDef?.registryVersionNumber,
+          registryContentHash: existingCache?.contentHash,
+          registryVersionNumber: existingCache?.version,
           lastValidatedAt: now,
           validationMode: "skipped",
         };
@@ -206,17 +210,18 @@ export async function refreshAugmentFromRegistry(
     }
 
     if (validation.status === "not-modified") {
-      const statusChanged = existingDef?.registryStatus !== "active";
-      if (existingDef) {
-        existingDef.registryStatus = "active";
-        existingDef.lastValidatedAt = now;
-        writeAugmentDef(existingDef);
+      const statusChanged = existingCache?.registryStatus !== "active";
+      if (existingCache) {
+        mutateCache(name, (c) => {
+          c.registryStatus = "active";
+          c.fetchedAt = now;
+        });
       }
 
       rememberValidatedSnapshot(
         name,
-        existingDef?.registryContentHash,
-        existingDef?.registryVersionNumber,
+        existingCache?.contentHash,
+        existingCache?.version,
       );
       counter("equip_cache_refresh_total", { result: "304" });
       logger.debug("refresh.match", {
@@ -229,8 +234,8 @@ export async function refreshAugmentFromRegistry(
         status: "match",
         changed: statusChanged,
         retracted: false,
-        registryContentHash: existingDef?.registryContentHash,
-        registryVersionNumber: existingDef?.registryVersionNumber,
+        registryContentHash: existingCache?.contentHash,
+        registryVersionNumber: existingCache?.version,
         lastValidatedAt: now,
         validationMode: "not-modified",
       };
@@ -240,12 +245,13 @@ export async function refreshAugmentFromRegistry(
 
     if (!registryDef.contentHash) {
       clearRecentValidatedSnapshot(name);
-      const statusChanged = existingDef?.registryStatus !== "active";
-      if (existingDef) {
-        existingDef.registryStatus = "active";
-        existingDef.registryEtag = undefined;
-        existingDef.lastValidatedAt = now;
-        writeAugmentDef(existingDef);
+      const statusChanged = existingCache?.registryStatus !== "active";
+      if (existingCache) {
+        mutateCache(name, (c) => {
+          c.registryStatus = "active";
+          c.etag = undefined;
+          c.fetchedAt = now;
+        });
       }
 
       logger.warn("refresh.skipped", {
@@ -265,13 +271,14 @@ export async function refreshAugmentFromRegistry(
       };
     }
 
-    if (isRegistrySnapshotUnchanged(existingDef, registryDef)) {
-      const statusChanged = existingDef?.registryStatus !== "active";
-      if (existingDef) {
-        existingDef.registryEtag = validation.etag;
-        existingDef.registryStatus = "active";
-        existingDef.lastValidatedAt = now;
-        writeAugmentDef(existingDef);
+    if (isRegistrySnapshotUnchangedFromCache(existingCache, registryDef)) {
+      const statusChanged = existingCache?.registryStatus !== "active";
+      if (existingCache) {
+        mutateCache(name, (c) => {
+          c.etag = validation.etag;
+          c.registryStatus = "active";
+          c.fetchedAt = now;
+        });
       }
 
       rememberValidatedSnapshot(name, registryDef.contentHash, registryDef.version);
@@ -295,35 +302,34 @@ export async function refreshAugmentFromRegistry(
       };
     }
 
-    const nextDef = syncFromRegistry(registryDef);
-    nextDef.registryEtag = validation.etag;
-    nextDef.registryStatus = "active";
-    nextDef.lastValidatedAt = now;
-    nextDef.updatedAt = now;
-    writeAugmentDef(nextDef);
-    rememberValidatedSnapshot(name, nextDef.registryContentHash, nextDef.registryVersionNumber);
+    // Main mutation path: full content update from the registry.
+    // Cleanup B Pkg 06 batch 2a: replace `syncFromRegistry + writeAugmentDef`
+    // with a direct cache write via `cachedFromRegistry`. The overlay defs/
+    // entry (if exists for modded augments) is intentionally untouched — the
+    // resolver merges overlay's user mods over cache content at read time,
+    // so user mods survive the registry refresh automatically.
+    const newCache = cachedFromRegistry(registryDef, {
+      fetchedAt: now,
+      etag: validation.etag,
+      registryStatus: "active",
+    });
+    writeCache(newCache);
+    rememberValidatedSnapshot(name, newCache.contentHash, newCache.version);
     counter("equip_cache_refresh_total", { result: "200" });
 
     if (installRecord) {
-      const updatedArtifacts = rewriteInstalledArtifacts(name, installRecord, existingDef, nextDef, logger);
-      installations.augments[name] = {
-        ...installRecord,
-        source: nextDef.source,
-        title: nextDef.title || name,
-        transport: nextDef.transport || installRecord.transport,
-        serverUrl: nextDef.serverUrl,
-        updatedAt: now,
-        artifacts: updatedArtifacts,
-      };
-      installations.lastUpdated = now;
-      writeInstallations(installations);
+      const updatedArtifacts = rewriteInstalledArtifactsFromCache(name, installRecord, existingCache, newCache, logger);
+      mutateInstall(name, (r) => {
+        r.updatedAt = now;
+        r.artifacts = updatedArtifacts;
+      });
     }
 
     logger.debug("refresh.mutated", {
       name,
       durationMs: Date.now() - startedAt,
-      registryContentHash: nextDef.registryContentHash,
-      registryVersionNumber: nextDef.registryVersionNumber,
+      registryContentHash: newCache.contentHash,
+      registryVersionNumber: newCache.version,
     });
 
     return {
@@ -331,8 +337,8 @@ export async function refreshAugmentFromRegistry(
       status: "mutated",
       changed: true,
       retracted: false,
-      registryContentHash: nextDef.registryContentHash,
-      registryVersionNumber: nextDef.registryVersionNumber,
+      registryContentHash: newCache.contentHash,
+      registryVersionNumber: newCache.version,
       lastValidatedAt: now,
       validationMode: "mutated",
     };
@@ -351,12 +357,6 @@ export async function refreshAugmentFromRegistry(
   }
 }
 
-function isRegistrySnapshotUnchanged(existingDef: AugmentDef | null, registryDef: RegistryDef): boolean {
-  return !!existingDef?.registryContentHash &&
-    !!registryDef.contentHash &&
-    existingDef.registryContentHash === registryDef.contentHash;
-}
-
 export function isNonPublicRegistryStatus(status: RegistryLifecycleStatus | undefined): boolean {
   return status === "pending-review" || status === "rejected" || status === "synced-unreviewed";
 }
@@ -371,11 +371,14 @@ export async function applyRegistryRetraction(
   const releaseLock = await acquireMutationLock();
   try {
     clearRecentValidatedSnapshot(name);
-    const existingDef = readAugmentDef(name);
-    const installations = readInstallations();
-    const installRecord = installations.augments[name];
+    // Cleanup B Pkg 06 batch 2a: read from new stores. Retraction operates
+    // on registry-tracked content (cache) + the install record (installs/).
+    // The orchestrator at the end handles overlay defs/ for modded augments
+    // (frozen-from-retraction promotion).
+    const existingCache = readCache(name);
+    const installRecord = readInstall(name);
 
-    if (!existingDef && !installRecord) {
+    if (!existingCache && !installRecord) {
       return {
         name,
         status: "missing-local",
@@ -386,34 +389,32 @@ export async function applyRegistryRetraction(
       };
     }
 
-    if (isNonPublicRegistryStatus(existingDef?.registryStatus)) {
-      if (existingDef) {
-        existingDef.lastValidatedAt = now;
-        writeAugmentDef(existingDef);
+    if (isNonPublicRegistryStatus(existingCache?.registryStatus)) {
+      if (existingCache) {
+        mutateCache(name, (c) => { c.fetchedAt = now; });
       }
 
       logger.debug("refresh.skipped", {
         name,
         durationMs: Date.now() - startedAt,
         reason: "non-public-status",
-        registryStatus: existingDef?.registryStatus,
+        registryStatus: existingCache?.registryStatus,
       });
       return {
         name,
         status: "skipped",
         changed: false,
         retracted: false,
-        registryContentHash: existingDef?.registryContentHash,
-        registryVersionNumber: existingDef?.registryVersionNumber,
+        registryContentHash: existingCache?.contentHash,
+        registryVersionNumber: existingCache?.version,
         lastValidatedAt: now,
         validationMode: "skipped",
       };
     }
 
-    if (existingDef?.registryStatus === "retracted" && !installRecord) {
-      if (existingDef.lastValidatedAt !== now) {
-        existingDef.lastValidatedAt = now;
-        writeAugmentDef(existingDef);
+    if (existingCache?.registryStatus === "retracted" && !installRecord) {
+      if (existingCache.fetchedAt !== now) {
+        mutateCache(name, (c) => { c.fetchedAt = now; });
       }
 
       return {
@@ -427,31 +428,34 @@ export async function applyRegistryRetraction(
     }
 
     if (installRecord) {
-      removeInstalledArtifacts(name, installRecord, existingDef);
-      delete installations.augments[name];
-      installations.lastUpdated = now;
-      writeInstallations(installations);
+      removeInstalledArtifactsFromCache(name, installRecord, existingCache);
+      // The orchestrator below also deletes the install record. Mirror it
+      // here so the in-flight uninstall is committed before the orchestrator
+      // runs (architect's ordering rule: side effects → derived state →
+      // durable marker last).
+      deleteInstall(name);
     }
 
-    if (existingDef) {
-      existingDef.registryStatus = "retracted";
-      existingDef.registryContentHash = undefined;
-      existingDef.registryEtag = undefined;
-      existingDef.registryVersionNumber = undefined;
-      existingDef.lastValidatedAt = now;
-      existingDef.updatedAt = now;
-      writeAugmentDef(existingDef);
+    // Cache update: mark retracted with cleared registry-tracking fields
+    // (matches the legacy behavior). The orchestrator below may delete the
+    // cache entirely for pure-registry augments OR keep it (for modded
+    // augments, where the overlay gets promoted to a frozen-LocalDef).
+    if (existingCache) {
+      mutateCache(name, (c) => {
+        c.registryStatus = "retracted";
+        c.contentHash = undefined;
+        c.etag = undefined;
+        c.version = undefined;
+        c.fetchedAt = now;
+      });
     }
 
-    // Cleanup B Spike (Package 01): route the retraction through the new
-    // store-orchestrator instead of the legacy dual-write-mirror. Behavior
-    // parity preserved — the orchestrator handles overlay-promote-to-frozen
-    // OR cache-delete + install-record cleanup, with the architect's
-    // ordering rule (side effects → derived state → durable marker).
-    //
-    // The legacy install-record removal at line ~423 above + the legacy
-    // writeAugmentDef at line ~430 above continue to dual-write the legacy
-    // files until Cleanup B Package 06 retires them.
+    // Spike Package 01 outcome: the orchestrator handles the cross-store
+    // sequence (overlay-promote-to-frozen OR cache-delete) with the
+    // architect's ordering rule. Post-Pkg-06-batch-2g (legacy module
+    // deletion), the orchestrator is the only retraction surface — the
+    // intermediate cache write above gets superseded by the orchestrator's
+    // outcome (cache-delete OR overlay-promotion).
     const retractionAction = await retractRegistryAugment(name, { retractedAt: now });
     logger.debug("refresh.retracted", {
       name,
@@ -496,8 +500,13 @@ export function resetRefreshValidationStateForTests(): void {
   recentValidatedSnapshots.clear();
 }
 
-function getRecentValidatedSnapshot(name: string, existingDef: AugmentDef | null): RecentValidatedSnapshot | null {
-  if (!existingDef?.registryContentHash || existingDef.registryStatus !== "active") {
+// Cleanup B Pkg 06 batch 2a: cache-aware variants of the per-augment
+// helpers. The legacy AugmentDef-taking variants were removed — the
+// migration moves all reads to cache, and after batch 2g augment-defs.ts
+// is gone entirely.
+
+function getRecentValidatedSnapshotFromCache(name: string, existingCache: CachedDef | null): RecentValidatedSnapshot | null {
+  if (!existingCache?.contentHash || existingCache.registryStatus !== "active") {
     clearRecentValidatedSnapshot(name);
     return null;
   }
@@ -507,7 +516,7 @@ function getRecentValidatedSnapshot(name: string, existingDef: AugmentDef | null
     return null;
   }
 
-  if (snapshot.contentHash !== existingDef.registryContentHash) {
+  if (snapshot.contentHash !== existingCache.contentHash) {
     clearRecentValidatedSnapshot(name);
     return null;
   }
@@ -520,11 +529,21 @@ function getRecentValidatedSnapshot(name: string, existingDef: AugmentDef | null
   return snapshot;
 }
 
-function shouldTreatNotFoundAsRetraction(existingDef: AugmentDef | null): boolean {
-  return existingDef?.registryStatus === "retracted";
+function shouldTreatNotFoundAsRetractionFromCache(existingCache: CachedDef | null): boolean {
+  return existingCache?.registryStatus === "retracted";
 }
 
-function removeInstalledArtifacts(name: string, installRecord: InstallationRecord, existingDef: AugmentDef | null): void {
+function isRegistrySnapshotUnchangedFromCache(existingCache: CachedDef | null, registryDef: RegistryDef): boolean {
+  return !!existingCache?.contentHash &&
+    !!registryDef.contentHash &&
+    existingCache.contentHash === registryDef.contentHash;
+}
+
+function removeInstalledArtifactsFromCache(
+  name: string,
+  installRecord: { platforms: string[]; artifacts: Record<string, ArtifactRecord> },
+  existingCache: CachedDef | null,
+): void {
   for (const platformId of installRecord.platforms || []) {
     const platform = createManualPlatform(platformId);
     const artifacts = installRecord.artifacts[platformId] || {};
@@ -535,8 +554,8 @@ function removeInstalledArtifacts(name: string, installRecord: InstallationRecor
 
     if (artifacts.rules) {
       uninstallRules(platform, {
-        marker: existingDef?.rules?.marker || name,
-        fileName: existingDef?.rules?.fileName,
+        marker: existingCache?.rules?.marker || name,
+        fileName: existingCache?.rules?.fileName,
       });
     }
 
@@ -546,17 +565,17 @@ function removeInstalledArtifacts(name: string, installRecord: InstallationRecor
   }
 }
 
-function rewriteInstalledArtifacts(
+function rewriteInstalledArtifactsFromCache(
   name: string,
-  installRecord: InstallationRecord,
-  previousDef: AugmentDef | null,
-  nextDef: AugmentDef,
+  installRecord: { platforms: string[]; artifacts: Record<string, ArtifactRecord> },
+  previousCache: CachedDef | null,
+  nextCache: CachedDef,
   logger: EquipLogger,
 ): Record<string, ArtifactRecord> {
   const nextArtifactsByPlatform: Record<string, ArtifactRecord> = {};
-  const credential = resolveStoredCredential(name, nextDef);
-  const nextHasMcp = !!(nextDef.serverUrl || nextDef.stdio);
-  const nextSkillNames = new Set((nextDef.skills || []).map((skill) => skill.name));
+  const credential = resolveStoredCredentialFromCache(name, nextCache);
+  const nextHasMcp = !!(nextCache.serverUrl || nextCache.stdioCommand);
+  const nextSkillNames = new Set((nextCache.skills || []).map((skill) => skill.name));
 
   for (const platformId of installRecord.platforms || []) {
     const platform = createManualPlatform(platformId);
@@ -566,10 +585,10 @@ function rewriteInstalledArtifacts(
       uninstallMcp(platform, name);
     }
 
-    if (currentArtifacts.rules && !nextDef.rules) {
+    if (currentArtifacts.rules && !nextCache.rules) {
       uninstallRules(platform, {
-        marker: previousDef?.rules?.marker || name,
-        fileName: previousDef?.rules?.fileName,
+        marker: previousCache?.rules?.marker || name,
+        fileName: previousCache?.rules?.fileName,
       });
     }
 
@@ -580,54 +599,54 @@ function rewriteInstalledArtifacts(
     }
 
     if (nextHasMcp) {
-      installMcp(platform, name, buildMcpEntry(nextDef, credential, platformId), {
-        serverUrl: nextDef.serverUrl,
+      installMcp(platform, name, buildMcpEntryFromCache(nextCache, credential, platformId), {
+        serverUrl: nextCache.serverUrl,
         logger,
       });
     }
 
-    if (nextDef.rules) {
-      installRules(platform, { ...nextDef.rules, logger });
+    if (nextCache.rules) {
+      installRules(platform, { ...nextCache.rules, logger });
     }
 
-    for (const skill of nextDef.skills || []) {
+    for (const skill of nextCache.skills || []) {
       installSkill(platform, name, skill, { logger });
     }
 
-    nextArtifactsByPlatform[platformId] = buildArtifactRecord(nextDef);
+    nextArtifactsByPlatform[platformId] = buildArtifactRecordFromCache(nextCache);
   }
 
   return nextArtifactsByPlatform;
 }
 
-function buildArtifactRecord(def: AugmentDef): ArtifactRecord {
+function buildArtifactRecordFromCache(cache: CachedDef): ArtifactRecord {
   return {
-    mcp: !!(def.serverUrl || def.stdio),
-    rules: def.rules?.version,
-    skills: (def.skills || []).map((skill) => skill.name),
+    mcp: !!(cache.serverUrl || cache.stdioCommand),
+    rules: cache.rules?.version,
+    skills: (cache.skills || []).map((skill) => skill.name),
   };
 }
 
-function resolveStoredCredential(name: string, def: AugmentDef): string | null {
-  if (!def.requiresAuth) return null;
+function resolveStoredCredentialFromCache(name: string, cache: CachedDef): string | null {
+  if (!cache.requiresAuth) return null;
   const credential = readStoredCredential(name);
   return credential?.credential || credential?.oauth?.accessToken || null;
 }
 
-function buildMcpEntry(def: AugmentDef, apiKey: string | null, platformId: string): Record<string, unknown> {
-  if (def.transport === "stdio" && def.stdio) {
+function buildMcpEntryFromCache(cache: CachedDef, apiKey: string | null, platformId: string): Record<string, unknown> {
+  if (cache.transport === "stdio" && cache.stdioCommand) {
     const env: Record<string, string> = {};
-    if (def.stdio.envKey && apiKey) {
-      env[def.stdio.envKey] = apiKey;
+    if (cache.envKey && apiKey) {
+      env[cache.envKey] = apiKey;
     }
-    return buildStdioConfig(def.stdio.command, def.stdio.args, env);
+    return buildStdioConfig(cache.stdioCommand, cache.stdioArgs ?? [], env);
   }
 
-  if (!def.serverUrl) {
-    throw new Error(`Augment "${def.name}" has no MCP server configuration to refresh`);
+  if (!cache.serverUrl) {
+    throw new Error(`Augment "${cache.name}" has no MCP server configuration to refresh`);
   }
 
   return apiKey
-    ? buildHttpConfigWithAuth(def.serverUrl, apiKey, platformId)
-    : buildHttpConfig(def.serverUrl, platformId);
+    ? buildHttpConfigWithAuth(cache.serverUrl, apiKey, platformId)
+    : buildHttpConfig(cache.serverUrl, platformId);
 }

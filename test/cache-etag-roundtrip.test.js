@@ -146,9 +146,13 @@ describe("Pkg 03 — ETag round-trip + refresh counter", () => {
     assert.deepEqual(refresh, [{ n: "equip_cache_refresh_total", l: { result: "error" } }]);
   });
 
-  it("dual-write: ETag captured by cache-store on 200 (next refresh can use it via legacy field)", async () => {
+  it("ETag captured by cache-store on 200 (next refresh can use it for If-None-Match)", async () => {
     // Registry strips quotes from the ETag header before storing — what's persisted
     // is the bare token, which the next request re-quotes for If-None-Match.
+    // Pkg 06 batch 2a: refresh writes directly to cache; the legacy AugmentDef
+    // is no longer updated by refresh (the dual-write mirror only runs in
+    // legacy → new direction, and refresh now bypasses it). Cache is the
+    // authoritative ETag store.
     writeRegistryDef({ registryEtag: undefined });
     global.fetch = async () => okResponse(
       makeRegistryResponse({ title: "Updated", version: 2 }),
@@ -156,12 +160,10 @@ describe("Pkg 03 — ETag round-trip + refresh counter", () => {
     );
 
     await refreshAugmentFromRegistry("etag-tool");
-    const def = readAugmentDef("etag-tool");
-    assert.equal(def.registryEtag, "server-etag-v2", "legacy AugmentDef captures ETag for round-trip");
 
     const cache = readCache("etag-tool");
-    assert.ok(cache, "cache-store has dual-write entry");
-    assert.equal(cache.etag, "server-etag-v2", "cache-store's ETag mirror matches");
+    assert.ok(cache, "cache-store has the registry snapshot");
+    assert.equal(cache.etag, "server-etag-v2", "cache stores ETag bare-token for next If-None-Match");
   });
 
   it("conditional refresh round-trip: first call sends no If-None-Match, second sends ETag from prior response", async () => {

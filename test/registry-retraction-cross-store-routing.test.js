@@ -156,7 +156,7 @@ describe("applyRegistryRetraction — cross-store routing characterization", () 
     assert.equal(readInstall("modded-aug"), null, "install record deleted");
   });
 
-  it("idempotent: re-running retraction on already-retracted augment is a no-op", async () => {
+  it("idempotent: re-running retraction on already-retracted augment reports missing-local", async () => {
     writeRegistryDef("twice");
     writeInstall("twice");
 
@@ -169,10 +169,16 @@ describe("applyRegistryRetraction — cross-store routing characterization", () 
     assert.equal(cacheAfterFirst, null);
     assert.equal(installAfterFirst, null);
 
+    // Pkg 06 batch 2a: retraction now fully removes the augment from local state
+    // (cache deleted + install removed). Re-running on a fully-retracted augment
+    // looks the same as "augment was never installed" — returns missing-local.
+    // Pre-migration this returned status="retracted" + changed=false because the
+    // legacy AugmentDef persisted as a tombstone with registryStatus="retracted".
+    // The new behavior is cleaner: retraction means gone.
     const second = await applyRegistryRetraction("twice");
-    assert.equal(second.status, "retracted");
+    assert.equal(second.status, "missing-local");
     assert.equal(second.changed, false, "second retraction reports no change");
-    assert.equal(second.retracted, true);
+    assert.equal(second.retracted, false, "no augment present → not retracted");
   });
 
   it("non-public registry status (pending-review): skipped path, only timestamp updates", async () => {
