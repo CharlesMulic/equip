@@ -287,6 +287,12 @@ export function runDoctor(options: DoctorOptions = {}): void {
     }
   }
 
+  // Cleanup B Pkg 06 batch 1: surface the .backup-pre-cleanup-b/ snapshot
+  // if it exists. Informational, not an issue — but helps the user notice
+  // the snapshot is sitting on disk eternally if they never run
+  // `equip --discard-pre-cleanup-b-backup` after confirming the cutover.
+  reportCleanupBBackup();
+
   // Summary
   cli.log("");
   if (issues === 0) {
@@ -294,6 +300,35 @@ export function runDoctor(options: DoctorOptions = {}): void {
   } else {
     cli.log(`  ${cli.YELLOW}${issues} issue${issues === 1 ? "" : "s"} found${cli.RESET} ${cli.DIM}(${checks} checks)${cli.RESET}\n`);
   }
+}
+
+function reportCleanupBBackup(): void {
+  const home = require("../equip-home").getEquipHome();
+  const backupDir = path.join(home, ".backup-pre-cleanup-b");
+  if (!fs.existsSync(backupDir)) return;
+
+  let totalBytes = 0;
+  let oldestMtimeMs = Date.now();
+  function walk(dir: string): void {
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        try {
+          const st = fs.statSync(full);
+          totalBytes += st.size;
+          if (st.mtimeMs < oldestMtimeMs) oldestMtimeMs = st.mtimeMs;
+        } catch { /* skip unreadable */ }
+      }
+    } catch { /* skip unreadable dir */ }
+  }
+  walk(backupDir);
+
+  const ageDays = Math.floor((Date.now() - oldestMtimeMs) / (1000 * 60 * 60 * 24));
+  const sizeMb = (totalBytes / 1024 / 1024).toFixed(1);
+  cli.log(`\n${cli.BOLD}Pre-Cleanup-B snapshot${cli.RESET}`);
+  cli.log(`  ${cli.DIM}~/.equip/.backup-pre-cleanup-b/  (${sizeMb} MB, ${ageDays} day${ageDays === 1 ? "" : "s"} old)${cli.RESET}`);
+  cli.log(`  ${cli.DIM}Run 'equip --restore-pre-cleanup-b' to recover, or 'equip --discard-pre-cleanup-b-backup' to delete.${cli.RESET}`);
 }
 
 function sanitizePath(p: string): string {
