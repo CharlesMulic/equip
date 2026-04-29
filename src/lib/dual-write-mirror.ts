@@ -13,8 +13,8 @@
 // `augment-defs.ts` + `installations.ts` modules. Direct writes from
 // elsewhere are forbidden by the CI grep test.
 
-import { writeDef, deleteDef, type LocalDef, type OverlayDef, type WrappedDef } from "./defs-store";
-import { writeCache, deleteCache, type CachedDef } from "./cache-store";
+import { readDef, writeDef, deleteDef, type LocalDef, type OverlayDef, type WrappedDef } from "./defs-store";
+import { readCache, writeCache, deleteCache, type CachedDef } from "./cache-store";
 import { writeInstall, deleteInstall, type InstallRecord, type ArtifactRecord } from "./installs-store";
 import type { AugmentDef } from "./augment-defs";
 import type { InstallationRecord } from "./installations";
@@ -95,6 +95,156 @@ export function mirrorRemoveInstallation(name: string): void {
     // eslint-disable-next-line no-console
     console.warn(`[equip-storage] dual-write install-delete-mirror failed for "${name}":`, e instanceof Error ? e.message : e);
   }
+}
+
+/**
+ * Pkg 02: handle a registry retraction in the new three-store layout.
+ *
+ * When the registry signals an augment is retracted (404/410 from
+ * `validateAgainstRegistry`), this routes the deletion based on whether the
+ * user has an active overlay (their personal mod):
+ *
+ *   - **Overlay exists** → silent promotion to a frozen `kind: "local"` def.
+ *     Cache content + overlay's overridable fields (rules/skills/hooks) are
+ *     merged into a sovereign LocalDef with a `frozen_from_retraction`
+ *     marker. Cache + overlay entries deleted. The user's mods survive
+ *     upstream retraction; doctor / UI surface the situation via the marker.
+ *
+ *   - **No overlay** → cache deleted (the augment is gone — there's no user
+ *     content to preserve). Existing legacy retraction flow handles the
+ *     installation cleanup separately.
+ *
+ * Idempotent — re-firing this on an already-frozen / already-deleted state
+ * is a no-op. Returns the action taken for ops + telemetry.
+ */
+export type RetractionAction = "frozen-from-overlay" | "cache-deleted" | "no-op";
+
+export function mirrorRetractFromRegistry(
+  name: string,
+  retractedAt: string = new Date().toISOString(),
+): RetractionAction {
+  try {
+    const overlay = readDef(name);
+    const cache = readCache(name);
+
+    // No-op: nothing in the new stores to retract.
+    if (!cache && (!overlay || overlay.kind !== "overlay")) {
+      return "no-op";
+    }
+
+    if (overlay && overlay.kind === "overlay" && cache) {
+      // Promotion: merge cache content with overlay's overridable fields,
+      // write as a frozen LocalDef, then delete cache + overlay.
+      const frozen = freezeFromRetraction(overlay, cache, retractedAt);
+      writeDef(frozen);
+      deleteCache(name);
+      // Overlay entry is superseded by the frozen LocalDef (same path
+      // ~/.equip/defs/<name>.json). The writeDef above overwrites it.
+      return "frozen-from-overlay";
+    }
+
+    if (overlay && overlay.kind === "overlay" && !cache) {
+      // Edge case: overlay exists but cache was already gone (sweeper race?
+      // partial state from a previous run?). Best-effort: write a frozen
+      // LocalDef from overlay-only content with whatever defaults we can
+      // synthesize, so the user's mods aren't silently dropped.
+      const frozen = freezeFromOverlayOnly(overlay, retractedAt);
+      writeDef(frozen);
+      return "frozen-from-overlay";
+    }
+
+    // Cache exists, no overlay → just delete cache. The augment was pure
+    // registry, the user has no personal content to preserve.
+    if (cache && (!overlay || overlay.kind !== "overlay")) {
+      deleteCache(name);
+      return "cache-deleted";
+    }
+
+    return "no-op";
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(`[equip-storage] retraction-mirror failed for "${name}":`, e instanceof Error ? e.message : e);
+    return "no-op";
+  }
+}
+
+/**
+ * Build a frozen LocalDef from an active overlay + last-known cache. Cache
+ * provides identity + infrastructure (publisher's brand metadata + transport
+ * the user trusted at install time); overlay provides the user's mods on
+ * the typed allowlist (rules/skills/hooks).
+ */
+function freezeFromRetraction(
+  overlay: OverlayDef,
+  cache: CachedDef,
+  retractedAt: string,
+): LocalDef {
+  const now = new Date().toISOString();
+  return {
+    name: overlay.name,
+    kind: "local",
+    createdAt: overlay.createdAt,
+    updatedAt: now,
+    title: cache.title,
+    subtitle: cache.subtitle,
+    description: cache.description,
+    rarity: cache.rarity,
+    flavorText: cache.flavorText,
+    transport: cache.transport as ("http" | "stdio" | undefined),
+    serverUrl: cache.serverUrl,
+    stdio: cache.stdioCommand
+      ? { command: cache.stdioCommand, args: cache.stdioArgs ?? [], envKey: cache.envKey }
+      : undefined,
+    envKey: cache.envKey,
+    requiresAuth: cache.requiresAuth ?? false,
+    auth: cache.auth,
+    // Overlay's mods take precedence on the allowlist; fall back to cache.
+    rules: overlay.rules ?? cache.rules,
+    skills: (overlay.skills ?? cache.skills) ?? [],
+    hooks: overlay.hooks ?? cache.hooks,
+    hookDir: cache.hookDir,
+    baseWeight: cache.baseWeight ?? 0,
+    loadedWeight: cache.loadedWeight ?? 0,
+    categories: cache.categories,
+    homepage: cache.homepage,
+    repository: cache.repository,
+    license: cache.license,
+    frozen_from_retraction: {
+      name: overlay.name,
+      retractedAt,
+      lastSeenContentHash: cache.contentHash ?? "",
+    },
+    lastUserActionAt: overlay.lastUserActionAt,
+  };
+}
+
+/**
+ * Edge-case freezer when cache is already gone. Synthesizes a minimal
+ * LocalDef from overlay-only content. UI/doctor surfaces this with extra
+ * caveats since we don't have the original publisher's transport/auth/etc.
+ */
+function freezeFromOverlayOnly(overlay: OverlayDef, retractedAt: string): LocalDef {
+  const now = new Date().toISOString();
+  return {
+    name: overlay.name,
+    kind: "local",
+    createdAt: overlay.createdAt,
+    updatedAt: now,
+    title: overlay.name,
+    description: "",
+    requiresAuth: false,
+    skills: overlay.skills ?? [],
+    hooks: overlay.hooks,
+    rules: overlay.rules,
+    baseWeight: 0,
+    loadedWeight: 0,
+    frozen_from_retraction: {
+      name: overlay.name,
+      retractedAt,
+      lastSeenContentHash: "",
+    },
+    lastUserActionAt: overlay.lastUserActionAt,
+  };
 }
 
 // ─── Legacy → new shape conversions ───────────────────────

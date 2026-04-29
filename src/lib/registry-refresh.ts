@@ -14,6 +14,7 @@ import { installRules, uninstallRules } from "./rules";
 import { installSkill, uninstallSkill } from "./skills";
 import type { RegistryDef } from "./registry";
 import { validateAgainstRegistry } from "./registry";
+import { mirrorRetractFromRegistry } from "./dual-write-mirror";
 import { acquireLock } from "./fs";
 import { NOOP_LOGGER, type EquipLogger } from "./types";
 
@@ -428,7 +429,18 @@ export async function applyRegistryRetraction(
       writeAugmentDef(existingDef);
     }
 
-    logger.debug("refresh.retracted", { name, durationMs: Date.now() - startedAt });
+    // Pkg 02 of equip-storage-refactor: route the retraction through the
+    // new three-store layout. If the user has an active overlay (their
+    // personal mod of this registry augment), promote it to a frozen
+    // `kind: "local"` def with a frozen_from_retraction marker — preserves
+    // their mods even when upstream goes away. Otherwise the cache entry
+    // is just deleted.
+    const retractionAction = mirrorRetractFromRegistry(name, now);
+    logger.debug("refresh.retracted", {
+      name,
+      durationMs: Date.now() - startedAt,
+      newStoreAction: retractionAction,
+    });
     return {
       name,
       status: "retracted",

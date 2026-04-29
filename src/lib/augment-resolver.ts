@@ -18,11 +18,21 @@
 // from "is it installed and where" (install metadata). Mixing them would
 // reproduce the conflation we're fixing.
 //
-// Pkg 01: overlay merge is stubbed (returns overlay's overlayable fields
-// merged onto cache content if cache exists; if cache missing, returns
-// overlay-only with a logged warning). Pkg 02 implements the strict typed
-// allowlist enforcement (logging + ignoring non-overridable fields if they
-// appear in the overlay).
+// Pkg 02 (2026-04-28): overlay merge enforces the typed allowlist. Only
+// `rules`, `skills`, and `hooks` from an OverlayDef merge onto cache content;
+// every other field on the overlay's on-disk JSON is silently ignored AND
+// surfaces a logged warning at WARN level for security audit. This is the
+// phishing-prevention rule from the architect's 2026-04-28 review:
+//   - transport / serverUrl / stdio / envKey / auth → never overridable
+//     (a malicious overlay could silently redirect MCP traffic or change
+//     credentials).
+//   - flavorText / subtitle / description / categories / tags / publisher →
+//     publisher's brand metadata, stays intact even when behavior is modded.
+//   - name / publisher / verified / featured → identity claims belong to
+//     the registry.
+//
+// Per user direction 2026-04-28, `flavorText` is excluded from overlay
+// (publisher brand metadata) — final allowlist is exactly rules/skills/hooks.
 //
 // **Pure function design:** the default-exported singleton uses the real
 // stores. For tests, construct via `createResolver({ defsStore, cacheStore,
@@ -303,10 +313,61 @@ function resolveWrapped(def: WrappedDef, _cache: CachedDef | null): ResolvedAugm
   };
 }
 
+/**
+ * Fields an overlay is allowed to override (Pkg 02 typed allowlist).
+ * Anything else on the overlay's on-disk JSON is silently ignored AND
+ * a warning is logged at WARN level for security audit.
+ */
+const OVERLAY_ALLOWED_FIELDS: ReadonlySet<string> = new Set([
+  "rules",
+  "skills",
+  "hooks",
+]);
+
+/**
+ * Structural fields on an OverlayDef — required by the type system or
+ * sidecar-only metadata that's not an "overlay merge" field. Allowed on
+ * disk without warning.
+ */
+const OVERLAY_STRUCTURAL_FIELDS: ReadonlySet<string> = new Set([
+  "name",
+  "kind",
+  "overlay_of",
+  "createdAt",
+  "updatedAt",
+  "lastUserActionAt",
+]);
+
+/**
+ * Defensive audit: warn if an overlay's on-disk JSON carries any field
+ * outside the typed allowlist + structural set. This catches:
+ *   - Malicious / malformed overlay files written outside the typed write API
+ *   - Future code regressions that try to overlay phishing-vector fields
+ *   - Migration bugs that copy the wrong fields into an overlay shape
+ *
+ * Logged at WARN level. Non-fatal — the resolver still returns the cache+
+ * allowed-fields merge correctly because resolveOverlay only reads the
+ * allowlist fields explicitly.
+ */
+function auditOverlayFields(def: OverlayDef): void {
+  for (const key of Object.keys(def)) {
+    if (OVERLAY_STRUCTURAL_FIELDS.has(key)) continue;
+    if (OVERLAY_ALLOWED_FIELDS.has(key)) continue;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[augment-resolver] overlay "${def.name}" carries non-overridable field "${key}" — ignored. ` +
+      `Only ${[...OVERLAY_ALLOWED_FIELDS].join("/")} may be overlaid; ` +
+      `transport/auth/serverUrl etc. stay on cache by design (phishing prevention).`,
+    );
+  }
+}
+
 function resolveOverlay(def: OverlayDef, cache: CachedDef | null): ResolvedAugment {
-  // Pkg 01 stub merge: overlay's overlayable fields take precedence; everything
-  // else comes from cache. Pkg 02 will add strict typed-allowlist enforcement
-  // (logging + ignoring non-overridable fields that appear in the overlay).
+  // Pkg 02: defensive audit catches overlay JSONs carrying fields outside
+  // the typed allowlist (phishing-prevention security check). Logs warning;
+  // non-fatal because the merge below only reads allowlisted fields anyway.
+  auditOverlayFields(def);
+
   if (!cache) {
     // Cache missing for an overlay — defs has overlay but cache hasn't been
     // populated. Surface what we have; consumer should trigger a registry
