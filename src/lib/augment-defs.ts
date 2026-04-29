@@ -23,6 +23,7 @@ import type { HookDefinition } from "./hooks";
 import type { RegistryDef } from "./registry";
 import { ensureStorageMigrated } from "./migration-trigger";
 import { mirrorWriteAugmentDef, mirrorDeleteAugmentDef } from "./dual-write-mirror";
+import { isLegacyStorageRetired } from "./migrate-storage";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -361,6 +362,18 @@ export function promoteWrappedToLocal(name: string): AugmentDef | null {
 
 /** Write an augment definition. Creates the augments directory if needed. */
 export function writeAugmentDef(def: AugmentDef): void {
+  // Cleanup B Pkg 06 batch 1: defensive gate on the schema-v4 cutover.
+  // After the cutover, the resolver / store-writers are the only sanctioned
+  // write surface. A legacy write here would recreate the file we just
+  // deleted in cleanupBLegacyFiles — typically caused by an old equip-app
+  // sidecar binary running concurrently with the new CLI that ran cleanup.
+  // This entire function disappears with the module in Pkg 06 batch 2;
+  // the gate exists only for the migration-window safety.
+  if (isLegacyStorageRetired()) {
+    // eslint-disable-next-line no-console
+    console.warn(`[equip] writeAugmentDef("${def.name}"): refusing legacy write — schema_version >= 4 (post-Cleanup-B). The new defs/cache stores are authoritative.`);
+    return;
+  }
   ensureStorageMigrated();
   ensureAugmentsDir();
   atomicWriteFileSync(augmentPath(def.name), JSON.stringify(def, null, 2) + "\n");
@@ -471,6 +484,14 @@ export function listAugmentDefs(): AugmentDef[] {
 
 /** Delete an augment definition. Returns true if the file existed. */
 export function deleteAugmentDef(name: string): boolean {
+  // Cleanup B Pkg 06 batch 1: defensive gate on the schema-v4 cutover.
+  // Mirror to new stores still fires (otherwise a legacy delete would leave
+  // stale defs/cache entries behind even post-cutover); we just don't touch
+  // the legacy file path that no longer exists.
+  if (isLegacyStorageRetired()) {
+    mirrorDeleteAugmentDef(name);
+    return false;
+  }
   ensureStorageMigrated();
   const filePath = augmentPath(name);
   try {

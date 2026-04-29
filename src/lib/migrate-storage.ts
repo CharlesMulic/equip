@@ -321,6 +321,19 @@ function stripPublisherStateFromLegacyFiles(legacyAugmentsDir: string): void {
 }
 
 /**
+ * Returns true once Cleanup B has retired the legacy stores
+ * (`.schema_version` >= 4). Used by the legacy writers in
+ * `augment-defs.ts` + `installations.ts` to defensively no-op when the
+ * cutover has happened — prevents the recreate-after-deletion failure
+ * mode where an old equip-app sidecar binary writes legacy files after
+ * the new CLI has run `cleanupBLegacyFiles`. Disappears with the legacy
+ * modules in Pkg 06 batch 2.
+ */
+export function isLegacyStorageRetired(): boolean {
+  return currentSchemaVersion() >= CLEANUP_B_SCHEMA_VERSION;
+}
+
+/**
  * Read the current on-disk schema version. Returns 1 if marker missing
  * (legacy single-store layout = schema version 1 by definition).
  */

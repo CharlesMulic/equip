@@ -16,6 +16,7 @@ import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
 import { getEquipHome } from "./equip-home";
 import { ensureStorageMigrated } from "./migration-trigger";
 import { mirrorWriteInstallations } from "./dual-write-mirror";
+import { isLegacyStorageRetired } from "./migrate-storage";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -157,6 +158,16 @@ function readFromDisk(): Installations {
 }
 
 function writeToDisk(inst: Installations): void {
+  // Cleanup B Pkg 06 batch 1: defensive gate on the schema-v4 cutover.
+  // Same rationale as augment-defs.ts:writeAugmentDef — refuse to recreate
+  // ~/.equip/installations.json after Cleanup B has retired it. Mirror still
+  // fires so the new installs/ store stays in sync with caller intent.
+  if (isLegacyStorageRetired()) {
+    // eslint-disable-next-line no-console
+    console.warn(`[equip] writeInstallations: refusing legacy write — schema_version >= 4 (post-Cleanup-B). The new installs/ store is authoritative.`);
+    mirrorWriteInstallations(inst);
+    return;
+  }
   ensureStorageMigrated();
   const dir = getEquipHome();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
