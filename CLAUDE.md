@@ -19,6 +19,18 @@ Decision record: `operations/initiatives/equip-dual-write-retirement/work/01-spi
 
 Install entry points (`equip-app/sidecar/bridge.ts:equipAugment`, `equip/src/cli/equip.ts:runInstall` + alias path) gate on cache freshness via `ensureCacheFreshForInstall(name, { logger? })` from `src/lib/install-cache-gate.ts`. Stale cache (>`EQUIP_CACHE_HARD_TTL_MS`, default 24h) triggers a synchronous `refreshAugmentFromRegistry` before the install proceeds. Bypassable via `EQUIP_CACHE_INSTALL_GATE_DISABLED=true` (kill switch, one-release-cycle escape).
 
+## Schema-v4 cutover helpers (Cleanup B Pkg 06 batch 1)
+
+`equip/src/lib/migrate-storage.ts` exposes `cleanupBLegacyFiles({ force? })` — the schema-v4 disk migration. Snapshots `~/.equip/augments/` + `~/.equip/installations.json` to `~/.equip/.backup-pre-cleanup-b/`, integrity-verifies file count + per-file byte counts, deletes legacy files (Windows EBUSY-retry), bumps `.schema_version=4`. Idempotent. **Not auto-fired yet** — `migrateStorageIfNeeded()` does not call it. The dual-write writers in `augment-defs.ts` / `installations.ts` would re-create the legacy files immediately. Auto-firing lands in Pkg 06 batch 2 alongside legacy module deletion.
+
+Companion CLIs (also from Pkg 06 batch 1):
+
+- **`equip --restore-pre-cleanup-b [--force]`** — symmetric inverse of `cleanupBLegacyFiles`. Reads `.backup-pre-cleanup-b/` and restores legacy files. Bumps `.schema_version` DOWN to 3 so a fresh sidecar resumes dual-write behavior. Aborts if `augments/` or `installations.json` already exist (use `--force` to overwrite). Module: `src/lib/commands/restore-pre-cleanup-b.ts`. Tests: `test/restore-pre-cleanup-b.test.js`.
+- **`equip --discard-pre-cleanup-b-backup [--force]`** — deletes the `.backup-pre-cleanup-b/` snapshot after the user is satisfied with the cutover. Default is dry-run (reports size that would be freed); `--force` actually deletes. Module: `src/lib/commands/discard-pre-cleanup-b-backup.ts`. Tests: `test/discard-pre-cleanup-b-backup.test.js`.
+- **`equip doctor`** reports snapshot existence + size + age in a "Pre-Cleanup-B snapshot" section so the user notices it sitting on disk eternally.
+
+CI grep test (`test/cleanup-b-todo-survival.test.js`) asserts no `@cleanup-b TODO` markers survive in `equip/src/` or `equip-app/sidecar/`. Any unresolved TODO must be addressed before Pkg 06 batch 2 ships.
+
 The 1207-line `src/lib/auth-engine.ts` is direct-mode code; broker-mode abstractions live in the sibling `src/lib/auth-broker-types.ts`. Comprehensive refactor of `auth-engine.ts` is broker plan Phase 1 — out of scope for the broker MVP initiative.
 
 ## Publisher submission state — server-side authoritative
