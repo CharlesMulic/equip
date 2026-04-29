@@ -1,36 +1,22 @@
 "use strict";
 
-// Cross-store characterization for the baseWeight/loadedWeight RMW pattern
-// in src/lib/commands/install.ts (lines 251 + 260).
+// Cross-store routing tests for the baseWeight/loadedWeight RMW pattern
+// in src/lib/commands/install.ts (lines 251-264 post-migration).
 //
-// The install path runs a "weight recompute" step after install:
+// **Pkg 06 batch 2b update (2026-04-29):** previously these tests
+// characterized a routing gap (legacyRegistryToCache + legacyToOverlayDef
+// both omitted weight fields). Per architect condition 1, the gap is
+// fixed in batch 2b — weight writes route to the correct store:
 //
-//   const def = readAugmentDef(toolDef.name);
-//   if (def) {
-//     const rulesTokens = ...;
-//     const skillTokens = ...;
-//     if (def.baseWeight === 0 && rulesTokens > 0) {
-//       def.baseWeight = rulesTokens;
-//       def.loadedWeight = skillTokens;
-//       writeAugmentDef(def);
-//     }
-//   }
+//   - Local augment   → defs/<name>.json (mutateDef)
+//   - Wrapped augment → defs/<name>.json (mutateDef)
+//   - Registry-unmodded → cache/<name>.json (mutateCache)
+//   - Registry-modded   → cache/<name>.json (mutateCache)
+//                         (overlay's allowlist is rules/skills/hooks only —
+//                         weights are install-time derived data, not user
+//                         content overrides; cache is the right home)
 //
-// **Pkg 06 batch 2 contract:** when this pattern is migrated to use
-// store-writers' mutateDef / mutateCache, the routing must be intentional:
-//
-//   - Local augment   → weights land on defs/<name>.json (mirror already does this)
-//   - Wrapped augment → weights land on defs/<name>.json (mirror already does this)
-//   - Registry unmodded → CURRENT BEHAVIOR: weights only on legacy file,
-//                         NOT propagated to cache (legacyRegistryToCache omits them)
-//   - Registry modded   → CURRENT BEHAVIOR: weights only on legacy file,
-//                         NOT propagated to overlay defs/ (legacyToOverlayDef omits them)
-//                         NOT propagated to cache (legacyRegistryToCache omits them)
-//
-// These tests characterize the CURRENT routing as observed. A routing gap
-// exists for registry augments — batch 2 must explicitly preserve OR fix
-// this behavior. The tests' explicit assertions force the migration author
-// to make a deliberate decision rather than silently changing the gap.
+// Tests assert the new contract: weights land where the resolver reads them.
 
 const { test } = require("node:test");
 const assert = require("assert/strict");
@@ -130,26 +116,40 @@ function writeRegistryModded(name, overrides = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// The install.ts pattern, run as a standalone helper for testing.
-// Mirrors lines 251-261 of src/lib/commands/install.ts.
+// The post-migration install.ts pattern. Mirrors lines 251-281
+// of src/lib/commands/install.ts (post-Pkg-06-batch-2b).
 // ─────────────────────────────────────────────────────────────
+const { augmentResolver } = require("../dist/lib/augment-resolver");
+const { mutateDef, mutateCache } = require("../dist/lib/store-writers");
+const { hasCache } = require("../dist/lib/cache-store");
+
 function runWeightRecomputeRmw(name) {
-  const def = readAugmentDef(name);
-  if (!def) return { mutated: false, reason: "no-def" };
-  const rulesTokens = def.rules?.content ? Math.round(def.rules.content.length / 4) : 0;
-  const skillTokens = (def.skills || []).reduce((sum, s) =>
+  const resolved = augmentResolver.resolve(name);
+  if (!resolved) return { mutated: false, reason: "no-def" };
+  const rulesTokens = resolved.rules?.content ? Math.round(resolved.rules.content.length / 4) : 0;
+  const skillTokens = (resolved.skills || []).reduce((sum, s) =>
     sum + (s.files || []).reduce((fsum, f) =>
       fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
-  if (def.baseWeight === 0 && rulesTokens > 0) {
-    def.baseWeight = rulesTokens;
-    def.loadedWeight = skillTokens;
-    writeAugmentDef(def);
+  if (resolved.baseWeight === 0 && rulesTokens > 0) {
+    if (resolved.source === "local" || resolved.source === "wrapped") {
+      mutateDef(name, (d) => {
+        if (d.kind === "local" || d.kind === "wrapped") {
+          d.baseWeight = rulesTokens;
+          d.loadedWeight = skillTokens;
+        }
+      });
+    } else if (hasCache(name)) {
+      mutateCache(name, (c) => {
+        c.baseWeight = rulesTokens;
+        c.loadedWeight = skillTokens;
+      });
+    }
     return { mutated: true, baseWeight: rulesTokens, loadedWeight: skillTokens };
   }
-  return { mutated: false, reason: "predicate-not-met", baseWeight: def.baseWeight };
+  return { mutated: false, reason: "predicate-not-met", baseWeight: resolved.baseWeight };
 }
 
-test("weight RMW on local augment: defs/<name>.json reflects updated baseWeight (mirror routes weights to defs)", (t) => {
+test("weight RMW on local augment: defs/<name>.json reflects updated baseWeight via mutateDef", (t) => {
   setupTempHome();
   t.after(teardownTempHome);
 
@@ -161,66 +161,55 @@ test("weight RMW on local augment: defs/<name>.json reflects updated baseWeight 
   assert.equal(result.mutated, true);
   assert.ok(result.baseWeight > 0, "rulesTokens computed from rules content");
 
-  // defs/<name>.json reflects the new weight (mirror copies it).
+  // defs/<name>.json reflects the new weight (mutateDef wrote it).
   const after = readDef("local-aug");
   assert.equal(after?.baseWeight, result.baseWeight,
-    "mirror routes weight from legacy → defs/ for local augments");
+    "weight RMW routes to defs/ for local augments via mutateDef");
   assert.equal(after?.kind, "local");
 });
 
-test("weight RMW on registry-unmodded augment: cache.baseWeight NOT updated (current routing gap)", (t) => {
+test("weight RMW on registry-unmodded augment: cache.baseWeight updated via mutateCache (gap fixed)", (t) => {
   setupTempHome();
   t.after(teardownTempHome);
 
   writeRegistry("reg-aug");
   const before = readCache("reg-aug");
-  // Cache was populated by dual-write; baseWeight on cache starts at undefined
-  // (legacyRegistryToCache omits this field — see dual-write-mirror.ts).
-  const beforeCacheWeight = before?.baseWeight;
 
   const result = runWeightRecomputeRmw("reg-aug");
-  assert.equal(result.mutated, true, "predicate met — weight gets recomputed on legacy");
+  assert.equal(result.mutated, true, "predicate met — weight recomputed");
   assert.ok(result.baseWeight > 0);
 
-  // Legacy file got the new weight.
-  const legacy = readAugmentDef("reg-aug");
-  assert.equal(legacy.baseWeight, result.baseWeight);
-
-  // Cache did NOT get the new weight — current routing gap.
+  // Cache.baseWeight reflects the new weight — the routing-gap fix.
   const afterCache = readCache("reg-aug");
-  assert.equal(afterCache?.baseWeight, beforeCacheWeight,
-    "ROUTING GAP: legacyRegistryToCache omits baseWeight, so weight RMW on " +
-    "registry augment does NOT propagate to cache. Pkg 06 batch 2 must " +
-    "decide whether to preserve this gap or fix it (likely fix — cache " +
-    "should reflect the install's computed weights for the resolver).");
+  assert.equal(afterCache?.baseWeight, result.baseWeight,
+    "Pkg 06 batch 2b routing-gap fix: weight RMW on registry augment routes to cache via mutateCache");
+  assert.equal(afterCache?.loadedWeight, result.loadedWeight);
 });
 
-test("weight RMW on registry-modded augment: overlay defs/ does NOT get weights (current routing gap)", (t) => {
+test("weight RMW on registry-modded augment: cache.baseWeight updated; overlay defs/ untouched", (t) => {
   setupTempHome();
   t.after(teardownTempHome);
 
   writeRegistryModded("modded-aug");
   const overlayBefore = readDef("modded-aug");
   assert.equal(overlayBefore?.kind, "overlay", "modded routes to overlay defs/");
-  // overlay shape doesn't include baseWeight (only allowlisted fields).
-  assert.equal(overlayBefore?.baseWeight, undefined,
-    "OverlayDef has no baseWeight by design — overlay only carries the " +
-    "rules/skills/hooks allowlist per the security review");
+  // OverlayDef has no baseWeight by design — overlay only carries the
+  // rules/skills/hooks allowlist per the security review.
+  assert.equal(overlayBefore?.baseWeight, undefined);
 
   const result = runWeightRecomputeRmw("modded-aug");
   assert.equal(result.mutated, true);
 
-  // Legacy got the weight, but overlay still has no baseWeight field.
+  // Cache.baseWeight reflects the new weight — modded routes to cache (not overlay).
+  const cacheAfter = readCache("modded-aug");
+  assert.equal(cacheAfter?.baseWeight, result.baseWeight,
+    "Pkg 06 batch 2b: modded registry augments also route weight to cache (overlay allowlist excludes weight)");
+  assert.equal(cacheAfter?.loadedWeight, result.loadedWeight);
+
+  // Overlay defs/ stays untouched.
   const overlayAfter = readDef("modded-aug");
   assert.equal(overlayAfter?.baseWeight, undefined,
-    "ROUTING GAP: legacyToOverlayDef omits baseWeight (allowlist is " +
-    "rules/skills/hooks only). Pkg 06 batch 2 must route weight to cache " +
-    "for modded registry augments instead.");
-
-  // Cache also doesn't get it (same gap as the unmodded test above).
-  const cacheAfter = readCache("modded-aug");
-  assert.equal(cacheAfter?.baseWeight, undefined,
-    "ROUTING GAP: legacyRegistryToCache omits baseWeight for modded augments too");
+    "overlay defs/ doesn't carry baseWeight — security allowlist excludes it");
 });
 
 test("weight RMW predicate: skipped when baseWeight already non-zero (idempotency)", (t) => {
@@ -234,7 +223,7 @@ test("weight RMW predicate: skipped when baseWeight already non-zero (idempotenc
   assert.equal(result.reason, "predicate-not-met");
   assert.equal(result.baseWeight, 999, "preset weight preserved");
 
-  // No mutation — the def still has the original weights.
+  // No mutation — defs/ still has the original weights.
   const after = readDef("preset");
   assert.equal(after?.baseWeight, 999);
   assert.equal(after?.loadedWeight, 777);
