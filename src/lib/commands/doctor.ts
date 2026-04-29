@@ -51,6 +51,15 @@ export function runDoctor(options: DoctorOptions = {}): void {
   if (installRecords.length === 0) {
     cli.log(`\n  ${cli.DIM}No tracked augments to check.${cli.RESET}`);
     cli.log(`  ${cli.DIM}Install an augment (e.g. 'equip prior') to start tracking.${cli.RESET}\n`);
+    // Cleanup B Pkg 06 batch 1: still surface the cutover status even when
+    // no installs are tracked — the snapshot's existence + the cutover-
+    // incomplete signal are orthogonal to install state.
+    const cutoverIncompleteEarly = reportCleanupBBackup();
+    if (cutoverIncompleteEarly) {
+      issues++;
+      cli.log("");
+      cli.log(`  ${cli.YELLOW}${issues} issue${issues === 1 ? "" : "s"} found${cli.RESET} ${cli.DIM}(${checks} checks)${cli.RESET}\n`);
+    }
     return;
   }
 
@@ -291,7 +300,10 @@ export function runDoctor(options: DoctorOptions = {}): void {
   // if it exists. Informational, not an issue — but helps the user notice
   // the snapshot is sitting on disk eternally if they never run
   // `equip --discard-pre-cleanup-b-backup` after confirming the cutover.
-  reportCleanupBBackup();
+  // Also: if the backup exists AND legacy files still exist, that's a
+  // mid-cutover-failure signal — escalate to issue.
+  const cutoverIncomplete = reportCleanupBBackup();
+  if (cutoverIncomplete) issues++;
 
   // Summary
   cli.log("");
@@ -302,10 +314,33 @@ export function runDoctor(options: DoctorOptions = {}): void {
   }
 }
 
-function reportCleanupBBackup(): void {
+/**
+ * Surfaces the .backup-pre-cleanup-b/ snapshot informationally + escalates
+ * to an issue when the cutover appears incomplete.
+ *
+ * Returns true if the cutover-incomplete condition fires (so the caller
+ * can increment its issue counter).
+ *
+ * "Cutover incomplete" definition (architect condition 5, 2026-04-29):
+ *   backup snapshot exists (cleanup was attempted at least once)
+ *   AND legacy files still exist on disk
+ *
+ * The backup-existence gate is what differentiates "post-cutover-failed"
+ * from "pre-cutover normal" (today, before batch 2 wires auto-firing).
+ * Pre-cutover the backup doesn't exist → check doesn't fire. After a
+ * successful cutover the backup exists but legacy is gone → check
+ * doesn't fire. Only the failure case (backup exists + legacy lingered)
+ * trips it.
+ *
+ * Note: `equip --restore-pre-cleanup-b` re-creates legacy files from the
+ * backup, so the warning fires after a deliberate rollback. That's
+ * acceptable — the user just ran a recovery operation; a "migration
+ * appears incomplete" warning is genuinely informative there.
+ */
+function reportCleanupBBackup(): boolean {
   const home = require("../equip-home").getEquipHome();
   const backupDir = path.join(home, ".backup-pre-cleanup-b");
-  if (!fs.existsSync(backupDir)) return;
+  if (!fs.existsSync(backupDir)) return false;
 
   let totalBytes = 0;
   let oldestMtimeMs = Date.now();
@@ -326,9 +361,24 @@ function reportCleanupBBackup(): void {
 
   const ageDays = Math.floor((Date.now() - oldestMtimeMs) / (1000 * 60 * 60 * 24));
   const sizeMb = (totalBytes / 1024 / 1024).toFixed(1);
+
+  // Cutover-incomplete check: backup exists + legacy files still on disk.
+  const legacyAugmentsDir = path.join(home, "augments");
+  const legacyInstallationsFile = path.join(home, "installations.json");
+  const legacyStillPresent = fs.existsSync(legacyAugmentsDir) || fs.existsSync(legacyInstallationsFile);
+
+  if (legacyStillPresent) {
+    cli.log(`\n${cli.BOLD}Cleanup B migration appears incomplete${cli.RESET}`);
+    cli.warn(`  Legacy files present on disk despite Cleanup B snapshot at ~/.equip/.backup-pre-cleanup-b/.`);
+    cli.log(`  ${cli.DIM}Re-run the sidecar (the schema-v4 migration retries on next boot), or run 'equip --restore-pre-cleanup-b' to roll back to the snapshot.${cli.RESET}`);
+    cli.log(`  ${cli.DIM}Snapshot details: ${sizeMb} MB, ${ageDays} day${ageDays === 1 ? "" : "s"} old.${cli.RESET}`);
+    return true;
+  }
+
   cli.log(`\n${cli.BOLD}Pre-Cleanup-B snapshot${cli.RESET}`);
   cli.log(`  ${cli.DIM}~/.equip/.backup-pre-cleanup-b/  (${sizeMb} MB, ${ageDays} day${ageDays === 1 ? "" : "s"} old)${cli.RESET}`);
   cli.log(`  ${cli.DIM}Run 'equip --restore-pre-cleanup-b' to recover, or 'equip --discard-pre-cleanup-b-backup' to delete.${cli.RESET}`);
+  return false;
 }
 
 function sanitizePath(p: string): string {
