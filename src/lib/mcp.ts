@@ -264,6 +264,32 @@ export function installMcp(platform: DetectedPlatform, serverName: string, mcpEn
   return installMcpJson(platform, serverName, mcpEntry, dryRun, logger);
 }
 
+/**
+ * Adoption-only install path that bypasses the unmanaged-entry conflict
+ * guard (broker-production-wiring Pkg 03). Strictly internal: callable
+ * ONLY from `equip-app/sidecar/bridge.ts:augmentResolveConflict`. This
+ * is the single-writer of `forceReplace` per architect rule #9 — every
+ * other call path goes through `installMcp` and respects the guard.
+ *
+ * The naming + leading-underscore-style convention (`__forceReplace`)
+ * signals to readers that this is the deliberate exception. A callsite
+ * test asserts no other module calls into this private helper.
+ *
+ * @internal — do not use outside the bridge's resolveConflict handler.
+ */
+export function installMcpForReplaceAdopt(
+  platform: DetectedPlatform,
+  serverName: string,
+  mcpEntry: Record<string, unknown>,
+  options: { dryRun?: boolean; logger?: EquipLogger } = {},
+): ArtifactResult {
+  const { dryRun = false, logger = NOOP_LOGGER } = options;
+  if (platform.configFormat === "toml") {
+    return installMcpTomlAdopt(platform, serverName, mcpEntry, dryRun, logger);
+  }
+  return installMcpJsonAdopt(platform, serverName, mcpEntry, dryRun, logger);
+}
+
 function hasManagedInstallOnPlatform(serverName: string, platformId: string): boolean {
   const record = readInstallations().augments[serverName];
   return !!record && Array.isArray(record.platforms) && record.platforms.includes(platformId);
@@ -283,6 +309,15 @@ function conflictResult(configPath: string, serverName: string, platformId: stri
  * Uses atomic writes and detects corrupt config files.
  */
 export function installMcpJson(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger = NOOP_LOGGER): ArtifactResult {
+  return installMcpJsonInternal(platform, serverName, mcpEntry, dryRun, logger, /* forceReplace */ false);
+}
+
+/** Adoption-only variant. See installMcpForReplaceAdopt. @internal */
+function installMcpJsonAdopt(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger): ArtifactResult {
+  return installMcpJsonInternal(platform, serverName, mcpEntry, dryRun, logger, /* forceReplace */ true);
+}
+
+function installMcpJsonInternal(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger, forceReplace: boolean): ArtifactResult {
   const { configPath, rootKey, platform: platformId } = platform;
 
   const { data: existing, status, error } = safeReadJsonSync(configPath);
@@ -299,8 +334,14 @@ export function installMcpJson(platform: DetectedPlatform, serverName: string, m
   if (!config[rootKey]) config[rootKey] = {};
   const currentRoot = config[rootKey] as Record<string, unknown>;
   const hasExistingEntry = !!currentRoot[serverName];
-  if (hasExistingEntry && !hasManagedInstallOnPlatform(serverName, platformId)) {
+  // forceReplace bypasses the unmanaged-entry conflict guard. Only set
+  // by installMcpForReplaceAdopt (broker-production-wiring Pkg 03 — the
+  // explicit user-consented adoption path).
+  if (hasExistingEntry && !forceReplace && !hasManagedInstallOnPlatform(serverName, platformId)) {
     return conflictResult(configPath, serverName, platformId, "json", logger);
+  }
+  if (hasExistingEntry && forceReplace) {
+    logger.info("MCP entry adopted (forceReplace)", { configPath, serverName, platformId });
   }
   currentRoot[serverName] = mcpEntry;
 
@@ -329,6 +370,15 @@ export function installMcpJson(platform: DetectedPlatform, serverName: string, m
  * Uses atomic writes.
  */
 export function installMcpToml(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger = NOOP_LOGGER): ArtifactResult {
+  return installMcpTomlInternal(platform, serverName, mcpEntry, dryRun, logger, /* forceReplace */ false);
+}
+
+/** Adoption-only variant. See installMcpForReplaceAdopt. @internal */
+function installMcpTomlAdopt(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger): ArtifactResult {
+  return installMcpTomlInternal(platform, serverName, mcpEntry, dryRun, logger, /* forceReplace */ true);
+}
+
+function installMcpTomlInternal(platform: DetectedPlatform, serverName: string, mcpEntry: Record<string, unknown>, dryRun: boolean, logger: EquipLogger, forceReplace: boolean): ArtifactResult {
   const { configPath, rootKey, platform: platformId } = platform;
 
   let existing = "";
@@ -347,10 +397,13 @@ export function installMcpToml(platform: DetectedPlatform, serverName: string, m
 
   const tableHeader = `[${rootKey}.${serverName}]`;
   const hasExistingEntry = existing.includes(tableHeader);
-  if (hasExistingEntry && !hasManagedInstallOnPlatform(serverName, platformId)) {
+  // forceReplace bypasses the unmanaged-entry conflict guard. Only set
+  // by installMcpForReplaceAdopt — the explicit adoption path.
+  if (hasExistingEntry && !forceReplace && !hasManagedInstallOnPlatform(serverName, platformId)) {
     return conflictResult(configPath, serverName, platformId, "toml", logger);
   }
   if (hasExistingEntry) {
+    if (forceReplace) logger.info("MCP entry adopted (forceReplace)", { configPath, serverName, platformId });
     existing = removeTomlEntry(existing, rootKey, serverName);
   }
 

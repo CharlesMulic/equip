@@ -438,6 +438,18 @@ export {
   findOrphanHookEntries,
 };
 
+// broker-production-wiring Pkg 03 — adoption flow.
+// `installMcpForReplaceAdopt` is the single-writer adopt-mode install
+// (per architect rule #9); only the bridge's resolveConflict handler
+// should call it. Validation that no other module calls it lives in
+// `equip/test/adoption-single-writer.test.js`.
+export { installMcpForReplaceAdopt } from "./lib/mcp";
+export {
+  writeAdoptionSnapshot,
+  redactSecrets,
+} from "./lib/adoption-snapshot";
+export type { AdoptionSnapshot } from "./lib/adoption-snapshot";
+
 export type {
   DetectedPlatform,
   PlatformDefinition,
