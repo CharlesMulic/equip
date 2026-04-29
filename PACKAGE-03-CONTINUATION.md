@@ -2,7 +2,22 @@
 
 This file lives on the `feat/dual-write-retirement` branch. Read it before resuming Package 03 (lib migration) work.
 
-## Status (handoff point, 2026-04-29 overnight autonomous run)
+## Status (updated 2026-04-29 — case-by-case migration done)
+
+**9 pure-read sites migrated** across 8 files. **20 read-modify-write sites deferred to Package 06** (when legacy modules are deleted entirely + the migration is forced + well-bounded).
+
+Migration commits on `feat/dual-write-retirement`:
+- `35b8361` — 7 pure-read sites (skills.ts, mcp.ts, reconcile.ts × 2, migrate.ts, update.ts, doctor.ts)
+- `d5d88ff` — 2 pure-read sites (platform-state.ts, install.ts:321 platform-list lookup)
+- `f4cd7aa` — 8-test safety net pinning the dual-write mirror's registry-state-field routing (protects the deferred RMW sites)
+
+Tests at this point: 854 pass / 0 fail / 2 skipped on equip suite.
+
+**Remaining 20 sites (all RMW-coupled, deferred to Package 06):**
+- `src/lib/registry-refresh.ts` — 16 sites in `refreshAugmentFromRegistry` + `applyRegistryRetraction`. Each function reads the legacy `existingDef`, mutates several fields (mix of sovereign + registry-cached), then writes back. Splitting reads alone forces awkward read-twice patterns; splitting writes requires careful per-field routing between defs/cache stores. The dual-write mirror's `legacyRegistryToCache` correctly routes registry-tracking field mutations into the new cache/ store (verified by `test/dual-write-registry-state-routing.test.js`), so deferring these sites until Package 06 is safe.
+- `src/lib/commands/install.ts` — 4 sites (lines 251 + 260 = baseWeight/loadedWeight RMW; lines 308 + 313 = `writeAugmentDefAndApply` boundary which writes def + immediately re-reads). Same RMW-coupling rationale.
+
+## Original handoff content (from 2026-04-29 earlier overnight run) follows ─────
 
 **Done:**
 - `Phase A` (plan polish + ENG-0063 ledger + test-isolation prepass) — landed to `main`
