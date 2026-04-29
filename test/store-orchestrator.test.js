@@ -197,3 +197,115 @@ test("removePlatformArtifacts callback is optional (no install record → no cal
   assert.equal(outcome, "cache-deleted");
   assert.equal(callbackFired, false, "callback not fired when there's no install record");
 });
+
+// ─────────────────────────────────────────────────────────────
+// promoteWrappedToLocal — wrapped → local kind transition
+// ─────────────────────────────────────────────────────────────
+
+function planWrapped(name, overrides = {}) {
+  return {
+    name,
+    kind: "wrapped",
+    createdAt: "2026-04-28T00:00:00.000Z",
+    updatedAt: "2026-04-28T00:00:00.000Z",
+    title: name,
+    description: `Wrapped ${name}`,
+    requiresAuth: false,
+    skills: [],
+    baseWeight: 0,
+    loadedWeight: 0,
+    wrappedFrom: { type: "mcp", platform: "cursor" },
+    ...overrides,
+  };
+}
+
+function planLocal(name, overrides = {}) {
+  return {
+    name,
+    kind: "local",
+    createdAt: "2026-04-28T00:00:00.000Z",
+    updatedAt: "2026-04-28T00:00:00.000Z",
+    title: name,
+    description: `Local ${name}`,
+    requiresAuth: false,
+    skills: [],
+    baseWeight: 0,
+    loadedWeight: 0,
+    ...overrides,
+  };
+}
+
+test("promoteWrappedToLocal: not-found when no def exists", async () => {
+  await freshHome();
+  const result = orchestratorMod.promoteWrappedToLocal("nonexistent");
+  assert.equal(result.outcome, "not-found");
+  assert.equal(result.def, null);
+});
+
+test("promoteWrappedToLocal: already-local when def is already kind=local", async () => {
+  await freshHome();
+  defsStoreMod.writeDef(planLocal("already-local-aug"));
+  const result = orchestratorMod.promoteWrappedToLocal("already-local-aug");
+  assert.equal(result.outcome, "already-local");
+  assert.equal(result.def?.kind, "local");
+  assert.equal(result.def?.name, "already-local-aug");
+});
+
+test("promoteWrappedToLocal: not-found when def is overlay (cannot promote modded registry)", async () => {
+  await freshHome();
+  // Overlay defs are conceptually registry-augment mods, not promotable.
+  defsStoreMod.writeDef({
+    name: "overlay-aug",
+    kind: "overlay",
+    overlay_of: "overlay-aug",
+    createdAt: "2026-04-28T00:00:00.000Z",
+    updatedAt: "2026-04-28T00:00:00.000Z",
+  });
+  const result = orchestratorMod.promoteWrappedToLocal("overlay-aug");
+  assert.equal(result.outcome, "not-found",
+    "overlay → caller's responsibility to error; orchestrator treats as not-found");
+});
+
+test("promoteWrappedToLocal: wrapped def becomes local with all content preserved", async () => {
+  await freshHome();
+  const wrapped = planWrapped("promote-me", {
+    title: "Promote Me Title",
+    description: "Original description",
+    transport: "http",
+    serverUrl: "https://example.com/promote",
+    rules: { content: "rules content", version: "1.0.0", marker: "promote-me" },
+    skills: [{ name: "skill-a", files: [{ path: "SKILL.md", content: "skill body" }] }],
+    baseWeight: 100,
+    loadedWeight: 200,
+    wrappedFrom: { type: "mcp", platform: "cursor", path: "/some/path" },
+  });
+  defsStoreMod.writeDef(wrapped);
+
+  const result = orchestratorMod.promoteWrappedToLocal("promote-me");
+  assert.equal(result.outcome, "promoted");
+  assert.equal(result.def?.kind, "local");
+  assert.equal(result.def?.name, "promote-me");
+  assert.equal(result.def?.title, "Promote Me Title");
+  assert.equal(result.def?.serverUrl, "https://example.com/promote");
+  assert.deepEqual(result.def?.rules, { content: "rules content", version: "1.0.0", marker: "promote-me" });
+  assert.equal(result.def?.skills?.[0]?.name, "skill-a");
+  assert.equal(result.def?.baseWeight, 100);
+  assert.equal(result.def?.loadedWeight, 200);
+  // updatedAt advances on promotion.
+  assert.notEqual(result.def?.updatedAt, wrapped.updatedAt);
+
+  // Disk reflects the promotion.
+  const onDisk = defsStoreMod.readDef("promote-me");
+  assert.equal(onDisk?.kind, "local");
+});
+
+test("promoteWrappedToLocal: idempotent — re-running on already-promoted def is already-local", async () => {
+  await freshHome();
+  defsStoreMod.writeDef(planWrapped("twice"));
+
+  const first = orchestratorMod.promoteWrappedToLocal("twice");
+  assert.equal(first.outcome, "promoted");
+
+  const second = orchestratorMod.promoteWrappedToLocal("twice");
+  assert.equal(second.outcome, "already-local");
+});

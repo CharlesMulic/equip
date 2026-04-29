@@ -217,3 +217,88 @@ function freezeFromOverlayOnly(overlay: OverlayDef, retractedAt: string): LocalD
     lastUserActionAt: overlay.lastUserActionAt,
   };
 }
+
+// ─── Wrapped → Local promotion orchestrator ────────────────────
+//
+// One-way transition: a `kind: "wrapped"` def becomes `kind: "local"`.
+// `mutateDef` rejects kind changes (identity invariant); the orchestrator
+// pattern handles the deleteDef + writeDef sequence with proper locking.
+//
+// Architect note (Pkg 06 batch 2 plan): bridge.ts:augmentPromote needs
+// this orchestrator post-Pkg-06-batch-2g (when augment-defs.ts's
+// promoteWrappedToLocal disappears). Lands in batch 2c so the bridge
+// migration has it available.
+//
+// Idempotent: if the def is already local (or doesn't exist), returns
+// the existing state without mutation.
+
+export type PromoteOutcome = "promoted" | "already-local" | "not-found";
+
+export interface PromoteResult {
+  outcome: PromoteOutcome;
+  /** The post-operation def (LocalDef on success/already-local; null on not-found). */
+  def: LocalDef | null;
+}
+
+/**
+ * Promote a wrapped augment to local. Preserves all content + provenance
+ * (`wrappedFrom` carries through as historical context). Sovereign content
+ * is written first; the wrapped marker is removed atomically via the
+ * delete-then-write sequence.
+ */
+export function promoteWrappedToLocal(name: string): PromoteResult {
+  const releaseLock = acquireLock();
+  try {
+    const existing = readDef(name);
+    if (!existing) {
+      return { outcome: "not-found", def: null };
+    }
+    if (existing.kind === "local") {
+      return { outcome: "already-local", def: existing };
+    }
+    if (existing.kind !== "wrapped") {
+      // overlay → can't promote (overlay is conceptually a registry-augment
+      // mod, not a wrapped one). Treat as not-found from the promotion API's
+      // perspective; caller should error.
+      return { outcome: "not-found", def: null };
+    }
+    const now = new Date().toISOString();
+    const promoted: LocalDef = {
+      name: existing.name,
+      kind: "local",
+      createdAt: existing.createdAt,
+      updatedAt: now,
+      title: existing.title,
+      subtitle: existing.subtitle,
+      description: existing.description,
+      rarity: existing.rarity,
+      flavorText: existing.flavorText,
+      transport: existing.transport,
+      serverUrl: existing.serverUrl,
+      stdio: existing.stdio,
+      envKey: existing.envKey,
+      requiresAuth: existing.requiresAuth,
+      auth: existing.auth,
+      rules: existing.rules,
+      skills: existing.skills,
+      hooks: existing.hooks,
+      hookDir: existing.hookDir,
+      baseWeight: existing.baseWeight,
+      loadedWeight: existing.loadedWeight,
+      primaryCategory: existing.primaryCategory,
+      categories: existing.categories,
+      tags: existing.tags,
+      homepage: existing.homepage,
+      repository: existing.repository,
+      license: existing.license,
+      lastUserActionAt: existing.lastUserActionAt,
+    };
+    // delete + write — mutateDef rejects kind changes, so use the raw
+    // sequence with the lock held for atomicity.
+    deleteDef(name);
+    writeDef(promoted);
+    return { outcome: "promoted", def: promoted };
+  } finally {
+    releaseLock();
+  }
+}
