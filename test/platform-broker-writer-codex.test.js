@@ -51,13 +51,19 @@ describe("Package 04 — Codex writeBrokerConfig: shape", () => {
     assert.equal(args[idx + 1], "notion-mcp");
   });
 
-  it("forwards shimExtraArgs after --augment <name>", () => {
+  it("forwards shimExtraArgs after --shim --augment <name>", () => {
     const result = callHook({
       augmentName: "notion-mcp",
       shimExtraArgs: ["--log-level", "debug"],
     });
     const args = result.entry.args;
-    assert.deepEqual(args, ["--augment", "notion-mcp", "--log-level", "debug"]);
+    assert.deepEqual(args, ["--shim", "--augment", "notion-mcp", "--log-level", "debug"]);
+  });
+
+  it("entry.args[0] is --shim (single-binary subcommand dispatch)", () => {
+    const result = callHook({ augmentName: "notion-mcp" });
+    assert.equal(result.entry.args[0], "--shim",
+      "broker-production-wiring Pkg 01: --shim selects shim mode in equip-sidecar dispatcher");
   });
 
   it("returns a human-readable note for `equip doctor` output", () => {

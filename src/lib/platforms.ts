@@ -283,6 +283,39 @@ function getClaudeCodeVersion(): string | null {
   } catch { return null; }
 }
 
+// ─── Augment-name validation for broker-shim args ───────────
+//
+// Defense against argv-injection via a malicious registry augment name
+// (broker-production-wiring Pkg 01, sec-pen requirement). The shim is
+// spawned by every MCP-supporting platform via its config's `command`
+// + `args` fields; an augment name containing a newline / quote /
+// leading `--` could escape its argv slot on platforms that
+// shell-quote inconsistently. Allowlist is also enforced server-side
+// at registry submit time (separate concern, backend), and inline in
+// the shim's argv parser as defense in depth.
+//
+// Regex: starts with [a-z0-9], 2-64 chars total, [a-z0-9_-] only.
+//   - Lowercase only (no case-collision attacks via Unicode normalization)
+//   - No leading dash (avoids being parsed as a CLI flag)
+//   - No newline / quote / shell-special chars
+
+const AUGMENT_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
+
+/**
+ * Throws if the augment name is unsafe to embed in shim argv. Called
+ * from each writeBrokerConfig strategy hook before constructing the
+ * platform's MCP-config entry.
+ */
+export function assertValidAugmentNameForShim(name: string): void {
+  if (!AUGMENT_NAME_RE.test(name)) {
+    throw new Error(
+      `Augment name "${name}" is not safe for broker-shim argv. ` +
+      `Names must match ${AUGMENT_NAME_RE.source} (lowercase, 2-64 chars, ` +
+      `[a-z0-9_-] only, no leading dash).`
+    );
+  }
+}
+
 // ─── Registry ───────────────────────────────────────────────
 
 const CLAUDE_CODE_HOOKS_EVENTS = [
@@ -344,14 +377,17 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // not part of this hook (it would only matter for legacy direct-
     // mode auth entries, out of scope for broker writers).
     brokerStrategy: {
-      writeBrokerConfig: (augmentName, endpoint) => ({
-        entry: {
-          command: endpoint.shimBinaryPath,
-          args: ["--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
-        },
-        transport: "stdio",
-        note: "broker-managed; first-time OAuth runs in equip-app",
-      }),
+      writeBrokerConfig: (augmentName, endpoint) => {
+        assertValidAugmentNameForShim(augmentName);
+        return {
+          entry: {
+            command: endpoint.shimBinaryPath,
+            args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+          },
+          transport: "stdio",
+          note: "broker-managed; first-time OAuth runs in equip-app",
+        };
+      },
     },
   }],
   ["cursor", {
@@ -400,14 +436,17 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // WWW-Authenticate); deferred until loopback-HTTP is actually wanted
     // (stdio is the strongest path; mcp-remote is exact prior art).
     brokerStrategy: {
-      writeBrokerConfig: (augmentName, endpoint) => ({
-        entry: {
-          command: endpoint.shimBinaryPath,
-          args: ["--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
-        },
-        transport: "stdio",
-        note: "broker-managed; first-time OAuth runs in equip-app",
-      }),
+      writeBrokerConfig: (augmentName, endpoint) => {
+        assertValidAugmentNameForShim(augmentName);
+        return {
+          entry: {
+            command: endpoint.shimBinaryPath,
+            args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+          },
+          transport: "stdio",
+          note: "broker-managed; first-time OAuth runs in equip-app",
+        };
+      },
     },
   }],
   ["windsurf", {
@@ -527,14 +566,17 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // Codex's perspective there is no OAuth at all — the shim mediates
     // and the broker holds credentials.
     brokerStrategy: {
-      writeBrokerConfig: (augmentName, endpoint) => ({
-        entry: {
-          command: endpoint.shimBinaryPath,
-          args: ["--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
-        },
-        transport: "stdio",
-        note: "broker-managed; first-time OAuth runs in equip-app",
-      }),
+      writeBrokerConfig: (augmentName, endpoint) => {
+        assertValidAugmentNameForShim(augmentName);
+        return {
+          entry: {
+            command: endpoint.shimBinaryPath,
+            args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+          },
+          transport: "stdio",
+          note: "broker-managed; first-time OAuth runs in equip-app",
+        };
+      },
     },
   }],
   ["gemini-cli", {
