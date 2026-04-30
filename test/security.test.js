@@ -557,42 +557,11 @@ describe("isTrustedCredentialHost", () => {
 // ═══════════════════════════════════════════════════════════════
 // Augment name validation at filesystem boundaries
 // ═══════════════════════════════════════════════════════════════
-
-describe("augment-defs: name validation at filesystem boundary", () => {
-  beforeEach(setupTempHome);
-  afterEach(teardownTempHome);
-
-  const { readAugmentDef, writeAugmentDef, hasAugmentDef } = require("../dist/lib/augment-defs");
-
-  it("rejects reading augment with path traversal name", () => {
-    assert.throws(() => readAugmentDef("../../../etc/passwd"), /Invalid augment name/);
-  });
-
-  it("rejects writing augment with path traversal name", () => {
-    assert.throws(() => writeAugmentDef({
-      name: "../../../tmp/evil",
-      source: "local",
-      title: "Evil",
-      description: "",
-      requiresAuth: false,
-      skills: [],
-      baseWeight: 0,
-      loadedWeight: 0,
-      modded: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }), /Invalid augment name/);
-  });
-
-  it("rejects hasAugmentDef with path traversal name", () => {
-    assert.throws(() => hasAugmentDef("../../.ssh/id_rsa"), /Invalid augment name/);
-  });
-
-  it("allows valid augment names", () => {
-    assert.doesNotThrow(() => readAugmentDef("my-tool"));
-    assert.doesNotThrow(() => hasAugmentDef("prior"));
-  });
-});
+// Coverage moved to the journal storage layer in storage-redesign Phase A4.
+// Content blobs are stored by SHA-256 of the canonical JSON, not by augment
+// name, so path-traversal in names cannot reach the filesystem. Name-based
+// path validation happens in storage/datastore.ts when journal callers pass
+// names through to platform writers (see storage/_test-helpers.js coverage).
 
 // ═══════════════════════════════════════════════════════════════
 // Rules content hash versioning

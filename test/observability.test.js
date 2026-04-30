@@ -16,7 +16,7 @@ const { installRules } = require("../dist/lib/rules");
 const { installHooks } = require("../dist/lib/hooks");
 const { installSkill } = require("../dist/lib/skills");
 const { safeReadJsonSync } = require("../dist/lib/fs");
-const { readInstallations } = require("../dist/lib/installations");
+const { JsonStore } = require("../dist/lib/storage/datastore");
 
 // ─── Test Helpers ───────────────────────────────────────────
 
@@ -258,32 +258,32 @@ describe("Blind spot #4: TOML read failure handling", () => {
 
 // ─── Blind Spot #5: State corruption ───────────────────────
 
-describe("Blind spot #5: corrupt installations.json", () => {
-  it("returns empty installations on corrupt file", () => {
+describe("Blind spot #5: corrupt journal", () => {
+  it("returns empty resolved view when journal lines fail to parse", () => {
     const os = require("os");
-    const statePath = path.join(os.homedir(), ".equip", "installations.json");
+    const journalPath = path.join(os.homedir(), ".equip", "storage", "intents.jsonl");
 
     // Save current state
     let originalContent = null;
-    try { originalContent = fs.readFileSync(statePath, "utf-8"); } catch {}
+    try { originalContent = fs.readFileSync(journalPath, "utf-8"); } catch {}
 
-    // Write corrupt state
-    const dir = path.dirname(statePath);
+    // Write corrupt state — non-JSON line + valid-shape but invalid-intent line
+    const dir = path.dirname(journalPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(statePath, "corrupt state {{{");
+    fs.writeFileSync(journalPath, "this is not json\n{\"type\":\"unknown-intent\",\"clock\":1}\n");
 
-    // readInstallations uses safeReadJsonSync — returns empty on corrupt
-    const inst = readInstallations();
-    assert.equal(inst.lastUpdated, "");
-    assert.deepEqual(inst.augments, {});
+    // Materializer skips unparseable + unrecognized lines without throwing.
+    // Production resilience: a corrupted journal must not brick the user's
+    // entire install — surviving lines still materialize.
+    const resolved = JsonStore.listResolved();
+    assert.deepEqual(resolved, []);
 
     // Restore original state
     if (originalContent) {
-      fs.writeFileSync(statePath, originalContent);
+      fs.writeFileSync(journalPath, originalContent);
     } else {
-      try { fs.unlinkSync(statePath); } catch {}
+      try { fs.unlinkSync(journalPath); } catch {}
     }
-    try { fs.unlinkSync(statePath + ".corrupt.bak"); } catch {}
   });
 });
 
