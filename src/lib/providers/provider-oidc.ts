@@ -173,7 +173,21 @@ export class OidcProvider implements Provider {
     }
 
     if (!response.ok || !body.access_token) {
-      const description = (body.error_description || body.error || `HTTP ${response.status}`) as string;
+      // Coerce description to string defensively. The CG3 API can return
+      // either RFC-6749 flat `{error, error_description}` (the spec shape
+      // /token is supposed to use) OR the wrapped `{ok: false, error: {code,
+      // message, ...}}` envelope used by other routes when an exception
+      // bubbles past the route handler. The latter has `error` as an
+      // object, which broke `description.includes(...)` with TypeError
+      // "undefined is not a function" on the broker hot path.
+      const rawDescription =
+        (typeof body.error_description === "string" && body.error_description) ||
+        (typeof body.error === "string" && body.error) ||
+        (body.error && typeof (body.error as { message?: unknown }).message === "string"
+          ? (body.error as { message: string }).message
+          : null) ||
+        `HTTP ${response.status}`;
+      const description = String(rawDescription);
       // Map common server-side errors to actionable codes.
       let code = "refresh_failed";
       if (description === "consent_required" || description === "grant_acceptance_required") {
