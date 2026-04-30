@@ -5,8 +5,6 @@
 // Comprehensive refactor of auth-engine.ts to use these types is broker
 // plan Phase 1 — explicitly out of scope for this initiative.
 //
-// See ADR: equip-app/planning/ADR-cross-platform-strategy-pattern.md
-//
 // Zero non-Node dependencies; pure types + minimal runtime helpers.
 
 import type { AuthConfig, StoredCredential } from "./auth-engine";

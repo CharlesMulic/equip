@@ -126,8 +126,8 @@ class Augment {
    *
    * The hook output for the platform is provided by
    * `PlatformDefinition.brokerStrategy.writeBrokerConfig` (Codex first, then
-   * Claude Code + Cursor in Pkg 05). The caller (typically equip-app) injects
-   * `shimBinaryPath` at call time — equip lib does NOT know the path.
+   * Claude Code + Cursor in Pkg 05). The caller injects `shimBinaryPath`
+   * at call time — equip lib does NOT know the path.
    *
    * Returns a `mcp` ArtifactResult with `errorCode: "BROKER_NOT_SUPPORTED"`
    * when the platform doesn't declare broker support; the caller should fall
@@ -406,8 +406,8 @@ export interface VerifyResult {
 // ─── Public API ─────────────────────────────────────────────
 // Lean surface for augment authors and setup scripts.
 // Internal modules (state management, installations, platform scans,
-// snapshots, credentials, etc.) are NOT exported here — the sidecar
-// and CLI import internal modules directly from src/lib/*.
+// snapshots, credentials, etc.) are NOT exported here — callers that
+// need them import directly from src/lib/*.
 
 export {
   // Core
@@ -420,8 +420,7 @@ export {
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
-  // Platform broker capability accessors (Package 01 — see ADR
-  // equip-app/planning/ADR-cross-platform-strategy-pattern.md)
+  // Platform broker capability accessors (Package 01)
   getBrokerCapabilities,
   platformSupportsBroker,
   getBrokerStrategy,
@@ -488,8 +487,8 @@ export { assertNeverDelivery } from "./lib/auth-broker-types";
 
 // Broker-mode Provider implementations. The five auth modes (none,
 // api_key, oidc, oauth, oauth_to_api_key) live here because they're
-// pure auth-protocol logic with no equip-app-specific dependencies;
-// equip-app's broker daemon constructs and registers them at startup.
+// pure auth-protocol logic; broker runtimes construct and register
+// them at startup.
 export { NoneProvider } from "./lib/providers/provider-none";
 export {
   ApiKeyProvider,
@@ -512,8 +511,8 @@ export type {
 export { OAuthToApiKeyProvider } from "./lib/providers/provider-oauth-to-api-key";
 export type { OAuthToApiKeyProviderOptions } from "./lib/providers/provider-oauth-to-api-key";
 
-// Telemetry counter port (Pkg 06b). Counter names + valid label values
-// are stable contract here; in-memory storage lives in equip-app/sidecar.
+// Telemetry counter port. Counter names + valid label values are the
+// stable contract here; storage is the caller's concern.
 export {
   noopCounter,
   COUNTER_NAMES,

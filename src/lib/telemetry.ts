@@ -1,18 +1,15 @@
-// Counter port for broker-mode telemetry (Pkg 06b of equip-mcp-login-continuity-gate).
+// Counter port for broker-mode telemetry.
 //
-// Boundary discipline (architect review 2026-04-27):
+// Boundary discipline:
 //   - This file owns the *contract* (counter names + valid label keys).
-//   - In-memory counter STORAGE lives in equip-app/sidecar/broker/metrics.ts.
-//   - Emit sites can be in either layer (equip lib or equip-app), but
-//     emission goes through the Counter port — no direct store access.
-//   - Standalone equip CLI gets `noopCounter` (no telemetry).
-//   - equip-app's bridge supplies the sidecar's real counter implementation
-//     when invoking install paths.
+//   - Counter storage is whoever wires the port. Standalone CLI gets
+//     `noopCounter` (no telemetry). Other callers can pass their own
+//     implementation through the install/apply opts.
+//   - Emit sites are inside this lib only; collection is downstream.
 //
-// Why a port and not an exported counter object: equip lib is published to
-// npm and used outside equip-app. Hardcoding a counter store here would
-// either leak metrics or carry an import dependency on equip-app. The port
-// is the ergonomic mirror of the existing EquipLogger pattern.
+// Why a port and not an exported counter object: equip lib has no
+// awareness of who collects metrics. The port is the ergonomic mirror
+// of the existing EquipLogger pattern.
 
 /**
  * Bump a named counter by 1, optionally tagged with labels.

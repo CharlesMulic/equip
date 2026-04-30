@@ -75,9 +75,9 @@ cli.log(`\n${cli.BOLD}unequip ${toolName}${cli.RESET}`);
 if (dryRun) cli.warn("Dry run — no files will be modified");
 cli.log("");
 
-// Take the equip-wide lock for the whole uninstall. Without this, a concurrent
-// `equip <other>` (or sidecar reconcile) can race against our deletes, and an
-// adversarial process could swap files between our ownership check and unlink.
+// Take the equip-wide lock for the whole uninstall. Without this, any
+// concurrent equip writer can race against our deletes, and an adversarial
+// process could swap files between our ownership check and unlink.
 const releaseLock = acquireLock();
 
 let removed = 0;

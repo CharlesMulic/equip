@@ -266,16 +266,16 @@ export function installMcp(platform: DetectedPlatform, serverName: string, mcpEn
 
 /**
  * Adoption-only install path that bypasses the unmanaged-entry conflict
- * guard (broker-production-wiring Pkg 03). Strictly internal: callable
- * ONLY from `equip-app/sidecar/bridge.ts:augmentResolveConflict`. This
- * is the single-writer of `forceReplace` per architect rule #9 — every
- * other call path goes through `installMcp` and respects the guard.
+ * guard. Strictly internal: callable only from a deliberate adoption-
+ * resolve handler. The single-writer of `forceReplace` per architect
+ * rule #9 — every other call path goes through `installMcp` and
+ * respects the guard.
  *
  * The naming + leading-underscore-style convention (`__forceReplace`)
  * signals to readers that this is the deliberate exception. A callsite
  * test asserts no other module calls into this private helper.
  *
- * @internal — do not use outside the bridge's resolveConflict handler.
+ * @internal — adoption resolve only.
  */
 export function installMcpForReplaceAdopt(
   platform: DetectedPlatform,

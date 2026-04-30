@@ -26,13 +26,12 @@ import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
 // ─── apply: put a def on platforms ─────────────────────────────────────────
 //
 // "Apply" is the second half of the equip refresh+apply pipeline:
-//   - refresh: network or local-author edit writes to ~/.equip/augments/<name>.json
-//   - apply: that def file → installed platform copies (this function)
+//   - refresh: network or local-author edit produces a def
+//   - apply: that def → installed platform copies (this function)
 //
 // Callers are runInstall (first-time install with auth resolution + platform
-// discovery upstream of apply) and the propagation paths from
-// operations/initiatives/equip-augment-update-propagation/ (registry refresh,
-// equip-app authoring save, platform-enable backfill, equip apply CLI).
+// discovery upstream of apply) and update-propagation paths (registry refresh,
+// authoring save, platform-enable backfill, equip apply CLI).
 //
 // Each caller is responsible for:
 //   - Constructing the Augment instance from a def (typically via
@@ -64,8 +63,8 @@ export interface ApplyOptions {
   report?: InstallReportBuilder;
   /**
    * Optional counter port for telemetry. Defaults to no-op when absent.
-   * equip-app's bridge supplies the sidecar's metrics-store counter so
-   * broker-mode installs are observable; standalone CLI omits it.
+   * Callers that need observability supply their own counter; the CLI
+   * runs without one.
    */
   counter?: Counter;
 }
@@ -138,10 +137,9 @@ export function apply(
           report.addResult(p.platform, result);
           if (result.success) {
             cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);
-            // Telemetry: this install path is direct-mode by definition (apply
-            // doesn't dispatch to installMcpBroker). Broker-mode installs go
-            // through equip-app's bridge with its own emit site; keeping the
-            // call here ensures direct-mode is also counted.
+            // Telemetry: this install path is direct-mode by definition
+            // (apply doesn't dispatch to installMcpBroker). Broker-mode
+            // installs go through their own paths and emit independently.
             if (!dryRun) counter(COUNTER_NAMES.INSTALL_MODE_TOTAL, { mode: "direct", platform: p.platform });
           } else {
             cli.fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
@@ -248,7 +246,7 @@ export function apply(
 // Use this helper instead of plain `writeAugmentDef` whenever a user-driven
 // edit lands a new def state and the change should propagate immediately to
 // installed platform copies. Examples:
-//   - equip-app authoring save (the canonical "Save" button)
+//   - authoring "Save" flows
 //   - future publisher draft commit-to-live flows
 //   - CLI `equip apply <augment>` (Package 04 — falls through to apply directly)
 //
@@ -422,10 +420,9 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   }
 
   // ── Apply ──
-  // The install-loop, state-reconciliation, and token-weight-recompute half
-  // lives in `apply()` so it can be reused by registry-refresh, equip-app
-  // authoring save, platform-enable backfill, and the equip apply CLI command
-  // (operations/initiatives/equip-augment-update-propagation/).
+  // The install-loop and state-reconciliation half lives in `apply()` so
+  // it can be reused by registry-refresh, authoring save, platform-enable
+  // backfill, and the equip apply CLI command.
   const report = apply(equip, toolDef, platforms, apiKey, {
     dryRun,
     takeover: parsedArgs.takeover,

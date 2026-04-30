@@ -86,8 +86,8 @@ export async function refreshAugmentFromRegistry(
 
   let releaseLock: (() => void) | null = null;
   try {
-    // Serialize daemon and one-shot sidecar mutations against the shared on-disk
-    // registry/install state so we don't lose concurrent read-modify-write updates.
+    // Serialize concurrent refreshes against the shared on-disk registry/install
+    // state so we don't lose concurrent read-modify-write updates.
     releaseLock = await acquireMutationLock();
 
     const now = new Date().toISOString();
