@@ -136,7 +136,7 @@ export interface ParsedArgs {
   adopt: boolean;
   /** `equip doctor --fix-orphan-hooks` — prune settings hook entries pointing at missing scripts. */
   fixOrphanHooks: boolean;
-  /** `equip --restore-pre-cleanup-b --force` — overwrite existing legacy files during recovery. */
+  /** Generic --force flag for any command that opts in. */
   force: boolean;
 }
 

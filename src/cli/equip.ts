@@ -22,8 +22,6 @@ import { runInstall } from "../lib/commands/install.js";
 import { runReauth } from "../lib/commands/reauth.js";
 import { runRefresh, autoRefreshExpired } from "../lib/commands/refresh.js";
 import { runSnapshot, runSnapshots, runRestore } from "../lib/commands/snapshot.js";
-import { runRestorePreCleanupB } from "../lib/commands/restore-pre-cleanup-b.js";
-import { runDiscardPreCleanupBBackup } from "../lib/commands/discard-pre-cleanup-b-backup.js";
 import { detectPlatforms } from "../lib/detect.js";
 import { ensureInitialSnapshots } from "../lib/snapshots.js";
 import { reconcileState } from "../lib/reconcile.js";
@@ -314,10 +312,7 @@ async function main(): Promise<void> {
   const parsedArgs = parseArgs(rawArgs.slice(1));
 
   // Auto-refresh expired OAuth tokens (best effort).
-  // Skip for recovery commands — the user may be in a borked state where
-  // network refresh would fail or further mutate the broken install.
-  if (cmd !== "refresh" && cmd !== "reauth" && cmd !== "demo"
-      && cmd !== "--restore-pre-cleanup-b" && cmd !== "--discard-pre-cleanup-b-backup") {
+  if (cmd !== "refresh" && cmd !== "reauth" && cmd !== "demo") {
     await autoRefreshExpired(parsedArgs.verbose);
   }
 
@@ -332,8 +327,6 @@ async function main(): Promise<void> {
     case "uninstall": cmdUninstall(parsedArgs._); break;
     case "reauth":    await runReauth(parsedArgs); break;
     case "refresh":   await runRefresh(parsedArgs); break;
-    case "--restore-pre-cleanup-b": runRestorePreCleanupB(parsedArgs); break;
-    case "--discard-pre-cleanup-b-backup": runDiscardPreCleanupBBackup(parsedArgs); break;
     default:          await dispatchAugment(cmd, parsedArgs); break;
   }
 }
