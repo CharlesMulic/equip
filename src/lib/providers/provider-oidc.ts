@@ -67,11 +67,17 @@ export class OidcProvider implements Provider {
   }
 
   async acquire(opts: ProviderAcquireOptions): Promise<ProviderResult<StoredCredential>> {
-    return this.tokenExchange(opts.augmentName, /* consent= */ true);
+    return this.tokenExchange(opts.augmentName, /* consent= */ true, {
+      audience: opts.auth.audience,
+      scopes: opts.auth.scopes,
+    });
   }
 
   async refresh(opts: ProviderRefreshOptions): Promise<ProviderResult<StoredCredential>> {
-    return this.tokenExchange(opts.augmentName, /* consent= */ false);
+    return this.tokenExchange(opts.augmentName, /* consent= */ false, {
+      audience: opts.current.audience,
+      scopes: opts.current.scopes,
+    });
   }
 
   async validate(_opts: ProviderValidateOptions): Promise<ProviderResult<void>> {
@@ -93,10 +99,17 @@ export class OidcProvider implements Provider {
   /**
    * Core RFC 8693 token-exchange flow. Used for both acquire (with
    * consent_action=accept) and refresh (without).
+   *
+   * mcp-resource-server-cutover Pkg 03: audience + scopes plumbed
+   * through from auth-config (acquire) or stored credential (refresh).
+   * Falls back to legacy values (audience=augmentName, scope=identity:read)
+   * during the W1 window when registry rows haven't been migrated to
+   * the uniform shape yet.
    */
   private async tokenExchange(
     augmentName: string,
     includeConsent: boolean,
+    overrides: { audience?: string; scopes?: string[] } = {},
   ): Promise<ProviderResult<StoredCredential>> {
     const session = await this.readSession();
     if (!session?.accessToken) {
@@ -116,13 +129,23 @@ export class OidcProvider implements Provider {
 
     const tokenUrl = session.tokenUrl ?? DEFAULT_TOKEN_URL;
     const clientId = session.clientId ?? DEFAULT_CLIENT_ID;
+
+    // W1 fallbacks: if the registry def doesn't carry the new uniform
+    // shape yet, audience defaults to augmentName and scope defaults to
+    // identity:read (the pre-cutover behavior). Pkg 05 cutover migrates
+    // all registry rows; the fallbacks become unreachable post-cutover.
+    const audience = overrides.audience ?? augmentName;
+    const scopeStr = overrides.scopes && overrides.scopes.length > 0
+      ? overrides.scopes.join(" ")
+      : "identity:read";
+
     const form = new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
       client_id: clientId,
-      audience: augmentName,
+      audience,
       subject_token: session.accessToken,
       subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
-      scope: "identity:read",
+      scope: scopeStr,
     });
     if (includeConsent) form.set("consent_action", "accept");
 
@@ -163,12 +186,20 @@ export class OidcProvider implements Provider {
 
     const accessToken = body.access_token as string;
     const now = new Date().toISOString();
+    // Persist the audience + scopes the credential was issued with so
+    // refresh can re-mint with consistent claims (Pkg 03). Reading
+    // response-side "scope" (RFC 8693 §2.2) when the AS narrows what
+    // it issued vs. what was requested.
+    const issuedScopeStr = typeof body.scope === "string" ? body.scope : scopeStr;
+    const issuedScopes = issuedScopeStr.split(" ").filter((s) => s.length > 0);
     return {
       ok: true,
       value: {
         authType: "oidc",
         credential: accessToken,
         toolName: augmentName,
+        audience,
+        scopes: issuedScopes,
         storedAt: now,
         updatedAt: now,
       },

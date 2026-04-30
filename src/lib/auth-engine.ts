@@ -17,7 +17,7 @@ import * as cli from "./cli";
 // ─── Types ─────────────────────────────────────────────────
 
 export interface AuthConfig {
-  type: "none" | "api_key" | "oauth" | "oauth_to_api_key" | "oidc";
+  type: "none" | "api_key" | "oauth" | "oauth_to_api_key" | "oidc" | "oauth-dcr";
 
   /**
    * Identity provider for this augment's OAuth flow.
@@ -30,6 +30,35 @@ export interface AuthConfig {
    * is already logged into Equip with a compatible provider.
    */
   provider?: "cg3" | "github" | "google" | "custom";
+
+  /**
+   * Audience the issued bearer should target (RFC 8707 resource indicator).
+   * mcp-resource-server-cutover Pkg 03: uniform augment-def shape.
+   * For type=oidc this is passed to /token; for type=oauth-dcr this is
+   * the third-party MCP server URL.
+   *
+   * When omitted on type=oidc, OidcProvider falls back to legacy behavior
+   * (audience = augmentName) — W1 compatibility window. Pkg 05 cutover
+   * removes the fallback and makes audience required.
+   */
+  audience?: string;
+
+  /**
+   * Scopes the bearer should carry. mcp-resource-server-cutover Pkg 03.
+   * When omitted on type=oidc, falls back to legacy ["identity:read"] for W1.
+   * For type=oauth-dcr these are passed through to the third-party AS.
+   */
+  scopes?: string[];
+
+  /**
+   * Dynamic Client Registration metadata for type=oauth-dcr (third-party
+   * MCP servers with their own authorization server). Schema only at Pkg 03;
+   * runtime support deferred per ENG-0019 / first-publisher integration.
+   */
+  dcr?: {
+    publisherSlug: string;
+    dcrEndpoint: string;
+  };
 
   keyEnvVar?: string;
   keyPrefix?: string;
@@ -80,6 +109,17 @@ export interface StoredCredential {
     tokenUrl: string;
     clientId: string;
   };
+  /**
+   * Audience the credential was issued with (RFC 8707).
+   * mcp-resource-server-cutover Pkg 03: persisted at acquire time so
+   * refresh can re-mint with consistent claims without re-reading auth-config.
+   */
+  audience?: string;
+  /**
+   * Scopes the credential was issued with.
+   * mcp-resource-server-cutover Pkg 03.
+   */
+  scopes?: string[];
   toolName: string;
   storedAt: string;
   updatedAt: string;

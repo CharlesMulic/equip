@@ -508,6 +508,7 @@ export type {
 } from "./lib/providers/provider-oauth";
 export { OAuthToApiKeyProvider } from "./lib/providers/provider-oauth-to-api-key";
 export type { OAuthToApiKeyProviderOptions } from "./lib/providers/provider-oauth-to-api-key";
+export { OAuthDcrProvider } from "./lib/providers/provider-oauth-dcr";
 
 // Telemetry counter port. Counter names + valid label values are the
 // stable contract here; storage is the caller's concern.
