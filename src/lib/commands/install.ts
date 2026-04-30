@@ -19,15 +19,6 @@ import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
 import { readAugmentDef, writeAugmentDef, augmentDefToConfig, type AugmentDef } from "../augment-defs";
-// Cleanup B Pkg 06 batch 2b: weight RMW migration (architect condition 1
-// routing-gap fix). The legacy weight RMW path wrote to legacy AugmentDef
-// only, never propagated to cache/overlay (legacyRegistryToCache +
-// legacyToOverlayDef both omit baseWeight/loadedWeight). Migrated to
-// route via mutateCache for registry/overlay augments + mutateDef for
-// local/wrapped, so the resolver returns correct weights for all variants.
-import { augmentResolver } from "../augment-resolver";
-import { mutateDef, mutateCache } from "../store-writers";
-import { hasCache } from "../cache-store";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
@@ -247,47 +238,6 @@ export function apply(
     }); // withInstallationsBatch
   } finally {
     releaseLock();
-  }
-
-  // ── Token Weight Recompute ──
-  // Estimate weight from the persisted augment content (no introspection needed).
-  // mcp-introspect and weight modules are in the desktop app sidecar, not in
-  // this package. If available (e.g., when run from the sidecar), introspection
-  // runs. If not (pure CLI), this silently skips — apply still works, just
-  // without accurate weight data. The desktop app will introspect on next load.
-  //
-  // Pkg 06 batch 2b (architect condition 1 routing-gap fix): route the weight
-  // write to the right store. Local/wrapped augments → defs/<name>.json.
-  // Registry/overlay augments → cache/<name>.json. Pre-migration the legacy
-  // path wrote weights only to legacy AugmentDef and the dual-write mirror
-  // omitted them, so registry weights silently disappeared (cache.baseWeight
-  // stayed 0). Now they land where the resolver reads them.
-  if (!dryRun) {
-    try {
-      const resolved = augmentResolver.resolve(toolDef.name);
-      if (resolved) {
-        const rulesTokens = resolved.rules?.content ? Math.round(resolved.rules.content.length / 4) : 0;
-        const skillTokens = (resolved.skills || []).reduce((sum: number, s: { files?: { content?: string }[] }) =>
-          sum + (s.files || []).reduce((fsum: number, f: { content?: string }) =>
-            fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
-        if (resolved.baseWeight === 0 && rulesTokens > 0) {
-          if (resolved.source === "local" || resolved.source === "wrapped") {
-            mutateDef(toolDef.name, (d) => {
-              if (d.kind === "local" || d.kind === "wrapped") {
-                d.baseWeight = rulesTokens;
-                d.loadedWeight = skillTokens;
-              }
-            });
-          } else if (hasCache(toolDef.name)) {
-            // source === "registry" or "overlay" → weights belong on cache.
-            mutateCache(toolDef.name, (c) => {
-              c.baseWeight = rulesTokens;
-              c.loadedWeight = skillTokens;
-            });
-          }
-        }
-      }
-    } catch { /* best effort */ }
   }
 
   return report;
