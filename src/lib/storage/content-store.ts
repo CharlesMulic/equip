@@ -33,6 +33,23 @@ export interface AugmentContent {
   title: string;
   /** Free-form description. */
   description: string;
+  /** Optional subtitle shown under the title (publisher-declared). */
+  subtitle?: string;
+  /** Flavor text for the catalog detail page (publisher-declared). */
+  flavorText?: string;
+  /** Category slugs the augment belongs to. Primary category is the first
+   *  in this list when `primaryCategory` isn't set. */
+  categories?: string[];
+  /** Primary category slug for catalog grouping. Falls back to categories[0]. */
+  primaryCategory?: string;
+  /** Free-form discovery tags. */
+  tags?: string[];
+  /** Publisher's homepage URL (informational; for catalog display). */
+  homepage?: string;
+  /** Source repository URL. */
+  repository?: string;
+  /** License identifier (SPDX or free-form). */
+  license?: string;
   /** MCP transport. */
   transport?: "http" | "stdio";
   /** HTTP endpoint (if transport=http). */

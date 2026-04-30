@@ -95,6 +95,12 @@ function registryDefToContent(def: RegistryDef): AugmentContent {
       : undefined,
     requiresAuth: def.requiresAuth || false,
     auth: def.auth as Record<string, unknown> | undefined,
+    subtitle: def.subtitle,
+    flavorText: def.flavorText,
+    categories: def.categories,
+    homepage: def.homepage,
+    repository: def.repository,
+    license: def.license,
     rules: def.rules
       ? { content: def.rules.content, version: def.rules.version, marker: def.rules.marker }
       : undefined,
