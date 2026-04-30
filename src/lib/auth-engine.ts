@@ -92,7 +92,7 @@ export interface AuthResolveOptions {
   apiKey?: string | null;
   nonInteractive?: boolean;
   dryRun?: boolean;
-  /** Equip session for CG3 OIDC delegated auth. Provided by the sidecar bridge. */
+  /** Equip session for CG3 OIDC delegated auth. Optional — supplied by callers that maintain their own session state. */
   session?: {
     accessToken: string;
     refreshToken: string;
@@ -486,7 +486,6 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
 // ─── CG3 OIDC Delegated Auth Flow ─────────────────────────
 
 // Override only allowed in test mode to prevent credential redirect attacks in production.
-// Gate mirrors equip-app/sidecar/session.ts — unified test-mode signal across both files.
 // Production builds must strip these env vars at launch (tracked in Phase 1 deferred items).
 const IDENTITY_TEST_MODE_OK = process.env.NODE_ENV === "development" || process.env.EQUIP_TEST_MODE === "1";
 const IDENTITY_TOKEN_URL = (IDENTITY_TEST_MODE_OK && process.env.EQUIP_IDENTITY_URL)
@@ -541,8 +540,8 @@ async function resolveOidc(
   }
 
   // If the session token is expired:
-  // 1. Try re-reading from disk (the sidecar/bridge may have already refreshed it)
-  // 2. If still expired, attempt an inline refresh (for CLI callers without a sidecar)
+  // 1. Try re-reading from disk (something else may have refreshed it)
+  // 2. If still expired, attempt an inline refresh ourselves
   if (isJwtExpired(session.accessToken)) {
     logger.info("Session token expired, re-reading from disk");
     let refreshed = false;
@@ -558,7 +557,7 @@ async function resolveOidc(
       }
     } catch { /* disk read failed */ }
 
-    // Fallback: inline refresh for CLI callers (no sidecar running)
+    // Fallback: inline refresh from this process
     if (!refreshed && session.refreshToken) {
       logger.info("Attempting inline session refresh");
       try {
@@ -667,10 +666,9 @@ async function resolveOidc(
 }
 
 // `refreshOidcTokens` and `updatePlatformConfigs` were retired here
-// 2026-04-27 with the legacy identity-refresh-daemon. The broker is now
-// the canonical refresh authority (`equip-app/sidecar/broker/`). MCP
-// config rewriting moves to per-platform writers in
-// equip-mcp-login-continuity-gate Pkg 04 + Pkg 05.
+// 2026-04-27 with the legacy identity-refresh-daemon. Bulk refresh is
+// no longer this module's concern; per-platform MCP writers handle
+// config rewriting (equip-mcp-login-continuity-gate Pkg 04 + Pkg 05).
 //
 // `resolveOidc` (the immediate-acquire path used by the install command)
 // still lives here — it's not refresh, it's first-time grant.

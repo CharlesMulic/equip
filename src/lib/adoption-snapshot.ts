@@ -1,19 +1,17 @@
 // Adoption snapshot — capture the existing MCP config entry before
 // equip overwrites it with broker-mode wiring.
 //
-// broker-production-wiring Pkg 03 (2026-04-28). When a user accepts the
-// adoption modal in equip-app, the bridge calls back through to here to
-// snapshot the existing entry to `~/.equip/adopted-entries/`. Two file
-// shapes:
+// When a user accepts adoption (regardless of where the prompt came
+// from), the caller invokes this helper to snapshot the existing entry
+// to `~/.equip/adopted-entries/`. Two file shapes:
 //
 // 1. Per-entry snapshots: `<platform>-<augment>-<timestamp>.json`. Just
 //    the existing MCP entry (the value at `mcpServers[name]` for JSON
 //    or the parsed `[mcp_servers.name]` for TOML), bearer-redacted.
 // 2. Per-platform baseline: `<platform>-baseline-<timestamp>.json`. The
 //    whole platform config file at the moment of the FIRST adoption per
-//    platform, bearer-redacted. Lets a future equip-app v(downgrade)
-//    offer "Restore pre-broker-mode setup" if a release ships that
-//    later needs to be backed out.
+//    platform, bearer-redacted. Lets a future caller offer "Restore
+//    pre-broker-mode setup" if a release later needs to be backed out.
 //
 // Posture (sec-pen requirement): both file types written at mode 0o600,
 // directory at 0o700. Bearer fields redacted to ***REDACTED***. The
