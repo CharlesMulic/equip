@@ -94,6 +94,7 @@ function registryDefToContent(def: RegistryDef): AugmentContent {
       ? { command: def.stdioCommand, args: def.stdioArgs || [] }
       : undefined,
     requiresAuth: def.requiresAuth || false,
+    auth: def.auth as Record<string, unknown> | undefined,
     rules: def.rules
       ? { content: def.rules.content, version: def.rules.version, marker: def.rules.marker }
       : undefined,

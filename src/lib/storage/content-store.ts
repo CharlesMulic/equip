@@ -41,6 +41,15 @@ export interface AugmentContent {
   stdio?: { command: string; args: string[] };
   /** Whether this augment requires user-provided auth. */
   requiresAuth?: boolean;
+  /**
+   * Auth flow declaration (publisher-declared, immutable per version).
+   * Mirrors legacy `RegistryDef.auth`. Consumed by broker-mode dispatch
+   * to decide direct-vs-broker per (augment × platform). Kept opaque
+   * here (`Record<string, unknown>`) because the structural shape lives
+   * in `auth-engine.ts` — content-store deliberately doesn't know about
+   * specific auth types.
+   */
+  auth?: Record<string, unknown>;
   /** Behavioral rules (markdown). */
   rules?: { content: string; version: string; marker: string };
   /** Named skill bundles. */
