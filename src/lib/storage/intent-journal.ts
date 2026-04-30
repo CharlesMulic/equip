@@ -11,7 +11,7 @@
 //
 // Multi-writer safety: O_APPEND handles concurrent appenders correctly on
 // POSIX. On Windows, fs.appendFile uses CreateFile with FILE_APPEND_DATA
-// which has the same atomicity guarantee. Both CLI and sidecar can append
+// which has the same atomicity guarantee. Any cooperating writer can append
 // without coordination.
 
 import * as fs from "fs";

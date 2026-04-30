@@ -12,13 +12,12 @@ import { readStoredCredential, isCredentialExpired, listStoredCredentials } from
 import { findOrphanHookEntries } from "../hooks";
 
 /**
- * Friendly hint for broker-managed installs. Doctor (in equip lib) does not
- * call broker IPC — that's a downstream concern living in equip-app/sidecar.
- * Per architectural review (06c, 2026-04-27): the boundary is a single
- * `installMode` field on the install record; doctor reads it, the sidecar
- * `broker-health` command consumes the live IPC surface.
+ * Friendly hint for broker-managed installs. Doctor knows nothing about
+ * the broker runtime — the boundary is the `installMode` field on the
+ * install intent. Doctor reads it; the runtime's own health command
+ * (whatever ships it) is the place to check live status.
  */
-const BROKER_HEALTH_HINT = "broker-managed — run 'equip-app sidecar broker-health' for live status";
+const BROKER_HEALTH_HINT = "broker-managed — runtime status is managed externally";
 
 export interface DoctorOptions {
   /** When true, prune orphan hook entries from platform settings files. */
@@ -107,10 +106,9 @@ export function runDoctor(options: DoctorOptions = {}): void {
         if (isBrokerManaged) {
           // Broker-managed entries are stdio-shim shape (command + args, no
           // url, no auth headers). The URL-HTTPS and auth-header checks
-          // below would fire false-positive warnings on these. Skip them
-          // and surface the broker-health hint instead — the live status
-          // (live / refreshing / consent_revoked / etc.) lives behind the
-          // broker IPC and is rendered by `equip-app sidecar broker-health`.
+          // below would fire false-positive warnings on these — skip and
+          // surface the broker-health hint instead. Live status lives
+          // behind whatever runtime owns the shim; not equip's concern.
         } else {
           // Check URL is HTTPS
           const url = (entry as Record<string, unknown>).url || (entry as Record<string, unknown>).serverUrl || (entry as Record<string, unknown>).httpUrl;
@@ -210,13 +208,9 @@ export function runDoctor(options: DoctorOptions = {}): void {
 
   // Check 3: Stored credential health (direct-mode only).
   //
-  // `listStoredCredentials()` reads from auth-engine's direct-mode store
-  // (`~/.equip/credentials/` or equivalent). Broker-managed credentials
-  // live in the sidecar's FileCredentialStore (`~/.equip/secrets/`) and
-  // are intentionally NOT visible here — querying the broker's store from
-  // equip lib would re-introduce the boundary violation Pkg 06c was
-  // designed to avoid. Broker credential health is surfaced via
-  // `equip-app sidecar broker-health`.
+  // `listStoredCredentials()` reads auth-engine's direct-mode store.
+  // Broker-managed credentials are not equip's concern — whatever
+  // runtime owns the shim owns its own credentials.
   const credTools = listStoredCredentials();
   if (credTools.length > 0) {
     cli.log(`\n${cli.BOLD}Credential health${cli.RESET} ${cli.DIM}(direct-mode)${cli.RESET}`);
@@ -372,7 +366,7 @@ function reportCleanupBBackup(): boolean {
   if (legacyStillPresent) {
     cli.log(`\n${cli.BOLD}Cleanup B migration appears incomplete${cli.RESET}`);
     cli.warn(`  Legacy files present on disk despite Cleanup B snapshot at ~/.equip/.backup-pre-cleanup-b/.`);
-    cli.log(`  ${cli.DIM}Re-run the sidecar (the schema-v4 migration retries on next boot), or run 'equip --restore-pre-cleanup-b' to roll back to the snapshot.${cli.RESET}`);
+    cli.log(`  ${cli.DIM}Re-run 'equip update' (the schema-v4 migration retries on next boot), or run 'equip --restore-pre-cleanup-b' to roll back to the snapshot.${cli.RESET}`);
     cli.log(`  ${cli.DIM}Snapshot details: ${sizeMb} MB, ${ageDays} day${ageDays === 1 ? "" : "s"} old.${cli.RESET}`);
     return true;
   }

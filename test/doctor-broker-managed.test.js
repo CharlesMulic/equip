@@ -3,7 +3,7 @@
 // Doctor's job for broker-managed installs:
 //   1. Skip the URL-HTTPS check (entry has no url)
 //   2. Skip the auth-header check (entry has no headers)
-//   3. Emit a one-line hint: "broker-managed — run 'equip-app sidecar broker-health'"
+//   3. Emit a one-line hint that broker runtime is managed externally
 //   4. Continue checking rules/hooks/skills (orthogonal to auth)
 //
 // Doctor does NOT call broker IPC. Doctor does NOT read the broker's
@@ -119,7 +119,7 @@ describe("Pkg 06c — equip doctor: broker-managed branch", () => {
 
     assert.match(
       output,
-      /broker-managed — run 'equip-app sidecar broker-health'/,
+      /broker-managed — runtime status is managed externally/,
       `expected broker-managed hint; got:\n${output}`,
     );
   });

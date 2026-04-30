@@ -57,9 +57,9 @@ export interface ModOverrides {
 
 /**
  * Per-platform install mode. Affects how the platform writer emits the
- * MCP entry (direct = HTTP/stdio shape per the platform's native format;
- * broker = stdio-shim entry pointing at the equip-app broker binary).
- * Default direct.
+ * MCP entry — `direct` writes the upstream HTTP/stdio shape natively;
+ * `broker` writes a stdio-shim invocation whose runtime is managed
+ * outside equip. Default direct.
  */
 export type PlatformInstallMode = "direct" | "broker";
 

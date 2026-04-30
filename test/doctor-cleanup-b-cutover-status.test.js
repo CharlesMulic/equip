@@ -89,7 +89,7 @@ describe("doctor — Cleanup B cutover status", () => {
     const output = captureDoctorOutput(() => runDoctor());
     assert.match(output, /Cleanup B migration appears incomplete/);
     assert.match(output, /Legacy files present on disk/);
-    assert.match(output, /Re-run the sidecar/);
+    assert.match(output, /Re-run 'equip update'/);
     assert.match(output, /equip --restore-pre-cleanup-b/);
     // The doctor's summary line includes the issue count — verify at least 1 issue.
     // (Avoid \b — preceding ANSI escape ends in `m` which is a word char,

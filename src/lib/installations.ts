@@ -307,11 +307,10 @@ function buildContentBlobFor(name: string, record: InstallationRecord): AugmentC
   }
   if (!resolved) {
     // No legacy def available → can't build a meaningful content blob.
-    // Skipping is safe: the journal-canonical writers (reconcile, the
-    // sidecar bridge, future authoring flows) write content + intents
-    // directly, so a missing legacy def usually means the journal is
-    // already authoritative for this augment. Returning null tells the
-    // bridge to skip the appendIntent.
+    // Skipping is safe: journal-canonical writers (reconcile and future
+    // authoring flows) put content + intents directly, so a missing
+    // legacy def usually means the journal is already authoritative.
+    // Returning null tells the bridge to skip the appendIntent.
     return null;
   }
   const transport = resolved.transport === "http" || resolved.transport === "stdio"

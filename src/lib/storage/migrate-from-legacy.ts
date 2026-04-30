@@ -55,7 +55,7 @@ export interface MigrationResult {
 
 /**
  * Run the migration. Idempotent: skipped if schema_version >= 5.
- * Caller should invoke once on first sidecar boot (Phase B/C) OR via
+ * Caller should invoke once on first boot OR via
  * `equip --migrate-to-storage` for testing during Phase A.
  */
 export function migrateFromLegacy(opts: { force?: boolean } = {}): MigrationResult {

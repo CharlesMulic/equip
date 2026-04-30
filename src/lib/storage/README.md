@@ -14,7 +14,7 @@ The single canonical storage layer for equip-lib. All reads + writes for augment
 
 **Write path:** `JsonStore.appendIntent(intent)` is the single durable mutation primitive. Every user-facing action — install, mod, refresh, uninstall, pin — is one `Intent` appended to the journal.
 
-**Platform configs are outputs.** Code outside this module (sidecar materializer, CLI install path) reads `JsonStore.resolve()` and writes platform configs based on the result. We never read platform configs back as truth — only fingerprint them to detect external drift.
+**Platform configs are outputs.** Code outside this module (the install path) reads `JsonStore.resolve()` and writes platform configs based on the result. We never read platform configs back as truth — only fingerprint them to detect external drift.
 
 ## Why this design
 
@@ -40,11 +40,9 @@ Designed in the [`equip-storage-redesign`](../../../../operations/initiatives/eq
 | `mock-registry.ts` | Test helper — stub registry returning predefined content per (name, version) |
 | `mock-platform.ts` | Test helper — stub platform writer + drift fingerprinting |
 
-## Adapter pattern
+## Why an interface
 
-`EquipDataStore` is an interface. The default impl `JsonStore` (in `datastore.ts`) uses only Node stdlib — required for the equip CLI's zero-dep constraint.
-
-A future opt-in `SqliteIndexedStore` (deferred follow-up) would live in `equip-app/sidecar/`, layer an in-memory SQLite index on top of the same canonical files for query acceleration. Both adapters operate on the same on-disk format; the choice is per-process.
+`EquipDataStore` exists as an interface for one reason: testability — domain code takes the interface so unit tests can supply a mock. The shipped impl `JsonStore` is the only one in this module; if anything else ever wants to layer indexing on top, it does so on the canonical files without this module noticing.
 
 ## Usage
 
@@ -71,6 +69,6 @@ const all = JsonStore.listResolved();
 ## What's NOT in this module
 
 - Real registry HTTP fetching (lives in `../registry.ts`; this module accepts pre-fetched content)
-- Platform-specific config writers (live in `../platforms.ts` + per-platform modules; this module produces `ResolvedAugment`, downstream code translates)
+- Platform-specific config writers (live in `../platforms.ts` + per-platform modules; this module produces `ResolvedAugment`, the install path translates)
 - HTTP cache (the registry layer uses fetch's `Cache-Control` + `ETag` directly)
 - Migration from prior on-disk formats (lives in `migrate-from-legacy.ts` — same dir, separate concern, added in Phase A's A2 step)

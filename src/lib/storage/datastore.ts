@@ -1,19 +1,13 @@
-// DataStore interface — the adapter layer between equip-lib's domain logic
-// and the underlying persistence mechanism.
+// DataStore — single seam between equip's domain logic and the
+// canonical on-disk format (`~/.equip/storage/intents.jsonl` + content
+// blobs at `storage/content/<hash>.json`).
 //
-// Default implementation `JsonStore` (this file) uses zero deps — just
-// Node stdlib. Used by the equip CLI directly.
+// Zero npm deps. Single shipped impl: `JsonStore`. The interface exists
+// for one reason — testability (mockable in unit tests). Anything beyond
+// JsonStore is out of scope for this module.
 //
-// Optional implementation `SqliteIndexedStore` (deferred follow-up
-// initiative) would live in equip-app's sidecar package and layer an
-// in-memory SQLite index on top of the same canonical JSON files for
-// query acceleration. CLI never sees it.
-//
-// **Critical invariant: both adapters operate on the same canonical
-// on-disk files** (`~/.equip/storage/intents.jsonl` + `content/<hash>.json`).
-// Sidecar appending an intent and CLI appending an intent are both safe
-// (single-line atomic appends; last-clock-wins on materialize). Reads from
-// either fold the same journal.
+// Concurrency: writes are single-line atomic appends (POSIX O_APPEND for
+// ≤4KB intents); reads fold the journal in clock order.
 
 import { appendIntent as appendIntentToJournal, readIntents, getNodeId, nextSeq } from "./intent-journal";
 import { putContent, getContent, hasContent, type AugmentContent } from "./content-store";
@@ -21,15 +15,12 @@ import { resolve, listResolved, type ResolvedAugment } from "./materializer";
 import type { Intent, ContentHash } from "./intent";
 
 /**
- * The single API surface for storage. Both CLI and equip-app consume
- * augment data through this interface.
- *
- * Methods come in three flavors:
- *   - **Write**: appendIntent, putContent — the single durable mutation surface
- *   - **Read (canonical)**: getContent, readIntents — raw access for tools
+ * The single storage API. Three flavors of method:
+ *   - **Write**: `appendIntent`, `putContent` — the only durable mutation surface
+ *   - **Read (canonical)**: `getContent`, `readIntents` — raw access for tools
  *     (doctor, restore, etc.)
- *   - **Read (resolved)**: resolve, listInstalled — the materialized view
- *     consumers actually want
+ *   - **Read (resolved)**: `resolve`, `listResolved` — the materialized view
+ *     domain code actually wants
  */
 export interface EquipDataStore {
   // ── Write surface ─────────────────────────────────────
@@ -62,9 +53,8 @@ export interface EquipDataStore {
 }
 
 /**
- * Default JsonStore — zero-dep impl using only Node stdlib + the v2
- * sub-modules (intent-journal, content-store, materializer). This is what
- * the CLI uses.
+ * JsonStore — the shipped implementation. Zero deps; composes the
+ * intent-journal, content-store, and materializer sub-modules.
  */
 export const JsonStore: EquipDataStore = {
   appendIntent(intent: Intent): void {
