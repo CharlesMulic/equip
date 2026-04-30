@@ -19,9 +19,7 @@ import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, typ
 import type { ReadMcpResult } from "./lib/mcp";
 import { fetchRegistryDef, registryDefToConfig, type RegistryDef, type PostInstallAction } from "./lib/registry";
 import { resolveAuth, validateCredential, readStoredCredential, writeStoredCredential, deleteStoredCredential, listStoredCredentials, isCredentialExpired, refreshCredential, refreshAllExpired, type AuthConfig, type StoredCredential, type AuthResult, type RefreshResult } from "./lib/auth-engine";
-import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, hasAugmentDef, syncFromRegistry, createLocalAugment, wrapUnmanaged, promoteWrappedToLocal, modAugmentRules, resetAugmentRules, getAugmentsDir, type AugmentDef, type AugmentSource, type AugmentRules, type WrappedFromMeta, type LocalAugmentConfig, type WrapConfig } from "./lib/augment-defs";
 import { readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled, getEnabledPlatformIds, isPlatformEnabled, readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms, getPlatformsDir, type PlatformsMeta, type PlatformMeta, type PlatformScan, type PlatformAugmentEntry } from "./lib/platform-state";
-import { readInstallations, writeInstallations, trackInstallation, trackUninstallation, getAugmentsForPlatform, getManagedAugmentNames, type Installations, type InstallationRecord, type ArtifactRecord } from "./lib/installations";
 import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, updatePreferences, getInstallId, type EquipMeta, type EquipPreferences } from "./lib/equip-meta";
 import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSnapshot, hasInitialSnapshot, ensureInitialSnapshots, pruneSnapshots, type Snapshot, type SnapshotSummary, type RestoreResult } from "./lib/snapshots";
 import { reconcileState } from "./lib/reconcile";
@@ -126,8 +124,8 @@ class Augment {
    *
    * The hook output for the platform is provided by
    * `PlatformDefinition.brokerStrategy.writeBrokerConfig` (Codex first, then
-   * Claude Code + Cursor in Pkg 05). The caller (typically equip-app) injects
-   * `shimBinaryPath` at call time — equip lib does NOT know the path.
+   * Claude Code + Cursor in Pkg 05). The caller injects `shimBinaryPath`
+   * at call time — equip lib does NOT know the path.
    *
    * Returns a `mcp` ArtifactResult with `errorCode: "BROKER_NOT_SUPPORTED"`
    * when the platform doesn't declare broker support; the caller should fall
@@ -405,9 +403,9 @@ export interface VerifyResult {
 
 // ─── Public API ─────────────────────────────────────────────
 // Lean surface for augment authors and setup scripts.
-// Internal modules (state management, installations, platform scans,
-// snapshots, credentials, etc.) are NOT exported here — the sidecar
-// and CLI import internal modules directly from src/lib/*.
+// Internal modules (state management, platform scans, snapshots,
+// credentials, etc.) are NOT exported here — callers that need them
+// import directly from src/lib/*.
 
 export {
   // Core
@@ -420,8 +418,7 @@ export {
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
-  // Platform broker capability accessors (Package 01 — see ADR
-  // equip-app/planning/ADR-cross-platform-strategy-pattern.md)
+  // Platform broker capability accessors (Package 01)
   getBrokerCapabilities,
   platformSupportsBroker,
   getBrokerStrategy,
@@ -488,8 +485,8 @@ export { assertNeverDelivery } from "./lib/auth-broker-types";
 
 // Broker-mode Provider implementations. The five auth modes (none,
 // api_key, oidc, oauth, oauth_to_api_key) live here because they're
-// pure auth-protocol logic with no equip-app-specific dependencies;
-// equip-app's broker daemon constructs and registers them at startup.
+// pure auth-protocol logic; broker runtimes construct and register
+// them at startup.
 export { NoneProvider } from "./lib/providers/provider-none";
 export {
   ApiKeyProvider,
@@ -512,8 +509,8 @@ export type {
 export { OAuthToApiKeyProvider } from "./lib/providers/provider-oauth-to-api-key";
 export type { OAuthToApiKeyProviderOptions } from "./lib/providers/provider-oauth-to-api-key";
 
-// Telemetry counter port (Pkg 06b). Counter names + valid label values
-// are stable contract here; in-memory storage lives in equip-app/sidecar.
+// Telemetry counter port. Counter names + valid label values are the
+// stable contract here; storage is the caller's concern.
 export {
   noopCounter,
   COUNTER_NAMES,

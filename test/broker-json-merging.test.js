@@ -16,7 +16,8 @@ const os = require("os");
 const fs = require("fs");
 
 const { Augment } = require("..");
-const { trackInstallation } = require("../dist/lib/installations");
+const { setupInstalledAugment } = require("./storage/_test-helpers");
+const { setupFullHome } = require("./_isolation");
 
 function tmpPath(prefix) {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -101,11 +102,7 @@ describe("Package 05 — installMcpBroker preserves pre-existing JSON entries", 
   });
 
   it("Claude Code: re-install replaces broker entry, preserves others", () => {
-    const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "broker-cc-reinstall-"));
-    const origHomedir = os.homedir;
-    os.homedir = () => tempHome;
-    process.env.EQUIP_HOME = path.join(tempHome, ".equip");
-    fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+    const isolation = setupFullHome("broker-cc-reinstall");
 
     try {
       const configPath = tmpPath("cc-reinstall") + ".json";
@@ -115,12 +112,11 @@ describe("Package 05 — installMcpBroker preserves pre-existing JSON entries", 
       const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
 
       augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
-      trackInstallation("stub-broker-augment", {
+      setupInstalledAugment("stub-broker-augment", {
         source: "registry",
         title: "Stub Broker Augment",
         transport: "stdio",
         platforms: ["claude-code"],
-        artifacts: { "claude-code": { mcp: true, installMode: "broker" } },
       });
 
       const newShim = "/Library/equip-app/bin/equip-broker-shim";
@@ -134,9 +130,7 @@ describe("Package 05 — installMcpBroker preserves pre-existing JSON entries", 
 
       cleanup(configPath);
     } finally {
-      os.homedir = origHomedir;
-      delete process.env.EQUIP_HOME;
-      try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
+      isolation.dispose();
     }
   });
 

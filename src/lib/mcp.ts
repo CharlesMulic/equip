@@ -8,7 +8,7 @@ import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } from "./fs";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
-import { readInstall } from "./installs-store";
+import { JsonStore } from "./storage/datastore";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -266,16 +266,16 @@ export function installMcp(platform: DetectedPlatform, serverName: string, mcpEn
 
 /**
  * Adoption-only install path that bypasses the unmanaged-entry conflict
- * guard (broker-production-wiring Pkg 03). Strictly internal: callable
- * ONLY from `equip-app/sidecar/bridge.ts:augmentResolveConflict`. This
- * is the single-writer of `forceReplace` per architect rule #9 — every
- * other call path goes through `installMcp` and respects the guard.
+ * guard. Strictly internal: callable only from a deliberate adoption-
+ * resolve handler. The single-writer of `forceReplace` per architect
+ * rule #9 — every other call path goes through `installMcp` and
+ * respects the guard.
  *
  * The naming + leading-underscore-style convention (`__forceReplace`)
  * signals to readers that this is the deliberate exception. A callsite
  * test asserts no other module calls into this private helper.
  *
- * @internal — do not use outside the bridge's resolveConflict handler.
+ * @internal — adoption resolve only.
  */
 export function installMcpForReplaceAdopt(
   platform: DetectedPlatform,
@@ -291,10 +291,10 @@ export function installMcpForReplaceAdopt(
 }
 
 function hasManagedInstallOnPlatform(serverName: string, platformId: string): boolean {
-  // Cleanup B Pkg 03: read from new installs-store directly. readInstall is a
-  // per-augment wrapper over installs/<name>.json (same on-disk shape via mirror).
-  const record = readInstall(serverName);
-  return !!record && Array.isArray(record.platforms) && record.platforms.includes(platformId);
+  // Phase A: read via storage layer's resolver. installedPlatforms reflects the
+  // current install intent; non-empty means the augment is equip-managed.
+  const resolved = JsonStore.resolve(serverName);
+  return !!resolved && resolved.installed && resolved.installedPlatforms.includes(platformId);
 }
 
 function conflictResult(configPath: string, serverName: string, platformId: string, method: "json" | "toml", logger: EquipLogger): ArtifactResult {

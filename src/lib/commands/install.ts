@@ -13,21 +13,35 @@ import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { acquireLock } from "../fs";
-import { withInstallationsBatch } from "../installations";
-import { readInstall } from "../installs-store";
+import { JsonStore } from "../storage/datastore";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
-import { readAugmentDef, writeAugmentDef, augmentDefToConfig, type AugmentDef } from "../augment-defs";
-// Cleanup B Pkg 06 batch 2b: weight RMW migration (architect condition 1
-// routing-gap fix). The legacy weight RMW path wrote to legacy AugmentDef
-// only, never propagated to cache/overlay (legacyRegistryToCache +
-// legacyToOverlayDef both omit baseWeight/loadedWeight). Migrated to
-// route via mutateCache for registry/overlay augments + mutateDef for
-// local/wrapped, so the resolver returns correct weights for all variants.
-import { augmentResolver } from "../augment-resolver";
-import { mutateDef, mutateCache } from "../store-writers";
-import { hasCache } from "../cache-store";
+import type { SkillManifestOwnerSource } from "../skill-manifest";
+import type { SkillConfig } from "../skills";
+import type { HookDefinition } from "../hooks";
+
+/**
+ * The minimal augment-shaped input writeAugmentDefAndApply consumes.
+ * Defined locally so install.ts has no dependency on legacy modules.
+ * AugmentDef and RegistryDef both structurally satisfy this contract,
+ * so existing callers keep working without code changes.
+ */
+export interface AugmentInput {
+  name: string;
+  source: SkillManifestOwnerSource;
+  title?: string;
+  description?: string;
+  transport?: "http" | "stdio";
+  serverUrl?: string;
+  stdio?: { command: string; args: string[]; envKey?: string };
+  envKey?: string;
+  requiresAuth?: boolean;
+  rules?: { content: string; version: string; marker: string; fileName?: string };
+  skills?: SkillConfig[];
+  hooks?: HookDefinition[];
+  hookDir?: string;
+}
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
@@ -35,13 +49,12 @@ import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
 // ─── apply: put a def on platforms ─────────────────────────────────────────
 //
 // "Apply" is the second half of the equip refresh+apply pipeline:
-//   - refresh: network or local-author edit writes to ~/.equip/augments/<name>.json
-//   - apply: that def file → installed platform copies (this function)
+//   - refresh: network or local-author edit produces a def
+//   - apply: that def → installed platform copies (this function)
 //
 // Callers are runInstall (first-time install with auth resolution + platform
-// discovery upstream of apply) and the propagation paths from
-// operations/initiatives/equip-augment-update-propagation/ (registry refresh,
-// equip-app authoring save, platform-enable backfill, equip apply CLI).
+// discovery upstream of apply) and update-propagation paths (registry refresh,
+// authoring save, platform-enable backfill, equip apply CLI).
 //
 // Each caller is responsible for:
 //   - Constructing the Augment instance from a def (typically via
@@ -73,8 +86,8 @@ export interface ApplyOptions {
   report?: InstallReportBuilder;
   /**
    * Optional counter port for telemetry. Defaults to no-op when absent.
-   * equip-app's bridge supplies the sidecar's metrics-store counter so
-   * broker-mode installs are observable; standalone CLI omits it.
+   * Callers that need observability supply their own counter; the CLI
+   * runs without one.
    */
   counter?: Counter;
 }
@@ -84,7 +97,7 @@ export interface ApplyOptions {
  * behavioral rules, skills, runs verification, reconciles state, and
  * re-estimates token weight from the persisted def.
  *
- * Acquires the equip-wide lock and wraps writes in withInstallationsBatch.
+ * Acquires the equip-wide lock for the duration.
  * Safe to call from any caller; the lock is re-entrant via reconcileState.
  *
  * Caller MUST have already filtered disabled platforms out of `platforms`.
@@ -95,7 +108,7 @@ export interface ApplyOptions {
  */
 export function apply(
   equip: Augment,
-  toolDef: RegistryDef | AugmentDef,
+  toolDef: RegistryDef | AugmentInput,
   platforms: ReturnType<Augment["detect"]>,
   apiKey: string | null,
   opts: ApplyOptions = {},
@@ -129,13 +142,10 @@ export function apply(
   // Take the equip-wide lock for the whole apply. Re-entrant — reconcileState
   // below acquires the same lock and just bumps the depth counter. Closes a
   // TOCTOU window on the per-skill "is current" check and prevents concurrent
-  // equip processes from corrupting installations.json or stomping each other's
-  // skill writes.
+  // equip processes from stomping each other's skill writes.
   const releaseLock = acquireLock();
 
   try {
-    withInstallationsBatch(() => {
-
       // MCP Server (skipped when augment has no server — rules/skills-only
       // augments are valid; matches bridge.ts install-path gating).
       if (hasMcpServer) {
@@ -147,10 +157,9 @@ export function apply(
           report.addResult(p.platform, result);
           if (result.success) {
             cli.ok(`${platformName(p.platform)}   MCP server "${toolDef.name}" ${dryRun ? "would be " : ""}added ${cli.DIM}(${transport}, ${result.method})${cli.RESET}`);
-            // Telemetry: this install path is direct-mode by definition (apply
-            // doesn't dispatch to installMcpBroker). Broker-mode installs go
-            // through equip-app's bridge with its own emit site; keeping the
-            // call here ensures direct-mode is also counted.
+            // Telemetry: this install path is direct-mode by definition
+            // (apply doesn't dispatch to installMcpBroker). Broker-mode
+            // installs go through their own paths and emit independently.
             if (!dryRun) counter(COUNTER_NAMES.INSTALL_MODE_TOTAL, { mode: "direct", platform: p.platform });
           } else {
             cli.fail(`${platformName(p.platform)}   ${result.error || result.errorCode}`);
@@ -244,50 +253,8 @@ export function apply(
         }
       }
 
-    }); // withInstallationsBatch
   } finally {
     releaseLock();
-  }
-
-  // ── Token Weight Recompute ──
-  // Estimate weight from the persisted augment content (no introspection needed).
-  // mcp-introspect and weight modules are in the desktop app sidecar, not in
-  // this package. If available (e.g., when run from the sidecar), introspection
-  // runs. If not (pure CLI), this silently skips — apply still works, just
-  // without accurate weight data. The desktop app will introspect on next load.
-  //
-  // Pkg 06 batch 2b (architect condition 1 routing-gap fix): route the weight
-  // write to the right store. Local/wrapped augments → defs/<name>.json.
-  // Registry/overlay augments → cache/<name>.json. Pre-migration the legacy
-  // path wrote weights only to legacy AugmentDef and the dual-write mirror
-  // omitted them, so registry weights silently disappeared (cache.baseWeight
-  // stayed 0). Now they land where the resolver reads them.
-  if (!dryRun) {
-    try {
-      const resolved = augmentResolver.resolve(toolDef.name);
-      if (resolved) {
-        const rulesTokens = resolved.rules?.content ? Math.round(resolved.rules.content.length / 4) : 0;
-        const skillTokens = (resolved.skills || []).reduce((sum: number, s: { files?: { content?: string }[] }) =>
-          sum + (s.files || []).reduce((fsum: number, f: { content?: string }) =>
-            fsum + (f.content ? Math.round(f.content.length / 4) : 0), 0), 0);
-        if (resolved.baseWeight === 0 && rulesTokens > 0) {
-          if (resolved.source === "local" || resolved.source === "wrapped") {
-            mutateDef(toolDef.name, (d) => {
-              if (d.kind === "local" || d.kind === "wrapped") {
-                d.baseWeight = rulesTokens;
-                d.loadedWeight = skillTokens;
-              }
-            });
-          } else if (hasCache(toolDef.name)) {
-            // source === "registry" or "overlay" → weights belong on cache.
-            mutateCache(toolDef.name, (c) => {
-              c.baseWeight = rulesTokens;
-              c.loadedWeight = skillTokens;
-            });
-          }
-        }
-      }
-    } catch { /* best effort */ }
   }
 
   return report;
@@ -295,76 +262,96 @@ export function apply(
 
 // ─── writeAugmentDefAndApply: explicit "user save" boundary ────────────────
 //
-// Use this helper instead of plain `writeAugmentDef` whenever a user-driven
-// edit lands a new def state and the change should propagate immediately to
-// installed platform copies. Examples:
-//   - equip-app authoring save (the canonical "Save" button)
+// User-driven edits land a new def state that should propagate immediately
+// to installed platform copies. Examples:
+//   - authoring "Save" flows
 //   - future publisher draft commit-to-live flows
-//   - CLI `equip apply <augment>` (Package 04 — falls through to apply directly)
+//   - CLI `equip apply <augment>` (falls through to apply directly)
 //
-// Internal-only writes (migrations, normalizations, registry-tracking sentinel
-// stamps, draft state mutations that don't touch live resources) MUST keep
-// using plain `writeAugmentDef` and skip apply. Architect's review (2026-04-26)
-// rejected file-watcher-on-augments-dir as a trap because multiple internal
-// code paths write to the def file; the explicit write boundary in this helper
-// is the correct discipline.
+// Journal-canonical: the act of applying produces an InstallAugmentIntent
+// (via apply → reconcile) that records the new content. There is no
+// separate "save the def" step — content is implicit in the install intent.
 //
-// If the augment isn't equipped to any platform (no installations.json record
-// or empty platforms array), apply is skipped — there's nowhere to propagate.
+// If the augment isn't equipped to any platform, this is a no-op (drafts
+// without an active install are out of scope for this surface; they live
+// in whatever authoring state store the caller maintains).
 //
-// Returns the persisted def + apply report. apply report is null when apply
-// was skipped (no platforms to write to).
+// Returns the input def unchanged + apply report. Apply report is null
+// when apply was skipped (no platforms to write to).
 
 export interface WriteAugmentDefAndApplyOptions extends ApplyOptions {
   /**
-   * Override platform list. Default: read from installations.json — every
-   * platform the augment is currently equipped to. Pass an explicit list to
-   * apply to only specific platforms (used by Package 05 platform-enable
-   * backfill: `apply this augment to only the newly-enabled platform`).
+   * Override platform list. Default: every platform the augment is
+   * currently equipped to (read from the journal). Pass an explicit
+   * list to apply to only specific platforms (e.g. platform-enable
+   * backfill: "apply this augment to only the newly-enabled platform").
    *
    * Apply NEVER writes to a disabled platform — caller must filter.
    */
   platforms?: string[];
 }
 
-export function writeAugmentDefAndApply(
-  def: AugmentDef,
-  opts: WriteAugmentDefAndApplyOptions = {},
-): { def: AugmentDef; applyReport: InstallReportBuilder | null } {
-  // 1. Write the def.
-  writeAugmentDef(def);
+/**
+ * AugmentInput → AugmentConfig adapter. (Was `augmentDefToConfig`
+ * in the now-deleted augment-defs module.)
+ */
+function defToAugmentConfig(def: AugmentInput): AugmentConfig {
+  const config: AugmentConfig = {
+    name: def.name,
+    source: def.source,
+  };
+  if (def.serverUrl) config.serverUrl = def.serverUrl;
+  if (def.rules) {
+    config.rules = {
+      content: def.rules.content,
+      version: def.rules.version,
+      marker: def.rules.marker,
+      ...(def.rules.fileName && { fileName: def.rules.fileName }),
+    };
+  }
+  if (def.stdio) {
+    config.stdio = {
+      command: def.stdio.command,
+      args: def.stdio.args,
+      envKey: def.stdio.envKey ?? def.envKey ?? "",
+    };
+  }
+  if (def.hooks && def.hooks.length > 0) config.hooks = def.hooks;
+  if (def.hookDir) config.hookDir = def.hookDir;
+  if (def.skills && def.skills.length > 0) config.skills = def.skills;
+  return config;
+}
 
-  // 2. Read the persisted shape back. Mirrors Package 02's mod-preservation
-  //    discipline — apply must operate on the persisted shape, not the input,
-  //    so any normalization/merge done by writeAugmentDef is reflected.
-  const persisted = readAugmentDef(def.name);
-  if (!persisted) {
-    // Should not happen — writeAugmentDef just succeeded — but defensive.
+export function writeAugmentDefAndApply(
+  def: AugmentInput,
+  opts: WriteAugmentDefAndApplyOptions = {},
+): { def: AugmentInput; applyReport: InstallReportBuilder | null } {
+  // Resolve target platforms from the journal (or caller override).
+  let platformIds = opts.platforms;
+  if (platformIds === undefined) {
+    const resolved = JsonStore.resolve(def.name);
+    platformIds = resolved?.installedPlatforms ?? [];
+  }
+
+  // No platforms equipped → nothing to propagate. Drafts that have
+  // never been installed are not represented in the journal.
+  if (platformIds.length === 0) {
     return { def, applyReport: null };
   }
 
-  // 3. Resolve target platforms.
-  let platformIds = opts.platforms;
-  if (platformIds === undefined) {
-    // Cleanup B Pkg 03: read via per-augment installs-store (was readInstallations).
-    const record = readInstall(def.name);
-    platformIds = record?.platforms ?? [];
-  }
-
-  // No platforms equipped → nothing to propagate.
-  if (platformIds.length === 0) {
-    return { def: persisted, applyReport: null };
-  }
-
-  // 4. Construct Augment instance from persisted def, run apply.
-  //    apiKey is null on the update path — installMcp updates the MCP config
-  //    in-place and existing credentials persist in the platform-specific
-  //    config. First-time install via `runInstall` resolves auth before apply.
-  const config = augmentDefToConfig(persisted);
+  // Construct Augment from def, run apply. apply→reconcile puts the
+  // content blob and appends the install intent; the journal's view of
+  // this augment is updated atomically.
+  //
+  // apiKey is null on the update path — installMcp updates the MCP
+  // config in-place and existing credentials persist in the platform-
+  // specific config. First-time install via runInstall resolves auth
+  // before apply.
+  const config = defToAugmentConfig(def);
   const equip = new Augment(config);
   const platforms = platformIds.map((id) => createManualPlatform(id));
 
-  const applyReport = apply(equip, persisted, platforms, null, {
+  const applyReport = apply(equip, def, platforms, null, {
     dryRun: opts.dryRun,
     takeover: opts.takeover,
     adopt: opts.adopt,
@@ -372,7 +359,7 @@ export function writeAugmentDefAndApply(
     report: opts.report,
   });
 
-  return { def: persisted, applyReport };
+  return { def, applyReport };
 }
 
 /**
@@ -472,10 +459,9 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   }
 
   // ── Apply ──
-  // The install-loop, state-reconciliation, and token-weight-recompute half
-  // lives in `apply()` so it can be reused by registry-refresh, equip-app
-  // authoring save, platform-enable backfill, and the equip apply CLI command
-  // (operations/initiatives/equip-augment-update-propagation/).
+  // The install-loop and state-reconciliation half lives in `apply()` so
+  // it can be reused by registry-refresh, authoring save, platform-enable
+  // backfill, and the equip apply CLI command.
   const report = apply(equip, toolDef, platforms, apiKey, {
     dryRun,
     takeover: parsedArgs.takeover,

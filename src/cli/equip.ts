@@ -13,7 +13,6 @@ import { ParsedArgs, parseArgs, isLocalPath, YELLOW, DIM, RESET, BOLD, GREEN, cr
 import * as cli from "../lib/cli.js";
 import { readEquipMeta } from "../lib/equip-meta.js";
 import { fetchRegistryDef, RegistryDef } from "../lib/registry.js";
-import { ensureCacheFreshForInstall } from "../lib/install-cache-gate.js";
 import { getEquipHome } from "../lib/equip-home.js";
 import { validateCredential, readStoredCredential } from "../lib/auth-engine.js";
 import { runStatus } from "../lib/commands/status.js";
@@ -23,8 +22,6 @@ import { runInstall } from "../lib/commands/install.js";
 import { runReauth } from "../lib/commands/reauth.js";
 import { runRefresh, autoRefreshExpired } from "../lib/commands/refresh.js";
 import { runSnapshot, runSnapshots, runRestore } from "../lib/commands/snapshot.js";
-import { runRestorePreCleanupB } from "../lib/commands/restore-pre-cleanup-b.js";
-import { runDiscardPreCleanupBBackup } from "../lib/commands/discard-pre-cleanup-b-backup.js";
 import { detectPlatforms } from "../lib/detect.js";
 import { ensureInitialSnapshots } from "../lib/snapshots.js";
 import { reconcileState } from "../lib/reconcile.js";
@@ -122,11 +119,6 @@ async function cmdUpdate(parsedArgs: ParsedArgs): Promise<void> {
 
     // Clear cache to get fresh definition
     try { fs.unlinkSync(path.join(getEquipHome(), "cache", `${toolName}.json`)); } catch {}
-
-    // Cleanup B Pkg 02: hard-TTL cache-freshness gate (kill switch:
-    // EQUIP_CACHE_INSTALL_GATE_DISABLED=true). The unlink above clears
-    // any stale cache; the gate ensures the next read sees fresh data.
-    await ensureCacheFreshForInstall(toolName, { logger });
 
     const toolDef = await fetchRegistryDef(toolName, { logger });
     if (!toolDef) {
@@ -264,10 +256,6 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
   // Fetch augment definition from registry API (with cache fallback)
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
 
-  // Cleanup B Pkg 02: hard-TTL cache-freshness gate. Bypassable via
-  // EQUIP_CACHE_INSTALL_GATE_DISABLED=true.
-  await ensureCacheFreshForInstall(alias, { logger });
-
   const toolDef = await fetchRegistryDef(alias, { logger });
 
   if (toolDef && toolDef.installMode === "direct") {
@@ -324,10 +312,7 @@ async function main(): Promise<void> {
   const parsedArgs = parseArgs(rawArgs.slice(1));
 
   // Auto-refresh expired OAuth tokens (best effort).
-  // Skip for recovery commands — the user may be in a borked state where
-  // network refresh would fail or further mutate the broken install.
-  if (cmd !== "refresh" && cmd !== "reauth" && cmd !== "demo"
-      && cmd !== "--restore-pre-cleanup-b" && cmd !== "--discard-pre-cleanup-b-backup") {
+  if (cmd !== "refresh" && cmd !== "reauth" && cmd !== "demo") {
     await autoRefreshExpired(parsedArgs.verbose);
   }
 
@@ -342,8 +327,6 @@ async function main(): Promise<void> {
     case "uninstall": cmdUninstall(parsedArgs._); break;
     case "reauth":    await runReauth(parsedArgs); break;
     case "refresh":   await runRefresh(parsedArgs); break;
-    case "--restore-pre-cleanup-b": runRestorePreCleanupB(parsedArgs); break;
-    case "--discard-pre-cleanup-b-backup": runDiscardPreCleanupBBackup(parsedArgs); break;
     default:          await dispatchAugment(cmd, parsedArgs); break;
   }
 }

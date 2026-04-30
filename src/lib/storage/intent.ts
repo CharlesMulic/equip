@@ -1,4 +1,4 @@
-// Intent types — the canonical write surface for v2 storage.
+// Intent types — the canonical write surface for storage.
 //
 // Every user-facing mutation produces exactly one Intent appended to the
 // journal. Intents are immutable once written (the journal is append-only).
@@ -10,13 +10,14 @@
 // all consumers — exactly what we want for a foundational data layer.
 
 /**
- * Logical clock for sync ordering. For the spike we use a hybrid:
+ * Logical clock for sync ordering. Hybrid:
  * - `ts`: ISO timestamp from the originating machine (for human display)
  * - `seq`: monotonic counter local to this machine (advances on every append)
  * - `node`: stable machine identifier (placeholder until multi-device sync)
  *
- * Multi-device sync (deferred) will compare (seq, node) for total ordering
- * within a per-augment scope. For the spike, simple `ts` ordering suffices.
+ * Multi-device sync (deferred to a follow-up initiative) will compare
+ * (seq, node) for total ordering within a per-augment scope. For now,
+ * single-device single-writer means seq order = append order = clock order.
  */
 export interface IntentClock {
   ts: string;
@@ -34,11 +35,15 @@ export type ContentHash = string;
 
 /**
  * Provenance of content. Registry-fetched content + locally-authored content
- * both land in the content store; this tag records which it was.
+ * both land in the content store; this tag records which it was. The
+ * `wrapped` variant marks an augment that was auto-discovered from an
+ * existing platform-side MCP entry or skill directory and wrapped into
+ * the journal so subsequent operations treat it as managed.
  */
 export type ContentSource =
   | { kind: "registry"; version: number; etag?: string; fetchedAt: string }
-  | { kind: "local-authored"; createdAt: string };
+  | { kind: "local-authored"; createdAt: string }
+  | { kind: "wrapped"; fromPlatform: string; createdAt: string };
 
 /**
  * Typed override (the "mod" allowlist). Only these three fields are
@@ -49,15 +54,26 @@ export type ContentSource =
 export interface ModOverrides {
   rules?: { content: string; version: string; marker: string } | null;
   skills?: { name: string; files: { path: string; content: string }[] }[] | null;
-  hooks?: { type: string; command: string }[] | null;
+  hooks?: { event: string; matcher?: string; script: string; name: string }[] | null;
 }
 
 // ─── Intent variants ──────────────────────────────────────
 
 /**
+ * Per-platform install mode. Affects how the platform writer emits the
+ * MCP entry — `direct` writes the upstream HTTP/stdio shape natively;
+ * `broker` writes a stdio-shim invocation whose runtime is managed
+ * outside equip. Default direct.
+ */
+export type PlatformInstallMode = "direct" | "broker";
+
+/**
  * "User wants augment <name> installed at content <contentHash> on <platforms>."
  * If <name> previously had an InstallAugment intent, this supersedes it
  * (materializer takes the latest by clock).
+ *
+ * Per-platform install mode lives in `installModes` (rare per-platform
+ * variation; defaults to "direct" when unset).
  */
 export interface InstallAugmentIntent {
   type: "install-augment";
@@ -66,6 +82,11 @@ export interface InstallAugmentIntent {
   contentHash: ContentHash;
   contentSource: ContentSource;
   platforms: string[];
+  /**
+   * Optional per-platform install mode. Maps platformId → mode. Platforms
+   * not listed default to "direct".
+   */
+  installModes?: Record<string, PlatformInstallMode>;
 }
 
 /**

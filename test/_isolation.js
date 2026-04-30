@@ -87,4 +87,64 @@ function setupEquipHome(label = "equip") {
   };
 }
 
-module.exports = { setupEquipHome };
+// ─── Full home isolation (tempHome covers BOTH equip + platform dirs) ──
+//
+// Some tests exercise platform discovery (claude-code, codex, cursor, etc.)
+// or write into platform-side dirs like ~/.claude/skills/. These need
+// `os.homedir()` itself to point at the temp dir — not just EQUIP_HOME.
+//
+// Pre-ENG-0031 tests did `os.homedir = () => tempHome` to fake the homedir.
+// That's process-global, survives a thrown test, and was the source of a
+// 2026-04-26 incident that wiped a user's real ~/.equip/installations.json.
+//
+// This helper redirects via env vars instead. Node's `os.homedir()` resolves
+// to `$USERPROFILE` on Windows and `$HOME` on Unix at every call, so setting
+// these env vars cleanly retargets the homedir without monkey-patching.
+// `APPDATA` is also retargeted so platform discovery (vsCodeUserDir →
+// roo-code, vscode, copilot) doesn't read the developer's real installs.
+// `CODEX_HOME` is retargeted because Codex reads it directly.
+//
+// Pattern:
+//
+//   const { setupFullHome } = require("./_isolation");
+//
+//   describe("my suite", () => {
+//     let isolation;
+//     beforeEach(() => { isolation = setupFullHome("my-suite"); });
+//     afterEach(() => { isolation.dispose(); });
+//
+//     it("…", () => { /* os.homedir() → isolation.home */ });
+//   });
+
+const HOME_ENV_VARS = ["EQUIP_HOME", "HOME", "USERPROFILE", "APPDATA", "CODEX_HOME"];
+
+function setupFullHome(label = "equip-full") {
+  const previousEnv = {};
+  for (const k of HOME_ENV_VARS) previousEnv[k] = process.env[k];
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${label}-`));
+  fs.mkdirSync(path.join(tempRoot, ".equip"), { recursive: true });
+  fs.mkdirSync(path.join(tempRoot, "AppData", "Roaming"), { recursive: true });
+
+  process.env.HOME = tempRoot;
+  process.env.USERPROFILE = tempRoot;
+  process.env.EQUIP_HOME = path.join(tempRoot, ".equip");
+  process.env.APPDATA = path.join(tempRoot, "AppData", "Roaming");
+  process.env.CODEX_HOME = tempRoot;
+
+  return {
+    home: tempRoot,
+    equipHome: process.env.EQUIP_HOME,
+    dispose() {
+      for (const k of HOME_ENV_VARS) {
+        if (previousEnv[k] === undefined) delete process.env[k];
+        else process.env[k] = previousEnv[k];
+      }
+      try {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      } catch { /* Windows EBUSY tolerated, see setupEquipHome */ }
+    },
+  };
+}
+
+module.exports = { setupEquipHome, setupFullHome };

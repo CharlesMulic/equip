@@ -13,11 +13,6 @@ const {
 } = require("../dist/lib/platform-state");
 
 const {
-  readInstallations, writeInstallations, trackInstallation, trackUninstallation,
-  getAugmentsForPlatform, getManagedAugmentNames,
-} = require("../dist/lib/installations");
-
-const {
   readEquipMeta, writeEquipMeta, markScanCompleted, updatePreferences,
 } = require("../dist/lib/equip-meta");
 
@@ -25,21 +20,17 @@ const { installMcpJson } = require("../dist/lib/mcp");
 
 // ─── Helpers ────────────────────────────────────────────────
 
-let originalHome;
-let tempHome;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  originalHome = os.homedir;
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-platstate-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = require("path").join(tempHome, ".equip");
-  require("fs").mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("equip-platstate");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = originalHome;
-  delete process.env.EQUIP_HOME;
-  fs.rmSync(tempHome, { recursive: true, force: true });
+  isolation.dispose();
 }
 
 function mockDetectedPlatform(id, overrides = {}) {
@@ -246,136 +237,9 @@ describe("platform-state: platforms/<id>.json", () => {
 });
 
 // ─── Installations Tests ────────────────────────────────────
-
-describe("installations.json", () => {
-  beforeEach(setupTempHome);
-  afterEach(teardownTempHome);
-
-  it("readInstallations returns empty when file missing", () => {
-    const inst = readInstallations();
-    assert.equal(inst.lastUpdated, "");
-    assert.deepEqual(inst.augments, {});
-  });
-
-  it("trackInstallation creates new augment record", () => {
-    trackInstallation("prior", {
-      source: "registry",
-      package: "prior",
-      title: "Prior",
-      transport: "http",
-      serverUrl: "https://api.cg3.io/mcp",
-      platforms: ["claude-code", "cursor"],
-      artifacts: {
-        "claude-code": { mcp: true, rules: "0.6.0", skills: ["search"] },
-        "cursor": { mcp: true },
-      },
-    });
-
-    const inst = readInstallations();
-    assert.ok(inst.augments.prior);
-    assert.equal(inst.augments.prior.platforms.length, 2);
-    assert.equal(inst.augments.prior.artifacts["claude-code"].rules, "0.6.0");
-    assert.ok(inst.augments.prior.installedAt);
-  });
-
-  it("trackInstallation adds platform to existing record", () => {
-    trackInstallation("prior", {
-      source: "registry", title: "Prior", transport: "http",
-      platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: true } },
-    });
-    trackInstallation("prior", {
-      source: "registry", title: "Prior", transport: "http",
-      platforms: ["cursor"],
-      artifacts: { "cursor": { mcp: true } },
-    });
-
-    const inst = readInstallations();
-    assert.equal(inst.augments.prior.platforms.length, 2);
-    assert.ok(inst.augments.prior.platforms.includes("claude-code"));
-    assert.ok(inst.augments.prior.platforms.includes("cursor"));
-  });
-
-  it("trackUninstallation removes platform from record", () => {
-    trackInstallation("prior", {
-      source: "registry", title: "Prior", transport: "http",
-      platforms: ["claude-code", "cursor"],
-      artifacts: { "claude-code": { mcp: true }, "cursor": { mcp: true } },
-    });
-
-    trackUninstallation("prior", ["cursor"]);
-
-    const inst = readInstallations();
-    assert.ok(inst.augments.prior);
-    assert.equal(inst.augments.prior.platforms.length, 1);
-    assert.ok(inst.augments.prior.platforms.includes("claude-code"));
-    assert.ok(!inst.augments.prior.artifacts.cursor);
-  });
-
-  it("trackUninstallation removes augment when no platforms remain", () => {
-    trackInstallation("prior", {
-      source: "registry", title: "Prior", transport: "http",
-      platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: true } },
-    });
-
-    trackUninstallation("prior", ["claude-code"]);
-
-    const inst = readInstallations();
-    assert.equal(inst.augments.prior, undefined);
-  });
-
-  it("trackUninstallation without platforms removes entire record", () => {
-    trackInstallation("prior", {
-      source: "registry", title: "Prior", transport: "http",
-      platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: true } },
-    });
-
-    trackUninstallation("prior");
-
-    const inst = readInstallations();
-    assert.equal(inst.augments.prior, undefined);
-  });
-
-  it("getAugmentsForPlatform returns correct reverse lookup", () => {
-    trackInstallation("prior", {
-      source: "registry", title: "Prior", transport: "http",
-      platforms: ["claude-code", "cursor"],
-      artifacts: { "claude-code": { mcp: true }, "cursor": { mcp: true } },
-    });
-    trackInstallation("docs", {
-      source: "registry", title: "Docs", transport: "http",
-      platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: true } },
-    });
-
-    const ccAugments = getAugmentsForPlatform("claude-code");
-    assert.equal(ccAugments.length, 2);
-    assert.ok(ccAugments.includes("prior"));
-    assert.ok(ccAugments.includes("docs"));
-
-    const cursorAugments = getAugmentsForPlatform("cursor");
-    assert.equal(cursorAugments.length, 1);
-    assert.ok(cursorAugments.includes("prior"));
-  });
-
-  it("getManagedAugmentNames returns all managed names", () => {
-    trackInstallation("prior", {
-      source: "registry", title: "Prior", transport: "http",
-      platforms: ["claude-code"], artifacts: { "claude-code": { mcp: true } },
-    });
-    trackInstallation("docs", {
-      source: "local", title: "Docs", transport: "http",
-      platforms: ["claude-code"], artifacts: { "claude-code": { mcp: true } },
-    });
-
-    const names = getManagedAugmentNames();
-    assert.ok(names.has("prior"));
-    assert.ok(names.has("docs"));
-    assert.ok(!names.has("unknown"));
-  });
-});
+// Deleted in storage-redesign Phase A4. Coverage of the journal-canonical
+// install/uninstall surface lives in test/storage/journal.test.js +
+// test/storage/materializer.test.js.
 
 // ─── Equip Meta Tests ───────────────────────────────────────
 
@@ -428,7 +292,34 @@ describe("equip.json", () => {
 
 // ─── Auto-wrapping MCP servers ──────────────────────────────
 
-const { readAugmentDef, hasAugmentDef, writeAugmentDef } = require("../dist/lib/augment-defs");
+const { JsonStore } = require("../dist/lib/storage/datastore");
+
+// Helpers that adapt the legacy readAugmentDef/writeAugmentDef shape used in
+// the auto-wrap tests below to the journal-canonical store. Lets the original
+// test intent survive the storage redesign without rewriting all assertions.
+function seedExistingAugment(name, content) {
+  const contentHash = JsonStore.putContent({
+    name,
+    title: content.title || name,
+    description: content.description || "",
+    transport: content.transport,
+    serverUrl: content.serverUrl,
+    stdio: content.stdio,
+    requiresAuth: content.requiresAuth ?? false,
+  });
+  JsonStore.appendIntent({
+    type: "install-augment",
+    clock: JsonStore.newClock(),
+    name,
+    contentHash,
+    contentSource: { kind: "local-authored", createdAt: new Date().toISOString() },
+    platforms: [],
+  });
+}
+function resolvedExists(name) {
+  const r = JsonStore.resolve(name);
+  return !!r && r.installed;
+}
 
 describe("Auto-wrapping MCP servers during scan", () => {
   beforeEach(setupTempHome);
@@ -457,45 +348,27 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     const { scans } = scanAllPlatforms(detected, new Set());
 
-    // Verify the augment was auto-wrapped
-    assert.ok(hasAugmentDef("my-server"), "Augment should be created");
-    const def = readAugmentDef("my-server");
-    assert.equal(def.source, "wrapped");
-    assert.equal(def.transport, "stdio");
-    assert.equal(def.stdio.command, "npx");
-    assert.deepEqual(def.stdio.args, ["-y", "my-mcp-server"]);
-    assert.equal(def.wrappedFrom.type, "mcp");
-    assert.equal(def.wrappedFrom.platform, "test-platform");
-    assert.equal(def.wrappedFrom.originalName, "my-server");
-
-    // Verify installation record was created
-    const inst = readInstallations();
-    assert.ok(inst.augments["my-server"]);
-    assert.equal(inst.augments["my-server"].source, "wrapped");
-    assert.deepEqual(inst.augments["my-server"].platforms, ["test-platform"]);
+    // Verify the augment was auto-wrapped into the journal.
+    const resolved = JsonStore.resolve("my-server");
+    assert.ok(resolved, "Augment should be wrapped into the journal");
+    assert.equal(resolved.transport, "stdio");
+    assert.equal(resolved.stdio.command, "npx");
+    assert.deepEqual(resolved.stdio.args, ["-y", "my-mcp-server"]);
+    assert.equal(resolved.installed, true);
+    assert.deepEqual(resolved.installedPlatforms, ["test-platform"]);
+    assert.equal(resolved.contentSource.kind, "wrapped");
+    assert.equal(resolved.contentSource.fromPlatform, "test-platform");
 
     // Verify scan marks it as managed
     assert.equal(scans["test-platform"].augments["my-server"].managed, true);
   });
 
   it("does not re-wrap an already existing augment", () => {
-    // Pre-create the augment
-    const augDir = path.join(tempHome, ".equip", "augments");
-    fs.mkdirSync(augDir, { recursive: true });
-    writeAugmentDef({
-      name: "existing-server",
-      source: "local",
+    // Pre-create the augment in the journal as a local-authored entry.
+    seedExistingAugment("existing-server", {
       title: "Existing",
-      description: "",
       transport: "http",
       serverUrl: "http://original.com",
-      requiresAuth: false,
-      skills: [],
-      baseWeight: 0,
-      loadedWeight: 0,
-      modded: false,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
     });
 
     // Platform config has a server with the same name
@@ -515,10 +388,11 @@ describe("Auto-wrapping MCP servers during scan", () => {
       configFormat: "json",
     }], new Set());
 
-    // The original augment should be untouched
-    const def = readAugmentDef("existing-server");
-    assert.equal(def.source, "local");
-    assert.equal(def.serverUrl, "http://original.com");
+    // The original content should be preserved (auto-wrap is a no-op when
+    // the name is already known to the journal).
+    const resolved = JsonStore.resolve("existing-server");
+    assert.equal(resolved.contentSource.kind, "local-authored");
+    assert.equal(resolved.serverUrl, "http://original.com");
   });
 
   it("does not wrap already-managed servers", () => {
@@ -540,7 +414,7 @@ describe("Auto-wrapping MCP servers during scan", () => {
     }], new Set(["managed-server"]));
 
     // Should NOT be wrapped
-    assert.ok(!hasAugmentDef("managed-server"));
+    assert.ok(!resolvedExists("managed-server"));
   });
 
   it("wraps orphan skill files during scanAllPlatforms", () => {
@@ -572,35 +446,30 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     scanAllPlatforms(detected, new Set());
 
-    // Verify the skill was auto-wrapped
-    assert.ok(hasAugmentDef("my-custom-skill"), "Skill augment should be created");
-    const def = readAugmentDef("my-custom-skill");
-    assert.equal(def.source, "wrapped");
-    assert.equal(def.wrappedFrom.type, "skill");
-    assert.equal(def.wrappedFrom.platform, "claude-code");
-    assert.equal(def.wrappedFrom.originalName, "my-custom-skill");
+    // Verify the skill was auto-wrapped into the journal.
+    const resolved = JsonStore.resolve("my-custom-skill");
+    assert.ok(resolved, "Skill augment should be wrapped into the journal");
+    assert.equal(resolved.contentSource.kind, "wrapped");
+    assert.equal(resolved.contentSource.fromPlatform, "claude-code");
+    assert.equal(resolved.installed, true);
+    assert.deepEqual(resolved.installedPlatforms, ["claude-code"]);
 
-    // Verify skill content is captured in augment def
-    assert.equal(def.skills.length, 1, "Should have 1 skill");
-    assert.equal(def.skills[0].name, "do-thing");
-    assert.deepEqual(def.skills[0].files.map((file) => file.path), [
+    // Verify skill content is captured.
+    assert.equal(resolved.skills.length, 1, "Should have 1 skill");
+    assert.equal(resolved.skills[0].name, "do-thing");
+    assert.deepEqual(resolved.skills[0].files.map((file) => file.path), [
       "SKILL.md",
       "assets/example.json",
       "references/usage.md",
       "scripts/check.ps1",
     ]);
-    assert.equal(def.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
-    assert.equal(def.skills[0].files.find((file) => file.path === "references/usage.md").content, "# Usage\n");
-    assert.equal(def.skills[0].files.find((file) => file.path === "scripts/check.ps1").content, "Write-Output 'ok'\n");
-    assert.equal(def.skills[0].files.find((file) => file.path === "assets/example.json").content, "{\"ok\":true}\n");
+    assert.equal(resolved.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
+    assert.equal(resolved.skills[0].files.find((file) => file.path === "references/usage.md").content, "# Usage\n");
+    assert.equal(resolved.skills[0].files.find((file) => file.path === "scripts/check.ps1").content, "Write-Output 'ok'\n");
+    assert.equal(resolved.skills[0].files.find((file) => file.path === "assets/example.json").content, "{\"ok\":true}\n");
 
-    // Verify description extracted from SKILL.md heading
-    assert.equal(def.description, "Do Thing");
-
-    // Verify installation record
-    const inst = readInstallations();
-    assert.ok(inst.augments["my-custom-skill"]);
-    assert.deepEqual(inst.augments["my-custom-skill"].artifacts["claude-code"].skills, ["do-thing"]);
+    // Verify description extracted from SKILL.md heading.
+    assert.equal(resolved.description, "Do Thing");
   });
 
   it("extracts description from SKILL.md skipping YAML frontmatter", () => {
@@ -623,11 +492,11 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     scanAllPlatforms(detected, new Set());
 
-    const def = readAugmentDef("fancy-skill");
-    assert.ok(def, "Skill augment should be created");
-    assert.equal(def.description, "Friendly Greeter", "Should skip frontmatter and extract heading");
-    assert.equal(def.skills.length, 1);
-    assert.equal(def.skills[0].name, "greet");
+    const resolved = JsonStore.resolve("fancy-skill");
+    assert.ok(resolved, "Skill augment should be wrapped into the journal");
+    assert.equal(resolved.description, "Friendly Greeter", "Should skip frontmatter and extract heading");
+    assert.equal(resolved.skills.length, 1);
+    assert.equal(resolved.skills[0].name, "greet");
   });
 
   it("does not wrap skills owned by managed augments", () => {
@@ -651,8 +520,9 @@ describe("Auto-wrapping MCP servers during scan", () => {
     // "prior" is managed
     scanAllPlatforms(detected, new Set(["prior"]));
 
-    // Should NOT be wrapped
-    assert.ok(!hasAugmentDef("prior") || readAugmentDef("prior")?.source !== "wrapped");
+    // Should NOT be wrapped (managed names skip auto-wrap)
+    const resolved = JsonStore.resolve("prior");
+    assert.ok(!resolved || resolved.contentSource.kind !== "wrapped");
   });
 
   it("auto-wrap is idempotent — second scan does not duplicate", () => {
@@ -674,11 +544,18 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     // First scan
     scanAllPlatforms(detected, new Set());
-    assert.ok(hasAugmentDef("idempotent-server"));
+    assert.ok(JsonStore.resolve("idempotent-server"), "wrapped after first scan");
+    const intentsAfterFirst = JsonStore.readIntents().filter(
+      (i) => i.name === "idempotent-server",
+    ).length;
 
-    // Second scan — should not error or duplicate
+    // Second scan — should not duplicate the install intent.
     scanAllPlatforms(detected, new Set());
-    const def = readAugmentDef("idempotent-server");
-    assert.equal(def.source, "wrapped");
+    const resolved = JsonStore.resolve("idempotent-server");
+    assert.equal(resolved.contentSource.kind, "wrapped");
+    const intentsAfterSecond = JsonStore.readIntents().filter(
+      (i) => i.name === "idempotent-server",
+    ).length;
+    assert.equal(intentsAfterSecond, intentsAfterFirst, "second scan must not append a duplicate intent");
   });
 });

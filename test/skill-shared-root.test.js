@@ -19,20 +19,17 @@ const fs = require("fs");
 const { installSkill, uninstallSkill } = require("../dist/lib/skills");
 const { readManifest, isTombstone } = require("../dist/lib/skill-manifest");
 
-let tempHome;
-const origHomedir = os.homedir;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-shared-root-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = require("path").join(tempHome, ".equip");
-  require("fs").mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("equip-shared-root");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch {}
+  isolation.dispose();
 }
 
 /** Two mock platforms sharing one skillsPath — mirrors codex + windsurf both writing to ~/.agents/skills/. */
@@ -205,20 +202,16 @@ describe("Shared-root + cross-augment takeover", () => {
     const skillDir = path.join(codex.skillsPath, "search");
     assert.equal(readManifest(skillDir).owners.length, 2);
 
-    // Track A in installations.json so the cross-augment refusal recognizes A.
-    // (Simulated via the manifest path; for collision detection we'd need
-    // installations.json updated — easiest for this test: use the trackInstallation
-    // helper from installations.ts.)
-    const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
-    trackInstallation("augment-a", {
+    // Phase A migration: storage-layer setup. Augment-a owns "search" skill
+    // on codex+windsurf. The new model derives ownership from
+    // content.skills × installedPlatforms.
+    const { setupInstalledAugment } = require("./storage/_test-helpers");
+    setupInstalledAugment("augment-a", {
       source: "registry",
       title: "A",
       transport: "http",
       platforms: ["codex", "windsurf"],
-      artifacts: {
-        codex: { mcp: false, skills: ["search"] },
-        windsurf: { mcp: false, skills: ["search"] },
-      },
+      skills: [SKILL],
     });
 
     // Augment-B installs for codex with --takeover.
@@ -234,8 +227,8 @@ describe("Shared-root + cross-augment takeover", () => {
     assert.equal(m.owners[0].augment, "augment-b");
     assert.equal(m.owners[0].platform, "codex");
 
-    trackUninstallation("augment-a");
-    trackUninstallation("augment-b");
+    // Cleanup handled by test isolation (fresh tempHome per test); no explicit
+    // trackUninstallation needed.
   });
 });
 

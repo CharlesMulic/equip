@@ -36,7 +36,6 @@ export interface PlatformHookCapabilities {
 }
 
 // ─── Broker capability flags + strategy hooks ──────────────
-// See ADR: equip-app/planning/ADR-cross-platform-strategy-pattern.md
 //
 // Capability flags answer YES/NO questions about a platform.
 // Strategy hooks produce behavioral outputs (config bytes, rule sets).
@@ -122,7 +121,7 @@ export interface BrokerConfigWriteResult {
   transport: "stdio" | "loopback-http";
   /**
    * Optional human-readable note for `equip doctor` output (e.g. "Cursor
-   * 2.5+ recommended" or "first-time auth runs in equip-app").
+   * 2.5+ recommended" or "broker-managed; runtime owns auth").
    */
   note?: string;
 }
@@ -385,7 +384,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
             args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
           },
           transport: "stdio",
-          note: "broker-managed; first-time OAuth runs in equip-app",
+          note: "broker-managed; runtime owns first-time OAuth",
         };
       },
     },
@@ -444,7 +443,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
             args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
           },
           transport: "stdio",
-          note: "broker-managed; first-time OAuth runs in equip-app",
+          note: "broker-managed; runtime owns first-time OAuth",
         };
       },
     },
@@ -574,7 +573,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
             args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
           },
           transport: "stdio",
-          note: "broker-managed; first-time OAuth runs in equip-app",
+          note: "broker-managed; runtime owns first-time OAuth",
         };
       },
     },

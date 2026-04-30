@@ -20,7 +20,18 @@ const fs = require("fs");
 const { execSync } = require("child_process");
 
 const EQUIP_ROOT = path.join(__dirname, "..");
-const { trackUninstallation } = require("../dist/lib/installations");
+const { JsonStore } = require("../dist/lib/storage/datastore");
+
+// Journal-based test cleanup: append an UninstallAugmentIntent so the
+// resolved view stops listing the augment as installed. Replaces the legacy
+// trackUninstallation helper which mutated installations.json directly.
+function trackUninstallation(name) {
+  JsonStore.appendIntent({
+    type: "uninstall-augment",
+    clock: JsonStore.newClock(),
+    name,
+  });
+}
 
 // ─── Helpers ─────────────────────────────────────────────────
 

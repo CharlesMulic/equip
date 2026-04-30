@@ -16,10 +16,10 @@
 //   5. Store the issued delegated access token. Validation at the publisher's MCP
 //      server uses jose.jwtVerify against the platform's JWKS — fully offline.
 //
-// The broker doesn't refresh `session.json` itself; the sidecar bridge owns that
-// loop. If the session is stale at refresh time, OidcProvider returns
-// { ok: false, code: "session_stale" } and the next tick retries after the bridge
-// has refreshed.
+// This provider doesn't refresh `session.json` itself — that's whoever
+// owns the session lifecycle. If the session is stale at refresh time,
+// OidcProvider returns { ok: false, code: "session_stale" } and the
+// next tick retries after the session has been refreshed externally.
 //
 // Ported from equip/src/lib/auth-engine.ts:resolveOidc + refreshOidcTokens.
 
@@ -109,7 +109,7 @@ export class OidcProvider implements Provider {
     if (isJwtExpired(session.accessToken)) {
       return {
         ok: false,
-        error: "Equip session expired — sidecar bridge needs to refresh it before delegated tokens can be issued",
+        error: "Equip session expired — refresh required before delegated tokens can be issued",
         code: "session_stale",
       };
     }

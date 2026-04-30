@@ -18,7 +18,8 @@ const fs = require("fs");
 
 const { Augment } = require("..");
 const { parseTomlServerEntry } = require("../dist/lib/mcp");
-const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
+const { setupInstalledAugment } = require("./storage/_test-helpers");
+const { setupFullHome } = require("./_isolation");
 
 function tmpPath(prefix) {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -90,11 +91,7 @@ describe("Package 04 — installMcpBroker preserves pre-existing TOML entries", 
 
   it("re-installing the same broker augment is idempotent (replaces the entry, preserves others)", () => {
     // Need a tempHome so installations.json doesn't leak across tests.
-    const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "broker-reinstall-"));
-    const origHomedir = os.homedir;
-    os.homedir = () => tempHome;
-    process.env.EQUIP_HOME = path.join(tempHome, ".equip");
-    fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+    const isolation = setupFullHome("broker-reinstall");
 
     try {
       const configPath = tmpPath("codex-reinstall") + ".toml";
@@ -108,12 +105,11 @@ describe("Package 04 — installMcpBroker preserves pre-existing TOML entries", 
       // do its own tracking).
       const r1 = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
       assert.equal(r1.success, true);
-      trackInstallation("stub-broker-augment", {
+      setupInstalledAugment("stub-broker-augment", {
         source: "registry",
         title: "Stub Broker Augment",
         transport: "stdio",
         platforms: ["codex"],
-        artifacts: { codex: { mcp: true, installMode: "broker" } },
       });
 
       // Second install with different shim path (simulating an equip-app upgrade
@@ -139,9 +135,7 @@ describe("Package 04 — installMcpBroker preserves pre-existing TOML entries", 
 
       cleanup(configPath);
     } finally {
-      os.homedir = origHomedir;
-      delete process.env.EQUIP_HOME;
-      try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
+      isolation.dispose();
     }
   });
 

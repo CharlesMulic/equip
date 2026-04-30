@@ -1,10 +1,9 @@
-// Append-only intent journal for v2 spike.
+// Append-only intent journal — the canonical write surface for storage.
 //
-// The single canonical write surface for user-facing mutations. Each line of
-// `~/.equip/v2/intents.jsonl` is one Intent serialized as JSON (no embedded
-// newlines, terminated with \n). Writes use Node's fs.appendFileSync which
-// translates to O_APPEND on POSIX — atomic for writes ≤ PIPE_BUF (~4KB).
-// Intents fit comfortably under that limit.
+// Each line of `~/.equip/storage/intents.jsonl` is one Intent serialized as
+// JSON (no embedded newlines, terminated with \n). Writes use Node's
+// fs.appendFileSync which translates to O_APPEND on POSIX — atomic for
+// writes ≤ PIPE_BUF (~4KB). Intents fit comfortably under that limit.
 //
 // Reads stream the file line-by-line, parsing each as Intent. Corrupt lines
 // (parse failures, schema mismatches) are logged + skipped — defensive
@@ -12,7 +11,7 @@
 //
 // Multi-writer safety: O_APPEND handles concurrent appenders correctly on
 // POSIX. On Windows, fs.appendFile uses CreateFile with FILE_APPEND_DATA
-// which has the same atomicity guarantee. Both CLI and sidecar can append
+// which has the same atomicity guarantee. Any cooperating writer can append
 // without coordination.
 
 import * as fs from "fs";
@@ -20,10 +19,10 @@ import * as path from "path";
 import { getEquipHome } from "../equip-home";
 import { type Intent, isIntent } from "./intent";
 
-const V2_JOURNAL_FILENAME = "v2/intents.jsonl";
+const STORAGE_JOURNAL_FILENAME = "storage/intents.jsonl";
 
 function getJournalPath(): string {
-  return path.join(getEquipHome(), V2_JOURNAL_FILENAME);
+  return path.join(getEquipHome(), STORAGE_JOURNAL_FILENAME);
 }
 
 function ensureJournalDir(): void {

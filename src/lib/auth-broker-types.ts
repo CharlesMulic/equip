@@ -5,8 +5,6 @@
 // Comprehensive refactor of auth-engine.ts to use these types is broker
 // plan Phase 1 — explicitly out of scope for this initiative.
 //
-// See ADR: equip-app/planning/ADR-cross-platform-strategy-pattern.md
-//
 // Zero non-Node dependencies; pure types + minimal runtime helpers.
 
 import type { AuthConfig, StoredCredential } from "./auth-engine";
@@ -73,11 +71,9 @@ export interface Provider {
 
   /**
    * Probe upstream that current credentials still work. Returns ok=true
-   * with no value on success. Used by the broker-side health surface
-   * (`equip-app sidecar broker-health`). `equip doctor` does not call
-   * this directly — it would require an IPC client in equip lib, which
-   * the boundary discipline (Pkg 06c, 2026-04-27 architect review)
-   * explicitly prohibits.
+   * with no value on success. Called by whatever runtime owns the
+   * provider's lifecycle — `equip doctor` deliberately does not invoke
+   * it, since that would require an IPC client and re-cross the boundary.
    */
   validate(opts: ProviderValidateOptions): Promise<ProviderResult<void>>;
 

@@ -1,7 +1,10 @@
 // State reconciliation — scans platform configs after tool dispatch
-// and records what's actually on disk in the new state files.
+// and writes an InstallAugmentIntent to the journal reflecting what's
+// actually on disk.
 //
-// Called by the global CLI after a tool's setup completes.
+// Called by the global CLI after a tool's setup completes, and by the
+// apply() pipeline after platform writes.
+//
 // Zero dependencies.
 
 import * as fs from "fs";
@@ -12,15 +15,13 @@ import { detectPlatforms } from "./detect";
 import { readMcpEntry } from "./mcp";
 import { dirExists, fileExists } from "./detect";
 import { acquireLock } from "./fs";
-import { trackInstallation, getManagedAugmentNames, type ArtifactRecord } from "./installations";
-import { readInstall } from "./installs-store";
-import { scanAllPlatforms, isPlatformEnabled } from "./platform-state";
-import { readAugmentDef, syncFromRegistry } from "./augment-defs";
-import { augmentResolver } from "./augment-resolver";
+import { JsonStore } from "./storage/datastore";
+import type { AugmentContent } from "./storage/content-store";
+import type { ContentHash, ContentSource, PlatformInstallMode } from "./storage/intent";
+import { scanAllPlatforms } from "./platform-state";
 import { markEquipUpdated } from "./equip-meta";
 import { createSnapshot, hasInitialSnapshot } from "./snapshots";
 import type { RegistryDef } from "./registry";
-import type { DetectedPlatform } from "./platforms";
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
 
@@ -29,13 +30,13 @@ import { NOOP_LOGGER } from "./types";
 export interface ReconcileOptions {
   /** Augment name (used as key in state and to find MCP entries) */
   toolName: string;
-  /** npm package name (e.g. "@cg3/prior-node") */
+  /** npm package name (e.g. "@cg3/prior-node") — kept for back-compat; unused post-A */
   package: string;
   /** Rules marker name. Defaults to toolName if not provided. */
   marker?: string;
   /** Hook directory path. Defaults to ~/.{toolName}/hooks if not provided. */
   hookDir?: string;
-  /** Registry definition (if available, used to sync augment definition) */
+  /** Registry definition (if available, used to build the content blob) */
   toolDef?: RegistryDef;
   /** Logger for debug/warning output (silent by default) */
   logger?: EquipLogger;
@@ -48,13 +49,13 @@ export interface ReconcileOptions {
  * Returns the number of platforms where the augment was found.
  */
 export function reconcileState(options: ReconcileOptions): number {
-  const { toolName, package: pkg, marker = toolName, hookDir: customHookDir, toolDef, logger = NOOP_LOGGER } = options;
+  const { toolName, marker = toolName, hookDir: customHookDir, toolDef, logger = NOOP_LOGGER } = options;
   const defaultHookDir = path.join(os.homedir(), `.${toolName}`, "hooks");
   const hookDir = customHookDir || defaultHookDir;
 
   const releaseLock = acquireLock();
   try {
-    return reconcileStateInner(toolName, pkg, marker, hookDir, toolDef, logger);
+    return reconcileStateInner(toolName, marker, hookDir, toolDef, logger);
   } finally {
     releaseLock();
   }
@@ -62,83 +63,107 @@ export function reconcileState(options: ReconcileOptions): number {
 
 /**
  * Resolve the set of skill names declared by an augment, consulting the
- * registry def first (freshest) and falling back to the persisted augment
- * def file written by syncFromRegistry / local authoring.
+ * registry def first (freshest) and falling back to the journal-resolved
+ * augment view.
  */
 function collectDeclaredSkillNames(toolName: string, toolDef: RegistryDef | undefined): string[] {
   const names = new Set<string>();
   if (toolDef?.skills) {
     for (const s of toolDef.skills) if (s?.name) names.add(s.name);
   }
-  try {
-    // Cleanup B Pkg 03: read via resolver (was readAugmentDef). The
-    // resolver returns ResolvedAugment merged from defs + cache; .skills
-    // exposes the same array regardless of which store contributed.
-    const persisted = augmentResolver.resolve(toolName);
-    if (persisted?.skills) {
-      for (const s of persisted.skills) if (s?.name) names.add(s.name);
-    }
-  } catch { /* persisted def may not exist */ }
+  const resolved = JsonStore.resolve(toolName);
+  if (resolved?.skills) {
+    for (const s of resolved.skills) if (s?.name) names.add(s.name);
+  }
   return [...names];
+}
+
+/**
+ * Convert a RegistryDef into the AugmentContent shape stored in the
+ * content-addressed blob store.
+ */
+function registryDefToContent(def: RegistryDef): AugmentContent {
+  const transport = (def.transport as "http" | "stdio") || (def.stdioCommand ? "stdio" : "http");
+  return {
+    name: def.name,
+    title: def.title || def.name,
+    description: def.description || "",
+    transport,
+    serverUrl: transport === "http" ? def.serverUrl : undefined,
+    stdio: def.stdioCommand
+      ? { command: def.stdioCommand, args: def.stdioArgs || [], ...(def.envKey ? { envKey: def.envKey } : {}) }
+      : undefined,
+    requiresAuth: def.requiresAuth || false,
+    auth: def.auth as Record<string, unknown> | undefined,
+    subtitle: def.subtitle,
+    flavorText: def.flavorText,
+    categories: def.categories,
+    homepage: def.homepage,
+    repository: def.repository,
+    license: def.license,
+    rules: def.rules
+      ? { content: def.rules.content, version: def.rules.version, marker: def.rules.marker }
+      : undefined,
+    skills: def.skills?.map((s) => ({ name: s.name, files: s.files || [] })),
+    hooks: def.hooks,
+  };
 }
 
 function reconcileStateInner(
   toolName: string,
-  pkg: string,
   marker: string,
   hookDir: string,
   toolDef: RegistryDef | undefined,
   logger: EquipLogger,
 ): number {
-  // Sync augment definition from registry if available
+  // Build content blob from the registry def (when present). We do this
+  // before scanning so the content hash is available when appending the
+  // install intent.
+  let contentHash: ContentHash | null = null;
+  let contentSource: ContentSource | null = null;
   if (toolDef) {
-    try { syncFromRegistry(toolDef); } catch (e: unknown) {
-      logger.debug("Failed to sync augment definition", { error: (e as Error).message });
+    try {
+      const content = registryDefToContent(toolDef);
+      contentHash = JsonStore.putContent(content);
+      contentSource = {
+        kind: "registry",
+        version: toolDef.version || 1,
+        etag: toolDef.contentHash,
+        fetchedAt: new Date().toISOString(),
+      };
+    } catch (e: unknown) {
+      logger.debug("Failed to write content blob from registry def", { error: (e as Error).message });
     }
   }
 
+  // Read existing journal state so we can preserve per-platform installMode.
+  // Broker-managed installs look identical on disk to direct-mode (just a
+  // command+args pointing at the broker shim), so without this preservation
+  // step every reconcile would silently downgrade installMode "broker" back
+  // to "direct" (Pkg 04 + ENG-0052).
+  const existing = JsonStore.resolve(toolName);
+
   let count = 0;
   const installedPlatforms: string[] = [];
-  const artifacts: Record<string, ArtifactRecord> = {};
-
-  // Read existing record so we can preserve metadata that the on-disk
-  // scan can't infer — currently `installMode` (Pkg 04 + ENG-0052). The
-  // platform config entry for a broker-managed install looks identical
-  // to a regular stdio entry on disk (just `command`+`args` pointing at
-  // the shim), so without this preservation step every reconcile would
-  // silently downgrade installMode: "broker" back to direct.
-  // Cleanup B Pkg 03: read via per-augment installs-store wrapper.
-  const existingRecord = readInstall(toolName);
 
   for (const [id, def] of PLATFORM_REGISTRY) {
     // Quick presence check (fast fs stat)
-    const dirFound = def.detection.dirs.some(fn => dirExists(fn()));
-    const fileFound = def.detection.files.some(fn => fileExists(fn()));
+    const dirFound = def.detection.dirs.some((fn) => dirExists(fn()));
+    const fileFound = def.detection.files.some((fn) => fileExists(fn()));
     const configPath = def.configPath();
     if (!dirFound && !fileFound && !fileExists(configPath)) continue;
 
-    // Build artifact record from what's on disk. Preserve installMode
-    // from the existing record (see comment above).
-    const existingInstallMode = existingRecord?.artifacts?.[id]?.installMode;
-    const artifactRecord: ArtifactRecord = { mcp: false };
-    if (existingInstallMode) artifactRecord.installMode = existingInstallMode;
     let hasAnyArtifact = false;
 
     // Check MCP config
     const entry = readMcpEntry(configPath, def.rootKey, toolName, def.configFormat);
-    if (entry) {
-      artifactRecord.mcp = true;
-      hasAnyArtifact = true;
-    }
+    if (entry) hasAnyArtifact = true;
 
     // Check for rules
     if (def.rulesPath) {
-      const rulesPath = def.rulesPath();
       try {
-        const content = fs.readFileSync(rulesPath, "utf-8");
-        const versionMatch = content.match(new RegExp(`<!-- ${marker}:v([0-9.]+) -->`));
-        if (versionMatch) {
-          artifactRecord.rules = versionMatch[1];
+        const rulesContent = fs.readFileSync(def.rulesPath(), "utf-8");
+        if (new RegExp(`<!-- ${marker}:v([0-9.]+) -->`).test(rulesContent)) {
           hasAnyArtifact = true;
         }
       } catch { /* rules file may not exist */ }
@@ -147,71 +172,62 @@ function reconcileStateInner(
     // Check for hooks
     if (def.hooks) {
       try {
-        const hookFiles = fs.readdirSync(hookDir).filter(f => f.endsWith(".js"));
-        if (hookFiles.length > 0) {
-          artifactRecord.hooks = hookFiles;
-          hasAnyArtifact = true;
-        }
+        const hookFiles = fs.readdirSync(hookDir).filter((f) => f.endsWith(".js"));
+        if (hookFiles.length > 0) hasAnyArtifact = true;
       } catch { /* hook dir may not exist */ }
     }
 
     // Check for skills.
     // Skills now live flat at {skillsPath}/{skillName}/SKILL.md, so we can't infer
     // which skills belong to this augment by listing a directory. Cross-reference
-    // the augment's declared skill names (from registry def or persisted def file)
+    // the augment's declared skill names (from registry def or resolved augment)
     // and look each one up at the flat path. Also accept legacy nested installs
     // from older equip versions so reconcile reflects what's still on disk.
     if (def.skillsPath) {
       const skillsBasePath = def.skillsPath();
       const declaredSkills = collectDeclaredSkillNames(toolName, toolDef);
-      const found: string[] = [];
       for (const skillName of declaredSkills) {
         const flat = path.join(skillsBasePath, skillName, "SKILL.md");
         const legacy = path.join(skillsBasePath, toolName, skillName, "SKILL.md");
-        try {
-          if (fs.statSync(flat).isFile()) { found.push(skillName); continue; }
-        } catch { /* fall through */ }
-        try {
-          if (fs.statSync(legacy).isFile()) found.push(skillName);
-        } catch { /* not installed on this platform */ }
-      }
-      if (found.length > 0) {
-        artifactRecord.skills = found;
-        hasAnyArtifact = true;
+        try { if (fs.statSync(flat).isFile()) { hasAnyArtifact = true; break; } } catch { /* fall through */ }
+        try { if (fs.statSync(legacy).isFile()) { hasAnyArtifact = true; break; } } catch { /* not installed on this platform */ }
       }
     }
 
     if (!hasAnyArtifact) continue;
 
     installedPlatforms.push(id);
-    artifacts[id] = artifactRecord;
     count++;
   }
 
-  // Write to installations.json
-  if (installedPlatforms.length > 0) {
+  // Append InstallAugmentIntent to the journal. Requires content (we can't
+  // record an install without knowing what content was applied). When
+  // toolDef is absent (CLI discovery flow), we skip — the augment was
+  // presumably installed via a prior intent that already carries the
+  // content reference, so the journal state is already correct.
+  if (installedPlatforms.length > 0 && contentHash && contentSource) {
+    // Preserve broker mode for platforms that previously had it. Default
+    // direct mode is implicit (omitted from installModes).
+    const installModes: Record<string, PlatformInstallMode> = {};
+    if (existing) {
+      for (const platformId of installedPlatforms) {
+        if (existing.installModes[platformId] === "broker") {
+          installModes[platformId] = "broker";
+        }
+      }
+    }
     try {
-      const transport = toolDef?.transport || (artifacts[installedPlatforms[0]]?.mcp ? "http" : "stdio");
-      // Source determination: AugmentDef carries an explicit `source` field
-      // ("local" | "registry" | "wrapped"); RegistryDef does not (registry-
-      // fetched defs are always "registry" by construction). Read from toolDef
-      // when present so a local user-save flow (writeAugmentDefAndApply ->
-      // apply -> reconcileState) preserves source="local" in installations.json
-      // instead of overwriting it. Default to "registry" when toolDef lacks
-      // the field, matching the historical behavior for runInstall callers.
-      type DefWithSource = { source?: "registry" | "local" | "wrapped" };
-      const augmentSource = (toolDef as DefWithSource | undefined)?.source ?? "registry";
-      trackInstallation(toolName, {
-        source: augmentSource,
-        package: pkg,
-        title: toolDef?.title || toolName,
-        transport: (transport as "http" | "stdio"),
-        serverUrl: toolDef?.serverUrl,
+      JsonStore.appendIntent({
+        type: "install-augment",
+        clock: JsonStore.newClock(),
+        name: toolName,
+        contentHash,
+        contentSource,
         platforms: installedPlatforms,
-        artifacts,
+        ...(Object.keys(installModes).length > 0 ? { installModes } : {}),
       });
     } catch (e: unknown) {
-      logger.debug("Failed to track installation", { error: (e as Error).message });
+      logger.debug("Failed to append install intent", { error: (e as Error).message });
     }
   }
 
@@ -231,7 +247,9 @@ function reconcileStateInner(
       }
     }
 
-    const managedNames = getManagedAugmentNames();
+    const managedNames = new Set(
+      JsonStore.listResolved().filter((r) => r.installed).map((r) => r.name),
+    );
     scanAllPlatforms(detected, managedNames);
     markEquipUpdated();
   } catch (e: unknown) {

@@ -1,6 +1,6 @@
 // Materializer — folds intents + content blobs into the resolved view.
 //
-// This is the single read path for v2. Every consumer that wants to know
+// This is THE single read path for storage. Every consumer that wants to know
 // "what's the current state of augment X" calls `resolve(name)`. The
 // materializer:
 //   1. Reads all intents for that augment from the journal
@@ -31,7 +31,7 @@
 //   - This means a refresh that changes serverUrl picks up the new value;
 //     a refresh that changes rules has its rules overridden by an active mod
 
-import { readIntentsFor } from "./intent-journal";
+import { readIntentsFor, readIntents } from "./intent-journal";
 import { getContent, type AugmentContent } from "./content-store";
 import type {
   Intent,
@@ -57,7 +57,7 @@ export interface ResolvedAugment {
   requiresAuth: boolean;
   rules?: { content: string; version: string; marker: string };
   skills: { name: string; files: { path: string; content: string }[] }[];
-  hooks: { type: string; command: string }[];
+  hooks: { event: string; matcher?: string; script: string; name: string }[];
 
   // ── Provenance ──
   contentHash: ContentHash;
@@ -70,6 +70,8 @@ export interface ResolvedAugment {
   // ── Install state ──
   installed: boolean;
   installedPlatforms: string[];
+  /** Per-platform install mode. Platforms not listed default to "direct". */
+  installModes: Record<string, "direct" | "broker">;
 
   // ── Pin state ──
   pinnedTo: ContentHash | null;
@@ -83,6 +85,7 @@ interface FoldState {
   contentHash: ContentHash | null;
   contentSource: ContentSource | null;
   installedPlatforms: string[];
+  installModes: Record<string, "direct" | "broker">;
   installed: boolean;
   mod: ModOverrides | null;
   pinnedTo: ContentHash | null;
@@ -117,6 +120,7 @@ export function resolveFromIntents(
     contentHash: null,
     contentSource: null,
     installedPlatforms: [],
+    installModes: {},
     installed: false,
     mod: null,
     pinnedTo: null,
@@ -135,7 +139,7 @@ export function resolveFromIntents(
     // Content blob missing — could indicate GC ran prematurely or a journal
     // referencing a deleted blob. Defensive: surface as null + log.
     // eslint-disable-next-line no-console
-    console.warn(`[equip v2 materializer] content blob missing for ${name} (hash=${state.contentHash})`);
+    console.warn(`[equip storage] content blob missing for ${name} (hash=${state.contentHash})`);
     return null;
   }
 
@@ -155,6 +159,10 @@ function foldIntent(state: FoldState, intent: Intent): void {
       }
       state.installed = true;
       state.installedPlatforms = [...intent.platforms];
+      // Replace installModes map (latest install intent's per-platform
+      // mode wins). Platforms not listed in installModes default to "direct"
+      // at consumer-render time.
+      state.installModes = intent.installModes ? { ...intent.installModes } : {};
       return;
 
     case "uninstall-augment":
@@ -164,9 +172,16 @@ function foldIntent(state: FoldState, intent: Intent): void {
       if (intent.platforms === undefined) {
         state.installed = false;
         state.installedPlatforms = [];
+        state.installModes = {};
       } else {
         const removed = new Set(intent.platforms);
         state.installedPlatforms = state.installedPlatforms.filter((p) => !removed.has(p));
+        // Remove installModes entries for the uninstalled platforms.
+        const remainingModes: Record<string, "direct" | "broker"> = {};
+        for (const [pid, mode] of Object.entries(state.installModes)) {
+          if (!removed.has(pid)) remainingModes[pid] = mode;
+        }
+        state.installModes = remainingModes;
         state.installed = state.installedPlatforms.length > 0;
       }
       return;
@@ -242,6 +257,7 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
     moddedFields,
     installed: state.installed,
     installedPlatforms: [...state.installedPlatforms],
+    installModes: { ...state.installModes },
     pinnedTo: state.pinnedTo,
   };
 }
@@ -250,13 +266,12 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
  * List all augments with any non-empty resolved state. Useful for the UI
  * library view + the doctor's "what's installed" check.
  *
- * Implementation reads the full journal, groups by name, and resolves each
- * group. Spike-grade — production needs an index.
+ * Reads the full journal once, groups by name, resolves each group. For
+ * very large journals this becomes O(N) per call — acceleration via
+ * SqliteIndexedStore (deferred follow-up) maintains a per-name index.
  */
 export function listResolved(): ResolvedAugment[] {
-  // Inline a one-time full-journal read; group by name; resolve each.
-  // (Mirror of resolve() but batched.)
-  const allIntents = require("./intent-journal").readIntents() as Intent[];
+  const allIntents = readIntents();
   const byName = new Map<string, Intent[]>();
   for (const intent of allIntents) {
     const existing = byName.get(intent.name);

@@ -3,7 +3,7 @@
 // Doctor's job for broker-managed installs:
 //   1. Skip the URL-HTTPS check (entry has no url)
 //   2. Skip the auth-header check (entry has no headers)
-//   3. Emit a one-line hint: "broker-managed — run 'equip-app sidecar broker-health'"
+//   3. Emit a one-line hint that broker runtime is managed externally
 //   4. Continue checking rules/hooks/skills (orthogonal to auth)
 //
 // Doctor does NOT call broker IPC. Doctor does NOT read the broker's
@@ -19,26 +19,59 @@ const os = require("os");
 const fs = require("fs");
 
 const { runDoctor } = require("../dist/lib/commands/doctor");
-const {
-  trackInstallation,
-  trackUninstallation,
-  readInstallations,
-} = require("../dist/lib/installations");
+// Phase A: trackInstallation is dead. Use storage-layer test helper that
+// translates the legacy artifacts shape (including installMode) → install
+// intent on the journal.
+const { setupInstalledAugment } = require("./storage/_test-helpers");
+function trackInstallation(name, opts) {
+  const { artifacts, ...rest } = opts || {};
+  let skills = rest.skills;
+  if (!skills && artifacts) {
+    const skillNames = new Set();
+    for (const platformId of Object.keys(artifacts)) {
+      for (const s of artifacts[platformId]?.skills ?? []) skillNames.add(s);
+    }
+    if (skillNames.size > 0) {
+      skills = [...skillNames].map((n) => ({
+        name: n,
+        files: [{ path: "SKILL.md", content: `---\nname: ${n}\ndescription: x\n---\n` }],
+      }));
+    }
+  }
+  setupInstalledAugment(name, { ...rest, skills, artifacts });
+}
+function trackUninstallation() { /* no-op; test isolation handles cleanup */ }
+function readInstallations() {
+  // Compatibility shim — return legacy-shape from storage layer for any
+  // tests that still assert on installations.augments[name] structure.
+  const { JsonStore } = require("../dist/lib/storage/datastore.js");
+  const augments = {};
+  for (const r of JsonStore.listResolved()) {
+    if (r.installed) {
+      augments[r.name] = {
+        source: r.contentSource.kind === "registry" ? "registry" : "local",
+        title: r.title,
+        platforms: r.installedPlatforms,
+        installedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        artifacts: {},
+      };
+    }
+  }
+  return { lastUpdated: new Date().toISOString(), augments };
+}
 
-let tempHome;
-const origHomedir = os.homedir;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-broker-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = path.join(tempHome, ".equip");
-  fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("doctor-broker");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  isolation.dispose();
 }
 
 /**
@@ -83,7 +116,7 @@ describe("Pkg 06c — equip doctor: broker-managed branch", () => {
 
     assert.match(
       output,
-      /broker-managed — run 'equip-app sidecar broker-health'/,
+      /broker-managed — runtime status is managed externally/,
       `expected broker-managed hint; got:\n${output}`,
     );
   });
