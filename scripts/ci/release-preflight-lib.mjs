@@ -31,7 +31,7 @@ function deriveEvidenceFileNames(artifacts) {
   return Object.fromEntries(
     Object.entries(normalizedArtifacts).map(([key, value]) => [
       key,
-      typeof value === "string" && value ? path.parse(value).name : "",
+      typeof value === "string" && value ? path.basename(value) : "",
     ]),
   );
 }

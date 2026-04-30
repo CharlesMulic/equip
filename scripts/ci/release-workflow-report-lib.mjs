@@ -65,7 +65,7 @@ function deriveEvidenceFileNamesFromArtifacts(artifacts) {
   return Object.fromEntries(
     entries.map(([key, value]) => [
       key,
-      path.parse(value).name,
+      path.basename(value),
     ]),
   );
 }

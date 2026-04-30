@@ -99,10 +99,10 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
   assert.equal(report.tarballSmoke.steps[0].name, "npm-install");
   assert.equal(report.dockerAcceptance.steps[1].name, "docker-run");
   assert.equal(report.artifacts.reportPath, ".generated/release/release-verification-report.json");
-  assert.equal(report.evidenceFileNames.packageLogPath, "pack-verification");
-  assert.equal(report.evidenceFileNames.tarballSmokeLogPath, "pack-install-smoke");
-  assert.equal(report.evidenceFileNames.dockerAcceptanceReportPath, "docker-acceptance-report");
-  assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report");
+  assert.equal(report.evidenceFileNames.packageLogPath, "pack-verification.log");
+  assert.equal(report.evidenceFileNames.tarballSmokeLogPath, "pack-install-smoke.log");
+  assert.equal(report.evidenceFileNames.dockerAcceptanceReportPath, "docker-acceptance-report.json");
+  assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report.json");
   assert.equal(report.artifactNames.packVerification, "pack-verification");
   assert.equal(report.artifactNames.dockerAcceptance, "docker-acceptance");
   assert.equal(report.artifactNames.report, "release-verification-report");
@@ -301,8 +301,8 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /## Evidence file names/i);
-  assert.match(summary, /Package Log Path: `pack-verification`/i);
-  assert.match(summary, /Tarball Smoke Log Path: `pack-install-smoke`/i);
+  assert.match(summary, /Package Log Path: `pack-verification\.log`/i);
+  assert.match(summary, /Tarball Smoke Log Path: `pack-install-smoke\.log`/i);
   assert.match(summary, /Pack Verification: `pack-verification`/i);
   assert.match(summary, /Summary: `release-verification-summary`/i);
 });
@@ -447,9 +447,9 @@ test("buildReleaseVerificationReport can embed final assertion details and artif
   assert.equal(report.artifacts.reportPath, "C:/tmp/release-verification-report.json");
   assert.equal(report.artifacts.assertionPath, "C:/tmp/release-verification-assertion.json");
   assert.equal(report.artifacts.summaryPath, "C:/tmp/release-verification-summary.md");
-  assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report");
-  assert.equal(report.evidenceFileNames.releaseVerificationAssertionPath, "release-verification-assertion");
-  assert.equal(report.evidenceFileNames.releaseVerificationSummaryPath, "release-verification-summary");
+  assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report.json");
+  assert.equal(report.evidenceFileNames.releaseVerificationAssertionPath, "release-verification-assertion.json");
+  assert.equal(report.evidenceFileNames.releaseVerificationSummaryPath, "release-verification-summary.md");
   assert.equal(report.artifactNames.packTarball, "pack-tarball");
   assert.equal(report.artifactNames.summary, "release-verification-summary");
 });

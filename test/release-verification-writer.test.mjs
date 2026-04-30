@@ -78,11 +78,11 @@ test("write-release-verification-summary writes a markdown artifact with the fin
       summary: "release-verification-summary",
     },
     evidenceFileNames: {
-      packageLogPath: "pack-verification",
-      tarballSmokeLogPath: "pack-install-smoke",
-      releaseVerificationReportPath: "release-verification-report",
-      releaseVerificationAssertionPath: "release-verification-assertion",
-      releaseVerificationSummaryPath: "release-verification-summary",
+      packageLogPath: "pack-verification.log",
+      tarballSmokeLogPath: "pack-install-smoke.log",
+      releaseVerificationReportPath: "release-verification-report.json",
+      releaseVerificationAssertionPath: "release-verification-assertion.json",
+      releaseVerificationSummaryPath: "release-verification-summary.md",
     },
     workflowContext: {
       repository: "CharlesMulic/equip",
@@ -127,7 +127,7 @@ test("write-release-verification-summary writes a markdown artifact with the fin
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /## Evidence file names/i);
-  assert.match(summary, /Release Verification Report Path: `release-verification-report`/i);
+  assert.match(summary, /Release Verification Report Path: `release-verification-report\.json`/i);
   assert.match(summary, /Pack Tarball: `pack-tarball`/i);
   assert.match(summary, /## Final assertion/i);
   assert.match(summary, /Tarball smoke failure: Installed equip --help output did not include the expected usage header\./i);
@@ -204,9 +204,9 @@ test("write-release-verification-report can rewrite a final report without dupli
   assert.equal(report.artifactNames.report, "release-verification-report");
   assert.equal(report.artifactNames.assertion, "release-verification-assertion");
   assert.equal(report.artifactNames.summary, "release-verification-summary");
-  assert.equal(report.evidenceFileNames.packageReportPath, "pack-verification");
-  assert.equal(report.evidenceFileNames.tarballSmokeResultPath, "pack-install-smoke");
-  assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report");
+  assert.equal(report.evidenceFileNames.packageReportPath, "pack-verification.json");
+  assert.equal(report.evidenceFileNames.tarballSmokeResultPath, "pack-install-smoke.json");
+  assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report.json");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(
     report.workflowContext.runUrl,
