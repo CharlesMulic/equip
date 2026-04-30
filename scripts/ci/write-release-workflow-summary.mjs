@@ -14,6 +14,16 @@ const summaryPath =
 const appendStepSummary =
   (process.env.RELEASE_WORKFLOW_APPEND_STEP_SUMMARY || "true").toLowerCase() !== "false";
 
+function readSyntheticArtifactNames() {
+  return {
+    assertion: process.env.RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME || "",
+    summary: process.env.RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME || "",
+    report: process.env.RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME || "",
+    releaseVerification: process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "",
+    changesetsRelease: process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "",
+  };
+}
+
 const report = fs.existsSync(reportPath)
   ? JSON.parse(fs.readFileSync(reportPath, "utf8"))
   : (() => {
@@ -35,6 +45,7 @@ const report = fs.existsSync(reportPath)
         },
       });
       syntheticReport.inputs.hasReleaseWorkflowReport = false;
+      syntheticReport.artifactNames = readSyntheticArtifactNames();
       return syntheticReport;
     })();
 const markdown = buildReleaseWorkflowSummaryMarkdown({ report });

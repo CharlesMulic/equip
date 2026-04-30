@@ -9,6 +9,16 @@ const assertionPath =
   process.env.RELEASE_WORKFLOW_ASSERTION_PATH ||
   path.join(".generated", "release", "release-workflow-assertion.json");
 
+function readSyntheticArtifactNames() {
+  return {
+    assertion: process.env.RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME || "",
+    summary: process.env.RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME || "",
+    report: process.env.RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME || "",
+    releaseVerification: process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "",
+    changesetsRelease: process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "",
+  };
+}
+
 function parseAllowedStatuses(rawValue) {
   const values = (rawValue || "published,completed")
     .split(",")
@@ -88,6 +98,7 @@ const report = fs.existsSync(reportPath)
         },
       });
       syntheticReport.inputs.hasReleaseWorkflowReport = false;
+      syntheticReport.artifactNames = readSyntheticArtifactNames();
       return syntheticReport;
     })();
 const allowedStatuses = parseAllowedStatuses(process.env.RELEASE_WORKFLOW_ALLOWED_STATUSES);

@@ -692,6 +692,11 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
     RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
+    RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
+    RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
+    RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
     GITHUB_REPOSITORY: "CharlesMulic/equip",
     GITHUB_WORKFLOW: "Release",
     GITHUB_RUN_ID: "1234567890",
@@ -709,6 +714,10 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
   assert.match(summary, /## Missing inputs/i);
   assert.match(summary, /Release workflow report artifact was missing/i);
   assert.match(summary, /Release bootstrap result was missing/i);
+  assert.match(summary, /## Evidence artifacts/i);
+  assert.match(summary, /Assertion: `release-workflow-assertion`/i);
+  assert.match(summary, /Summary: `release-workflow-summary`/i);
+  assert.match(summary, /Report: `release-workflow-report`/i);
 });
 
 test("assert-release-workflow-report writes a failure artifact when the report is missing", () => {
@@ -719,6 +728,11 @@ test("assert-release-workflow-report writes a failure artifact when the report i
   const result = runScript("scripts/ci/assert-release-workflow-report.mjs", {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
+    RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
+    RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
+    RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
     GITHUB_REPOSITORY: "CharlesMulic/equip",
     GITHUB_WORKFLOW: "Release",
     GITHUB_RUN_ID: "1234567890",
@@ -738,6 +752,11 @@ test("assert-release-workflow-report writes a failure artifact when the report i
   assert.equal(assertion.report.inputs.hasReleasePreflightResult, false);
   assert.equal(assertion.report.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.report.inputs.hasChangesetsReleaseReport, false);
+  assert.equal(assertion.report.artifactNames.assertion, "release-workflow-assertion");
+  assert.equal(assertion.report.artifactNames.report, "release-workflow-report");
+  assert.equal(assertion.report.artifactNames.summary, "release-workflow-summary");
+  assert.equal(assertion.report.artifactNames.releaseVerification, "release-verification-report");
+  assert.equal(assertion.report.artifactNames.changesetsRelease, "changesets-release-report");
   assert.equal(assertion.report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(assertion.report.workflowContext.workflow, "Release");
   assert.equal(assertion.report.workflowContext.runId, "1234567890");
