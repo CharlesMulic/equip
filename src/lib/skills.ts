@@ -7,8 +7,22 @@ import * as path from "path";
 import { type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync } from "./fs";
 import { validateRelativePath, validatePathWithinDir, validateToolName, validateSkillName } from "./validation";
-import { findAugmentsOwningSkill } from "./installations";
-import { readInstall } from "./installs-store";
+import { JsonStore } from "./storage/datastore";
+
+// Phase A migration: legacy `findAugmentsOwningSkill` (which queried per-platform
+// per-augment artifacts in installations.json) → derive from resolved view.
+// "Augments owning skill X on platform P" = augments with X in their content.skills
+// AND P in their installedPlatforms.
+function findAugmentsOwningSkill(platformId: string, skillName: string, excludeAugment?: string): string[] {
+  return JsonStore.listResolved()
+    .filter((r) =>
+      r.installed
+      && r.installedPlatforms.includes(platformId)
+      && r.skills.some((s) => s.name === skillName)
+      && r.name !== excludeAugment,
+    )
+    .map((r) => r.name);
+}
 import {
   MANIFEST_FILENAME,
   buildManifestForInstall,
@@ -364,11 +378,13 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
     return null;
   }
 
-  // No one else claims it. Did WE install it previously per the installs store?
-  // Cleanup B Pkg 03: read from new installs-store directly (was readInstallations().augments[toolName]).
-  // Same on-disk shape via dual-write mirror; readInstall is a thin per-augment wrapper.
-  const ourSkills = readInstall(toolName)?.artifacts?.[platform]?.skills;
-  const weExpectThis = Array.isArray(ourSkills) && ourSkills.includes(skillName);
+  // No one else claims it. Did WE install it previously per the storage layer?
+  // Phase A migration: derive from the resolved augment view. The resolver
+  // returns the current effective skills (mod overrides applied); if our
+  // augment's resolved view includes this skill name, we expect to own it.
+  const ourResolved = JsonStore.resolve(toolName);
+  const ourSkillNames = ourResolved?.skills.map((s) => s.name) ?? [];
+  const weExpectThis = ourSkillNames.includes(skillName);
   if (weExpectThis) {
     // Recovery case — files were installed by us in a prior run, just no manifest yet.
     logger.debug("Recovering manifest for previously-installed skill", { platform, skill: skillName });

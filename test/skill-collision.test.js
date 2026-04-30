@@ -20,7 +20,11 @@ const fs = require("fs");
 
 const { installSkill } = require("../dist/lib/skills");
 const { readManifest, writeManifest, buildManifestForInstall } = require("../dist/lib/skill-manifest");
-const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
+const { setupInstalledAugment } = require("./storage/_test-helpers");
+// Phase A: trackInstallation/trackUninstallation are gone. Tests use the
+// storage-layer test helper to set up "augment is installed with these skills".
+// trackUninstallation calls become no-ops (test isolation handles cleanup).
+const trackUninstallation = () => {};
 const { Augment } = require("..");
 
 let tempHome;
@@ -129,12 +133,12 @@ describe("installSkill collision-check decision tree", () => {
     fs.writeFileSync(path.join(skillDir, "SKILL.md"), "stale content");
 
     // Pretend a prior install crashed before manifest was written.
-    trackInstallation("prior", {
+    setupInstalledAugment("prior", {
       source: "registry",
       title: "Prior",
       transport: "http",
       platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: false, skills: ["search"] } },
+      skills: [SKILL],
     });
 
     const r = installSkill(p, "prior", SKILL, { source: "registry" });
@@ -149,12 +153,12 @@ describe("installSkill collision-check decision tree", () => {
     const p = mockPlatform();
     // Augment A installed first.
     installSkill(p, "augment-a", SKILL, { source: "registry" });
-    trackInstallation("augment-a", {
+    setupInstalledAugment("augment-a", {
       source: "registry",
       title: "A",
       transport: "http",
       platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: false, skills: ["search"] } },
+      skills: [SKILL],
     });
 
     // Augment B tries to install same skill name.
@@ -174,12 +178,12 @@ describe("installSkill collision-check decision tree", () => {
   it("(D + --takeover) overrides cross-augment collision", () => {
     const p = mockPlatform();
     installSkill(p, "augment-a", SKILL, { source: "registry" });
-    trackInstallation("augment-a", {
+    setupInstalledAugment("augment-a", {
       source: "registry",
       title: "A",
       transport: "http",
       platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: false, skills: ["search"] } },
+      skills: [SKILL],
     });
 
     const newSkill = {
@@ -293,12 +297,12 @@ describe("Augment.installSkill — partial install when one of N skills collides
 
     // Augment A pre-installs `search`.
     installSkill(p, "augment-a", SKILL, { source: "registry" });
-    trackInstallation("augment-a", {
+    setupInstalledAugment("augment-a", {
       source: "registry",
       title: "A",
       transport: "http",
       platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: false, skills: ["search"] } },
+      skills: [SKILL],
     });
 
     // Augment B ships [search, contribute, feedback] — only `search` collides.
@@ -335,12 +339,12 @@ describe("Augment.installSkill — partial install when one of N skills collides
     const p = mockPlatform();
 
     installSkill(p, "augment-a", SKILL, { source: "registry" });
-    trackInstallation("augment-a", {
+    setupInstalledAugment("augment-a", {
       source: "registry",
       title: "A",
       transport: "http",
       platforms: ["claude-code"],
-      artifacts: { "claude-code": { mcp: false, skills: ["search"] } },
+      skills: [SKILL],
     });
 
     const augmentB = new Augment({

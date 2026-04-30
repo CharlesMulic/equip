@@ -16,7 +16,7 @@ const os = require("os");
 const fs = require("fs");
 
 const { Augment } = require("..");
-const { trackInstallation } = require("../dist/lib/installations");
+const { setupInstalledAugment } = require("./storage/_test-helpers");
 
 function tmpPath(prefix) {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -115,12 +115,11 @@ describe("Package 05 — installMcpBroker preserves pre-existing JSON entries", 
       const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
 
       augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
-      trackInstallation("stub-broker-augment", {
+      setupInstalledAugment("stub-broker-augment", {
         source: "registry",
         title: "Stub Broker Augment",
         transport: "stdio",
         platforms: ["claude-code"],
-        artifacts: { "claude-code": { mcp: true, installMode: "broker" } },
       });
 
       const newShim = "/Library/equip-app/bin/equip-broker-shim";

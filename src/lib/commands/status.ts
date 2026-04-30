@@ -1,10 +1,11 @@
 // equip status — show all MCP servers across all platforms.
-// Reads config files directly and cross-references with installations.json.
+// Reads platform config files directly and cross-references with the
+// resolved augment view (which augments are equip-managed).
 
 import * as fs from "fs";
 import { PLATFORM_REGISTRY } from "../platforms";
 import { dirExists, fileExists } from "../detect";
-import { getManagedAugmentNames } from "../installations";
+import { JsonStore } from "../storage/datastore";
 import * as cli from "../cli";
 
 interface ServerInfo {
@@ -14,7 +15,9 @@ interface ServerInfo {
 }
 
 export function runStatus(): void {
-  const managedNames = getManagedAugmentNames();
+  // Phase A migration: managed augment names = anything with a non-empty
+  // resolved view (the journal model's equivalent of legacy "in installations.json").
+  const managedNames = new Set(JsonStore.listResolved().map((r) => r.name));
   const servers = new Map<string, ServerInfo>();
   const platformResults: { id: string; name: string; count: number }[] = [];
 

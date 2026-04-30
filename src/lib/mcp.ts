@@ -8,7 +8,7 @@ import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
 import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } from "./fs";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
-import { readInstall } from "./installs-store";
+import { JsonStore } from "./storage/datastore";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -291,10 +291,10 @@ export function installMcpForReplaceAdopt(
 }
 
 function hasManagedInstallOnPlatform(serverName: string, platformId: string): boolean {
-  // Cleanup B Pkg 03: read from new installs-store directly. readInstall is a
-  // per-augment wrapper over installs/<name>.json (same on-disk shape via mirror).
-  const record = readInstall(serverName);
-  return !!record && Array.isArray(record.platforms) && record.platforms.includes(platformId);
+  // Phase A: read via storage layer's resolver. installedPlatforms reflects the
+  // current install intent; non-empty means the augment is equip-managed.
+  const resolved = JsonStore.resolve(serverName);
+  return !!resolved && resolved.installed && resolved.installedPlatforms.includes(platformId);
 }
 
 function conflictResult(configPath: string, serverName: string, platformId: string, method: "json" | "toml", logger: EquipLogger): ArtifactResult {
