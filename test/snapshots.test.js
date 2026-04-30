@@ -21,18 +21,17 @@ const {
 
 // ─── Temp Home Isolation ────────────────────────────────────
 
-let originalHome;
-let tempHome;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  originalHome = os.homedir;
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "snap-test-"));
-  os.homedir = () => tempHome;
+  isolation = setupFullHome("snap-test");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = originalHome;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch {}
+  isolation.dispose();
 }
 
 // ─── Test Helpers ───────────────────────────────────────────

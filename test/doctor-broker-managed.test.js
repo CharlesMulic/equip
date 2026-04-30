@@ -61,20 +61,17 @@ function readInstallations() {
   return { lastUpdated: new Date().toISOString(), augments };
 }
 
-let tempHome;
-const origHomedir = os.homedir;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-broker-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = path.join(tempHome, ".equip");
-  fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("doctor-broker");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  isolation.dispose();
 }
 
 /**

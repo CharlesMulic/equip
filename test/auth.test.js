@@ -22,18 +22,17 @@ const {
 
 // ─── Test Helpers ───────────────────────────────────────────
 
-let originalHome;
-let tempHome;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  originalHome = os.homedir;
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-auth-"));
-  os.homedir = () => tempHome;
+  isolation = setupFullHome("equip-auth");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = originalHome;
-  fs.rmSync(tempHome, { recursive: true, force: true });
+  isolation.dispose();
 }
 
 // Use a unique tool name per test to avoid collisions

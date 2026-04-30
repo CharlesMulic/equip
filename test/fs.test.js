@@ -8,19 +8,17 @@ const os = require("os");
 const cp = require("child_process");
 
 const { atomicWriteFileSync, safeReadJsonSync } = require("../dist/lib/fs");
+const { setupFullHome } = require("./_isolation");
 
-let originalHome;
-let tempHome;
+let isolation, tempHome;
 
 function setupTempHome() {
-  originalHome = os.homedir;
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-fs-"));
-  os.homedir = () => tempHome;
+  isolation = setupFullHome("equip-fs");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = originalHome;
-  fs.rmSync(tempHome, { recursive: true, force: true });
+  isolation.dispose();
 }
 
 function withReadFailureOnce(target, fn) {

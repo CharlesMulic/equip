@@ -17,31 +17,17 @@ const fs = require("fs");
 
 const { reconcileState } = require("../dist/lib/reconcile");
 const { JsonStore } = require("../dist/lib/storage/datastore.js");
+const { setupFullHome } = require("./_isolation");
 
-let tempHome;
-const origHomedir = os.homedir;
-const origAppData = process.env.APPDATA;
+let isolation, tempHome;
 
 function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "reconcile-journal-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = path.join(tempHome, ".equip");
-  fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
-  // Codex platform: uses CODEX_HOME for config.toml location.
-  process.env.CODEX_HOME = tempHome;
-  // Sandbox APPDATA on Windows so platform-discovery (vsCodeUserDir →
-  // roo-code, vscode, etc.) doesn't read the developer's real installed
-  // augments and pollute the journal via the auto-wrap path.
-  process.env.APPDATA = path.join(tempHome, "AppData", "Roaming");
+  isolation = setupFullHome("reconcile-journal");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  delete process.env.CODEX_HOME;
-  if (origAppData === undefined) delete process.env.APPDATA;
-  else process.env.APPDATA = origAppData;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  isolation.dispose();
 }
 
 describe("Phase A.3b — reconcileState journal writes", () => {

@@ -26,21 +26,17 @@ const { setupInstalledAugment } = require("./storage/_test-helpers");
 // trackUninstallation calls become no-ops (test isolation handles cleanup).
 const trackUninstallation = () => {};
 const { Augment } = require("..");
+const { setupFullHome } = require("./_isolation");
 
-let tempHome;
-const origHomedir = os.homedir;
+let isolation, tempHome;
 
 function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-collision-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = require("path").join(tempHome, ".equip");
-  require("fs").mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("equip-collision");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch {}
+  isolation.dispose();
 }
 
 function mockPlatform() {

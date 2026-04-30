@@ -27,26 +27,12 @@ const fs = require("fs");
 const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
 const { writeAugmentDef } = require("../dist/lib/augment-defs");
 const { JsonStore } = require("../dist/lib/storage/datastore.js");
+const { setupFullHome } = require("./_isolation");
 
-let tempHome;
-const origHomedir = os.homedir;
-const origAppData = process.env.APPDATA;
+let isolation;
 
-function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "bridge-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = path.join(tempHome, ".equip");
-  fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
-  process.env.APPDATA = path.join(tempHome, "AppData", "Roaming");
-}
-
-function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  if (origAppData === undefined) delete process.env.APPDATA;
-  else process.env.APPDATA = origAppData;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
-}
+function setupTempHome() { isolation = setupFullHome("bridge"); }
+function teardownTempHome() { isolation.dispose(); }
 
 describe("Phase A.3b.1 — installations.ts journal-bridge", () => {
   beforeEach(setupTempHome);

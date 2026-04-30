@@ -27,21 +27,17 @@ const {
 } = require("../dist/lib/checksum-cache");
 const { verifyFileAgainstManifest } = require("../dist/lib/skill-manifest");
 const { installSkill, uninstallSkill } = require("../dist/lib/skills");
+const { setupFullHome } = require("./_isolation");
 
-let tempHome;
-const origHomedir = os.homedir;
+let isolation, tempHome;
 
 function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-cache-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = require("path").join(tempHome, ".equip");
-  require("fs").mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("equip-cache");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch {}
+  isolation.dispose();
 }
 
 function tmpFile(content) {

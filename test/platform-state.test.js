@@ -25,21 +25,17 @@ const { installMcpJson } = require("../dist/lib/mcp");
 
 // ─── Helpers ────────────────────────────────────────────────
 
-let originalHome;
-let tempHome;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  originalHome = os.homedir;
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-platstate-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = require("path").join(tempHome, ".equip");
-  require("fs").mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("equip-platstate");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = originalHome;
-  delete process.env.EQUIP_HOME;
-  fs.rmSync(tempHome, { recursive: true, force: true });
+  isolation.dispose();
 }
 
 function mockDetectedPlatform(id, overrides = {}) {

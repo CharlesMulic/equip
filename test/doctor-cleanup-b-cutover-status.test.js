@@ -20,20 +20,17 @@ const fs = require("fs");
 
 const { runDoctor } = require("../dist/lib/commands/doctor");
 
-let tempHome;
-const origHomedir = os.homedir;
+const { setupFullHome } = require("./_isolation");
+
+let isolation, tempHome;
 
 function setupTempHome() {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-cleanup-b-"));
-  os.homedir = () => tempHome;
-  process.env.EQUIP_HOME = path.join(tempHome, ".equip");
-  fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
+  isolation = setupFullHome("doctor-cleanup-b");
+  tempHome = isolation.home;
 }
 
 function teardownTempHome() {
-  os.homedir = origHomedir;
-  delete process.env.EQUIP_HOME;
-  try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  isolation.dispose();
 }
 
 function captureDoctorOutput(fn) {
