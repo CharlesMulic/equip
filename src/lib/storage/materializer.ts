@@ -57,7 +57,7 @@ export interface ResolvedAugment {
   requiresAuth: boolean;
   rules?: { content: string; version: string; marker: string };
   skills: { name: string; files: { path: string; content: string }[] }[];
-  hooks: { type: string; command: string }[];
+  hooks: { event: string; matcher?: string; script: string; name: string }[];
 
   // ── Provenance ──
   contentHash: ContentHash;
@@ -70,6 +70,8 @@ export interface ResolvedAugment {
   // ── Install state ──
   installed: boolean;
   installedPlatforms: string[];
+  /** Per-platform install mode. Platforms not listed default to "direct". */
+  installModes: Record<string, "direct" | "broker">;
 
   // ── Pin state ──
   pinnedTo: ContentHash | null;
@@ -83,6 +85,7 @@ interface FoldState {
   contentHash: ContentHash | null;
   contentSource: ContentSource | null;
   installedPlatforms: string[];
+  installModes: Record<string, "direct" | "broker">;
   installed: boolean;
   mod: ModOverrides | null;
   pinnedTo: ContentHash | null;
@@ -117,6 +120,7 @@ export function resolveFromIntents(
     contentHash: null,
     contentSource: null,
     installedPlatforms: [],
+    installModes: {},
     installed: false,
     mod: null,
     pinnedTo: null,
@@ -155,6 +159,10 @@ function foldIntent(state: FoldState, intent: Intent): void {
       }
       state.installed = true;
       state.installedPlatforms = [...intent.platforms];
+      // Replace installModes map (latest install intent's per-platform
+      // mode wins). Platforms not listed in installModes default to "direct"
+      // at consumer-render time.
+      state.installModes = intent.installModes ? { ...intent.installModes } : {};
       return;
 
     case "uninstall-augment":
@@ -164,9 +172,16 @@ function foldIntent(state: FoldState, intent: Intent): void {
       if (intent.platforms === undefined) {
         state.installed = false;
         state.installedPlatforms = [];
+        state.installModes = {};
       } else {
         const removed = new Set(intent.platforms);
         state.installedPlatforms = state.installedPlatforms.filter((p) => !removed.has(p));
+        // Remove installModes entries for the uninstalled platforms.
+        const remainingModes: Record<string, "direct" | "broker"> = {};
+        for (const [pid, mode] of Object.entries(state.installModes)) {
+          if (!removed.has(pid)) remainingModes[pid] = mode;
+        }
+        state.installModes = remainingModes;
         state.installed = state.installedPlatforms.length > 0;
       }
       return;
@@ -242,6 +257,7 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
     moddedFields,
     installed: state.installed,
     installedPlatforms: [...state.installedPlatforms],
+    installModes: { ...state.installModes },
     pinnedTo: state.pinnedTo,
   };
 }

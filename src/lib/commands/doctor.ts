@@ -4,8 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { PLATFORM_REGISTRY } from "../platforms";
 import { readMcpEntry } from "../mcp";
-import { listInstalls, readInstall } from "../installs-store";
-import { augmentResolver } from "../augment-resolver";
+import { JsonStore } from "../storage/datastore";
 import { dirExists, fileExists } from "../detect";
 import * as cli from "../cli";
 import { checkAuth } from "../auth";
@@ -29,18 +28,18 @@ export interface DoctorOptions {
 export function runDoctor(options: DoctorOptions = {}): void {
   cli.log(`\n${cli.BOLD}equip doctor${cli.RESET}\n`);
 
-  // Cleanup B Pkg 03: read installs via new per-augment store. The legacy
-  // `installations.lastUpdated` global timestamp doesn't exist in the per-file
-  // layout — replaced with an empty-records check (semantic equivalent for
-  // the user-visible "no equip state found" warning). Title falls back to the
-  // resolver's content view (was denormalized on the legacy install record).
-  const installRecords = listInstalls();
+  // Phase A: doctor reads via storage layer's resolver. ResolvedAugment
+  // carries content + install state in one shape; per-platform install mode
+  // (broker vs direct) lives on the install intent's installModes map and
+  // surfaces as resolved.installModes. Per-platform artifact details
+  // (mcp/rules/skills) are derived from content × installedPlatforms.
+  const resolvedAugments = JsonStore.listResolved().filter((r) => r.installed);
   let issues = 0;
   let checks = 0;
 
   // Check 1: Any installs tracked
   checks++;
-  if (installRecords.length === 0) {
+  if (resolvedAugments.length === 0) {
     cli.warn("No equip state found — run 'equip update' to initialize");
     issues++;
   } else {
@@ -48,7 +47,7 @@ export function runDoctor(options: DoctorOptions = {}): void {
   }
 
   // Check 2: For each tracked augment × platform, verify config exists
-  if (installRecords.length === 0) {
+  if (resolvedAugments.length === 0) {
     cli.log(`\n  ${cli.DIM}No tracked augments to check.${cli.RESET}`);
     cli.log(`  ${cli.DIM}Install an augment (e.g. 'equip prior') to start tracking.${cli.RESET}\n`);
     // Cleanup B Pkg 06 batch 1: still surface the cutover status even when
@@ -65,15 +64,12 @@ export function runDoctor(options: DoctorOptions = {}): void {
 
   cli.log(`\n${cli.BOLD}Checking tracked augments${cli.RESET}`);
 
-  for (const record of installRecords) {
-    const augmentName = record.name;
-    // Cleanup B Pkg 03: title + transport are content fields (live on def/cache),
-    // not install metadata. Resolve once per augment + reuse below.
-    const augContent = augmentResolver.resolve(augmentName);
-    const title = augContent?.title ?? augmentName;
+  for (const augContent of resolvedAugments) {
+    const augmentName = augContent.name;
+    const title = augContent.title;
     cli.log(`\n  ${cli.BOLD}${augmentName}${cli.RESET} ${cli.DIM}(${title})${cli.RESET}`);
 
-    for (const platformId of record.platforms) {
+    for (const platformId of augContent.installedPlatforms) {
       checks++;
       const def = PLATFORM_REGISTRY.get(platformId);
       if (!def) {
@@ -83,8 +79,14 @@ export function runDoctor(options: DoctorOptions = {}): void {
       }
 
       const configPath = def.configPath();
-      const artifacts = record.artifacts[platformId] || {};
-      const isBrokerManaged = artifacts.installMode === "broker";
+      const isBrokerManaged = augContent.installModes[platformId] === "broker";
+      // Derived "artifacts" — what would be installed given current content + platform.
+      const artifacts = {
+        mcp: !!(augContent.serverUrl || augContent.stdio),
+        rules: augContent.rules?.version,
+        skills: augContent.skills.map((s) => s.name),
+        hooks: augContent.hooks.map((h) => h.script),
+      };
 
       // Check config file exists
       if (!fileExists(configPath)) {

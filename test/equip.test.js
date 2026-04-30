@@ -34,6 +34,11 @@ const { migrateConfigs } = require("../dist/lib/migrate");
 // so existing test sites can keep their setup blocks.
 const { setupInstalledAugment } = require("./storage/_test-helpers");
 function trackInstallation(name, opts) {
+  // The legacy `artifacts` field had per-platform per-augment artifact
+  // metadata. The journal model derives skill/rules/mcp ownership from
+  // content × installedPlatforms, and per-platform installMode lives on
+  // the install intent. Extract both from artifacts and let
+  // setupInstalledAugment process them.
   const { artifacts, ...rest } = opts || {};
   let skills = rest.skills;
   if (!skills && artifacts) {
@@ -48,7 +53,7 @@ function trackInstallation(name, opts) {
       }));
     }
   }
-  setupInstalledAugment(name, { ...rest, skills });
+  setupInstalledAugment(name, { ...rest, skills, artifacts });
 }
 function trackUninstallation() { /* no-op; test isolation handles cleanup */ }
 const { checkAuth, extractAuthHeader } = require("../dist/lib/auth");

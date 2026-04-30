@@ -45,8 +45,8 @@ export interface AugmentContent {
   rules?: { content: string; version: string; marker: string };
   /** Named skill bundles. */
   skills?: { name: string; files: { path: string; content: string }[] }[];
-  /** Event hooks. */
-  hooks?: { type: string; command: string }[];
+  /** Event hooks. Shape matches the legacy HookDefinition (event/matcher/script/name). */
+  hooks?: { event: string; matcher?: string; script: string; name: string }[];
 }
 
 const STORAGE_CONTENT_DIRNAME = "storage/content";

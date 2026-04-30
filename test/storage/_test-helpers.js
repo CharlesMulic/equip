@@ -74,6 +74,21 @@ function setupInstalledAugment(name, opts) {
     }
     : { kind: "local-authored", createdAt: new Date().toISOString() };
 
+  // Optional installModes (per-platform broker vs direct). Test helper
+  // supports either an `installModes` map directly OR derives from the
+  // legacy `artifacts[platformId].installMode` shape (when callers pass
+  // through the legacy shape via the equip.test.js shim).
+  const installModes = (opts && opts.installModes) || (() => {
+    const out = {};
+    if (opts && opts.artifacts) {
+      for (const platformId of Object.keys(opts.artifacts)) {
+        const m = opts.artifacts[platformId]?.installMode;
+        if (m === "broker") out[platformId] = "broker";
+      }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  })();
+
   JsonStore.appendIntent({
     type: "install-augment",
     clock: JsonStore.newClock(),
@@ -81,6 +96,7 @@ function setupInstalledAugment(name, opts) {
     contentHash,
     contentSource,
     platforms,
+    ...(installModes ? { installModes } : {}),
   });
 
   // Phase A transition: also dual-write to legacy installs-store so consumers

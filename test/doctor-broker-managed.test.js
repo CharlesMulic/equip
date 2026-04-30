@@ -19,11 +19,47 @@ const os = require("os");
 const fs = require("fs");
 
 const { runDoctor } = require("../dist/lib/commands/doctor");
-const {
-  trackInstallation,
-  trackUninstallation,
-  readInstallations,
-} = require("../dist/lib/installations");
+// Phase A: trackInstallation is dead. Use storage-layer test helper that
+// translates the legacy artifacts shape (including installMode) → install
+// intent on the journal.
+const { setupInstalledAugment } = require("./storage/_test-helpers");
+function trackInstallation(name, opts) {
+  const { artifacts, ...rest } = opts || {};
+  let skills = rest.skills;
+  if (!skills && artifacts) {
+    const skillNames = new Set();
+    for (const platformId of Object.keys(artifacts)) {
+      for (const s of artifacts[platformId]?.skills ?? []) skillNames.add(s);
+    }
+    if (skillNames.size > 0) {
+      skills = [...skillNames].map((n) => ({
+        name: n,
+        files: [{ path: "SKILL.md", content: `---\nname: ${n}\ndescription: x\n---\n` }],
+      }));
+    }
+  }
+  setupInstalledAugment(name, { ...rest, skills, artifacts });
+}
+function trackUninstallation() { /* no-op; test isolation handles cleanup */ }
+function readInstallations() {
+  // Compatibility shim — return legacy-shape from storage layer for any
+  // tests that still assert on installations.augments[name] structure.
+  const { JsonStore } = require("../dist/lib/storage/datastore.js");
+  const augments = {};
+  for (const r of JsonStore.listResolved()) {
+    if (r.installed) {
+      augments[r.name] = {
+        source: r.contentSource.kind === "registry" ? "registry" : "local",
+        title: r.title,
+        platforms: r.installedPlatforms,
+        installedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        artifacts: {},
+      };
+    }
+  }
+  return { lastUpdated: new Date().toISOString(), augments };
+}
 
 let tempHome;
 const origHomedir = os.homedir;

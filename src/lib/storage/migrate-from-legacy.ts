@@ -209,7 +209,7 @@ interface LegacyDefShape {
   rules?: { content: string; version: string; marker: string };
   rulesUpstream?: { content: string; version: string; marker: string };
   skills?: { name: string; files: { path: string; content: string }[] }[];
-  hooks?: { type: string; command: string }[];
+  hooks?: { event: string; matcher?: string; script: string; name: string }[];
   modded?: boolean;
   moddedFields?: ("rules" | "skills" | "hooks")[];
   registryContentHash?: string;

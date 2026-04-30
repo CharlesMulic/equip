@@ -50,15 +50,26 @@ export type ContentSource =
 export interface ModOverrides {
   rules?: { content: string; version: string; marker: string } | null;
   skills?: { name: string; files: { path: string; content: string }[] }[] | null;
-  hooks?: { type: string; command: string }[] | null;
+  hooks?: { event: string; matcher?: string; script: string; name: string }[] | null;
 }
 
 // ─── Intent variants ──────────────────────────────────────
 
 /**
+ * Per-platform install mode. Affects how the platform writer emits the
+ * MCP entry (direct = HTTP/stdio shape per the platform's native format;
+ * broker = stdio-shim entry pointing at the equip-app broker binary).
+ * Default direct.
+ */
+export type PlatformInstallMode = "direct" | "broker";
+
+/**
  * "User wants augment <name> installed at content <contentHash> on <platforms>."
  * If <name> previously had an InstallAugment intent, this supersedes it
  * (materializer takes the latest by clock).
+ *
+ * Per-platform install mode lives in `installModes` (rare per-platform
+ * variation; defaults to "direct" when unset).
  */
 export interface InstallAugmentIntent {
   type: "install-augment";
@@ -67,6 +78,11 @@ export interface InstallAugmentIntent {
   contentHash: ContentHash;
   contentSource: ContentSource;
   platforms: string[];
+  /**
+   * Optional per-platform install mode. Maps platformId → mode. Platforms
+   * not listed default to "direct".
+   */
+  installModes?: Record<string, PlatformInstallMode>;
 }
 
 /**
