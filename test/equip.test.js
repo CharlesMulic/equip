@@ -2487,7 +2487,7 @@ describe("config migration", () => {
     assert.equal(entry.headers.Authorization, "Bearer ask_old", "should preserve auth");
   });
 
-  it("adds type field when wrong value (hypothetical)", { skip: "Flaky on Windows — Roo Code rules file lock (EPERM)" }, () => {
+  it("adds type field when wrong value (hypothetical)", () => {
     // Simulate: config has type: "http" but platform now requires "streamable-http"
     const { results, content } = setupAndMigrate("roo-code", "test-migrate", {
       mcpServers: {
@@ -2897,122 +2897,11 @@ describe("writeAugmentDefAndApply (commands/install)", () => {
 // the AugmentDef.source field, not be hardcoded.
 
 // Phase A migration note: this regression test was specific to a hardcode in
-// the legacy reconcile.ts:178 ("installations.json source must remain 'local'").
-// In the journal-canonical architecture, the legacy code path is deleted in
-// Phase A.4; the property being tested (contentSource.kind preserved through
-// install) is naturally true by construction (the install intent's
-// contentSource is what's written, no hardcode anywhere). These tests are
-// kept as historical context but skipped — the new equivalent assertions
-// land in storage/spike-install-flow.test.js + the per-handler tests in
-// commands/install.ts after tier-3 migration.
-describe.skip("source-preservation regression (cg3-internal-skills bug, 2026-04-27) — superseded by storage/spike-install-flow", () => {
-  const { writeAugmentDefAndApply } = require("../dist/lib/commands/install");
-  const { reconcileState } = require("../dist/lib/reconcile");
-  const { readInstallations, trackInstallation, trackUninstallation } = require("../dist/lib/installations");
-
-  it("writeAugmentDefAndApply preserves source='local' in installations.json", () => {
-    withTempHome(() => {
-      // Pre-existing install record (so apply has a platform target).
-      trackInstallation("source-pres-local", {
-        source: "local",
-        title: "Source Pres Local",
-        platforms: ["claude-code"],
-        artifacts: { "claude-code": { rules: true } },
-      });
-
-      const def = {
-        name: "source-pres-local",
-        source: "local",
-        title: "Source Pres Local",
-        description: "regression lock",
-        rules: {
-          content: "<!-- source-pres-local:v1.0.0 -->\nx\n<!-- /source-pres-local -->",
-          version: "1.0.0",
-          marker: "source-pres-local",
-        },
-        skills: [],
-        baseWeight: 0,
-        loadedWeight: 0,
-        modded: false,
-        requiresAuth: false,
-      };
-
-      writeAugmentDefAndApply(def);
-
-      const inst = readInstallations();
-      const record = inst.augments["source-pres-local"];
-      assert.ok(record, "installations record must exist after apply");
-      assert.equal(
-        record.source,
-        "local",
-        "installations.json source must remain 'local' for a local-source AugmentDef — pre-fix this would be 'registry'",
-      );
-
-      trackUninstallation("source-pres-local");
-    });
-  });
-
-  it("reconcileState writes installations.source from toolDef.source when present", () => {
-    withTempHome(() => {
-      // Set up a Claude Code platform config with our marker so reconcile
-      // finds the augment "installed" on a platform and reaches the
-      // trackInstallation branch.
-      const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
-      fs.mkdirSync(path.dirname(claudeMd), { recursive: true });
-      fs.writeFileSync(claudeMd, "<!-- recon-local:v1.0.0 -->\ntest\n<!-- /recon-local -->\n");
-
-      reconcileState({
-        toolName: "recon-local",
-        package: "recon-local",
-        marker: "recon-local",
-        toolDef: {
-          name: "recon-local",
-          source: "local",
-          title: "Recon Local",
-          rules: { content: "x", version: "1.0.0", marker: "recon-local" },
-          skills: [],
-        },
-      });
-
-      const inst = readInstallations();
-      const record = inst.augments["recon-local"];
-      if (record) {
-        assert.equal(record.source, "local", "reconcileState must propagate toolDef.source='local' into installations.json");
-      }
-      // If reconcile didn't find the platform (real-platform-detection skipped
-      // tmp paths on some setups), the test is silently inconclusive — the
-      // writeAugmentDefAndApply test above is the load-bearing lock.
-
-      trackUninstallation("recon-local");
-    });
-  });
-
-  it("reconcileState defaults to source='registry' when toolDef has no source field (RegistryDef shape)", () => {
-    withTempHome(() => {
-      const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
-      fs.mkdirSync(path.dirname(claudeMd), { recursive: true });
-      fs.writeFileSync(claudeMd, "<!-- recon-reg:v1.0.0 -->\ntest\n<!-- /recon-reg -->\n");
-
-      reconcileState({
-        toolName: "recon-reg",
-        package: "recon-reg",
-        marker: "recon-reg",
-        toolDef: {
-          name: "recon-reg",
-          // NO source field — mimics RegistryDef shape from runInstall.
-          title: "Recon Registry",
-          rules: { content: "x", version: "1.0.0", marker: "recon-reg" },
-          skills: [],
-        },
-      });
-
-      const inst = readInstallations();
-      const record = inst.augments["recon-reg"];
-      if (record) {
-        assert.equal(record.source, "registry", "reconcileState must default to source='registry' when toolDef has no source field");
-      }
-
-      trackUninstallation("recon-reg");
-    });
-  });
-});
+// Source-preservation regression coverage moved to
+// test/storage/spike-install-flow.test.js (assertions on
+// contentSource.kind through the journal install path). The legacy
+// installations.ts module + writeAugmentDefAndApply's source-mutating
+// behavior were deleted in storage redesign Phase A4 — this block
+// referenced those deleted modules and was kept skipped as a historical
+// marker, but the require() at module load would have crashed if
+// un-skipped. Removed 2026-04-30.
