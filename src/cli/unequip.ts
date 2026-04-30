@@ -8,7 +8,7 @@ import * as os from "os";
 
 import { PLATFORM_REGISTRY, createManualPlatform, platformName } from "../lib/platforms.js";
 import * as cli from "../lib/cli.js";
-import { readInstallations, trackUninstallation, withInstallationsBatch } from "../lib/installations.js";
+import { JsonStore } from "../lib/storage/datastore.js";
 import { isPlatformEnabled } from "../lib/platform-state.js";
 import { uninstallMcp } from "../lib/mcp.js";
 import { uninstallRules } from "../lib/rules.js";
@@ -30,14 +30,13 @@ if (!toolName || toolName === "--help" || toolName === "-h") {
   console.log("from all enabled platforms where it was installed.");
   console.log("");
 
-  const installations = readInstallations();
-  const augmentNames = Object.keys(installations.augments);
-  if (augmentNames.length > 0) {
+
+  const tracked = JsonStore.listResolved().filter((r) => r.installed);
+  if (tracked.length > 0) {
     console.log("Installed augments:");
-    for (const name of augmentNames) {
-      const record = installations.augments[name];
-      const plats = record.platforms.map(id => platformName(id)).join(", ");
-      console.log(`  ${name}  →  ${plats}`);
+    for (const aug of tracked) {
+      const plats = aug.installedPlatforms.map((id) => platformName(id)).join(", ");
+      console.log(`  ${aug.name}  →  ${plats}`);
     }
   } else {
     console.log("No augments tracked. Run 'equip <augment>' to install one first.");
@@ -53,23 +52,30 @@ if (toolName === "--version" || toolName === "-v") {
 
 // ─── Uninstall ──────────────────────────────────────────────
 
-const installations = readInstallations();
-const record = installations.augments[toolName];
-
-if (!record) {
+const resolved = JsonStore.resolve(toolName);
+if (!resolved || !resolved.installed) {
   cli.log(`\n${cli.BOLD}unequip ${toolName}${cli.RESET}\n`);
   cli.fail(`"${toolName}" is not tracked by equip.`);
   cli.log("");
 
-  const augmentNames = Object.keys(installations.augments);
-  if (augmentNames.length > 0) {
-    cli.log(`  Tracked augments: ${augmentNames.join(", ")}`);
+  const trackedNames = JsonStore.listResolved().filter((r) => r.installed).map((r) => r.name);
+  if (trackedNames.length > 0) {
+    cli.log(`  Tracked augments: ${trackedNames.join(", ")}`);
   } else {
     cli.log(`  No augments are currently tracked.`);
   }
   cli.log("");
   process.exit(1);
 }
+
+// Derive what's installed where from the resolved view. In the journal
+// model, per-platform artifact details aren't stored separately — the
+// content blob describes what each platform got (mcp/rules/skills/hooks),
+// and the install intent's platforms list says where.
+const hasMcp = !!(resolved.serverUrl || resolved.stdio);
+const hasRules = !!resolved.rules;
+const skillNames = resolved.skills.map((s) => s.name);
+const hookScripts = resolved.hooks.map((h) => h.script);
 
 cli.log(`\n${cli.BOLD}unequip ${toolName}${cli.RESET}`);
 if (dryRun) cli.warn("Dry run — no files will be modified");
@@ -84,9 +90,8 @@ let removed = 0;
 const removedPlatforms: string[] = [];
 
 try {
-withInstallationsBatch(() => {
 
-for (const platformId of record.platforms) {
+for (const platformId of resolved.installedPlatforms) {
   // Skip disabled platforms
   if (!isPlatformEnabled(platformId)) {
     cli.info(`${platformName(platformId)}: disabled, skipping`);
@@ -100,17 +105,16 @@ for (const platformId of record.platforms) {
   }
 
   const platform = createManualPlatform(platformId);
-  const artifacts = record.artifacts[platformId] || {};
   const results: string[] = [];
 
   // Remove MCP config
-  if (artifacts.mcp) {
+  if (hasMcp) {
     const mcpRemoved = uninstallMcp(platform, toolName, dryRun);
     if (mcpRemoved) results.push("config");
   }
 
   // Remove rules
-  if (artifacts.rules) {
+  if (hasRules) {
     const rulesRemoved = uninstallRules(platform, {
       marker: toolName,
       dryRun,
@@ -119,10 +123,10 @@ for (const platformId of record.platforms) {
   }
 
   // Remove hooks
-  if (artifacts.hooks && artifacts.hooks.length > 0) {
+  if (hookScripts.length > 0) {
     const hookDir = path.join(os.homedir(), `.${toolName}`, "hooks");
     const hooksRemoved = uninstallHooks(platform,
-      artifacts.hooks.map((s: string) => ({ event: "", name: s.replace(/\.js$/, ""), script: "", matcher: "" })),
+      hookScripts.map((s) => ({ event: "", name: s.replace(/\.js$/, ""), script: s, matcher: "" })),
       { hookDir, dryRun }
     );
     if (hooksRemoved) results.push("hooks");
@@ -131,13 +135,13 @@ for (const platformId of record.platforms) {
   // Remove skills
   const preservedAcrossSkills: string[] = [];
   let anyTombstone = false;
-  if (artifacts.skills && artifacts.skills.length > 0) {
-    for (const skillName of artifacts.skills) {
+  if (skillNames.length > 0) {
+    for (const skillName of skillNames) {
       const r = uninstallSkill(platform, toolName, skillName, dryRun);
       for (const f of r.preservedFiles) preservedAcrossSkills.push(`${skillName}/${f}`);
       if (r.tombstone) anyTombstone = true;
     }
-    results.push(`${artifacts.skills.length} skill${artifacts.skills.length === 1 ? "" : "s"}`);
+    results.push(`${skillNames.length} skill${skillNames.length === 1 ? "" : "s"}`);
   }
 
   if (results.length > 0) {
@@ -159,12 +163,16 @@ for (const platformId of record.platforms) {
   }
 }
 
-// Update state
+// Update journal: append uninstall intent for the platforms we removed from.
 if (!dryRun && removed > 0) {
-  trackUninstallation(toolName, removedPlatforms);
+  JsonStore.appendIntent({
+    type: "uninstall-augment",
+    clock: JsonStore.newClock(),
+    name: toolName,
+    platforms: removedPlatforms,
+  });
 }
 
-}); // withInstallationsBatch
 } finally {
   releaseLock();
 }
