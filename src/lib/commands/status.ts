@@ -15,8 +15,7 @@ interface ServerInfo {
 }
 
 export function runStatus(): void {
-  // Phase A migration: managed augment names = anything with a non-empty
-  // resolved view (the journal model's equivalent of legacy "in installations.json").
+  // Managed augment names = anything with a non-empty resolved view.
   const managedNames = new Set(JsonStore.listResolved().map((r) => r.name));
   const servers = new Map<string, ServerInfo>();
   const platformResults: { id: string; name: string; count: number }[] = [];

@@ -142,8 +142,7 @@ export function apply(
   // Take the equip-wide lock for the whole apply. Re-entrant — reconcileState
   // below acquires the same lock and just bumps the depth counter. Closes a
   // TOCTOU window on the per-skill "is current" check and prevents concurrent
-  // equip processes from corrupting installations.json or stomping each other's
-  // skill writes.
+  // equip processes from stomping each other's skill writes.
   const releaseLock = acquireLock();
 
   try {
@@ -293,9 +292,8 @@ export interface WriteAugmentDefAndApplyOptions extends ApplyOptions {
 }
 
 /**
- * AugmentInput → AugmentConfig adapter. Was `augmentDefToConfig` in
- * the legacy augment-defs module; inlined here so install.ts has no
- * dependency on a module being deleted in A4.
+ * AugmentInput → AugmentConfig adapter. (Was `augmentDefToConfig`
+ * in the now-deleted augment-defs module.)
  */
 function defToAugmentConfig(def: AugmentInput): AugmentConfig {
   const config: AugmentConfig = {

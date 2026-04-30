@@ -256,7 +256,7 @@ export function writePlatformScan(id: string, scan: PlatformScan): void {
  * Cross-references with managedNames to determine the `managed` flag.
  *
  * @param platform - Detected platform to scan
- * @param managedNames - Set of augment names that equip has installed (from installations.json)
+ * @param managedNames - Set of augment names equip has installed (resolved from the journal)
  * @param toolName - Optional: if provided, also check rules/hooks/skills for this specific tool
  */
 export function scanPlatform(
@@ -408,7 +408,7 @@ export function scanAllPlatforms(
   // Scan each platform. Auto-wrap of unmanaged MCP entries / orphan
   // skill dirs lands on the journal directly via autoWrapToJournal —
   // each appendIntent is a single-line atomic append, so no batching is
-  // needed (the prior legacy installations.json batch wrap is gone).
+  // needed.
   const scans: Record<string, PlatformScan> = {};
   for (const p of detected) {
     const scan = scanPlatform(p, managedNames);

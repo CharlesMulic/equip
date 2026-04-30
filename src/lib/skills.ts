@@ -9,10 +9,8 @@ import { atomicWriteFileSync } from "./fs";
 import { validateRelativePath, validatePathWithinDir, validateToolName, validateSkillName } from "./validation";
 import { JsonStore } from "./storage/datastore";
 
-// Phase A migration: legacy `findAugmentsOwningSkill` (which queried per-platform
-// per-augment artifacts in installations.json) → derive from resolved view.
-// "Augments owning skill X on platform P" = augments with X in their content.skills
-// AND P in their installedPlatforms.
+// "Augments owning skill X on platform P" = augments with X in their
+// content.skills AND P in their installedPlatforms.
 function findAugmentsOwningSkill(platformId: string, skillName: string, excludeAugment?: string): string[] {
   return JsonStore.listResolved()
     .filter((r) =>
@@ -103,7 +101,7 @@ export interface InstallSkillOptions {
   logger?: EquipLogger;
   /** Bypass cross-augment collision refusal (manifest names a different augment). */
   takeover?: boolean;
-  /** Bypass user-authored refusal (skill dir exists with no manifest and no installations.json record for us). */
+  /** Bypass user-authored refusal (skill dir exists with no manifest and no journal record for us). */
   adopt?: boolean;
   /** Augment registry version recorded in the manifest. Defaults to 0 for local installs. */
   augmentVersion?: number;
@@ -140,8 +138,8 @@ export const SKILL_COLLISION_FORGED_MANIFEST = "SKILL_COLLISION_FORGED_MANIFEST"
  *
  * Per-skill ownership is recorded in {skillDir}/.equip-meta.json (the manifest),
  * which is the on-disk hygiene control for cross-augment collision detection.
- * `installations.json` remains the authoritative cross-platform index — the
- * manifest is advisory and forgeable, so collision decisions cross-check both.
+ * The journal is the authoritative cross-platform index — the manifest is
+ * advisory and forgeable, so collision decisions cross-check both.
  *
  * @param platform - Detected platform with skillsPath
  * @param toolName - Owning augment name; used for ownership + legacy-layout cleanup
@@ -330,7 +328,7 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
     }
   }
 
-  // Find OTHER augments installations.json believes own this skill on this platform.
+  // Find OTHER augments the journal believes own this skill on this platform.
   const otherInstalled = findAugmentsOwningSkill(platform, skillName, toolName);
 
   // Manifest names a DIFFERENT augment.
@@ -341,8 +339,8 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
       existingManifest.owners.find(o => o.platform === platform)?.augment ??
       existingManifest.owners[0]?.augment;
     if (claimedAugment && claimedAugment !== toolName) {
-      const confirmedByInstallations = otherInstalled.includes(claimedAugment);
-      if (confirmedByInstallations) {
+      const confirmedByJournal = otherInstalled.includes(claimedAugment);
+      if (confirmedByJournal) {
         // True cross-augment collision (D)
         if (!options.takeover) {
           return refuse(SKILL_COLLISION_OTHER_AUGMENT,
@@ -355,7 +353,7 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
         });
         return null;
       }
-      // Manifest names an augment that installations.json doesn't confirm — forged advisory (E)
+      // Manifest names an augment that the journal doesn't confirm — forged advisory (E)
       logger.warn("Forged manifest detected; ignoring claimed owner", {
         platform, skill: skillName, claimedAugment,
       });
@@ -363,16 +361,16 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
     }
   }
 
-  // No (trusted) manifest. Decide based on installations.json.
+  // No (trusted) manifest. Decide based on the journal.
   if (otherInstalled.length > 0) {
-    // installations.json says someone else owns this — refuse without --takeover (B3).
+    // Journal says someone else owns this — refuse without --takeover (B3).
     if (!options.takeover) {
       return refuse(SKILL_COLLISION_OTHER_AUGMENT,
         `Skill "${skillName}" on ${platform} is recorded as owned by ${otherInstalled.join(", ")}. ` +
         `Pass --takeover to overwrite.`,
         logger);
     }
-    logger.warn("Takeover overrides installations.json collision", {
+    logger.warn("Takeover overrides journal collision", {
       platform, skill: skillName, formerOwners: otherInstalled, newOwner: toolName,
     });
     return null;

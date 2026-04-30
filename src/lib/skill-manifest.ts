@@ -2,12 +2,12 @@
 //
 // Records which augment installed which skill, with per-file SHA-256 fingerprints
 // so uninstall can preserve user-modified files. The manifest is the on-disk
-// hygiene control for skill ownership; `~/.equip/installations.json` remains
-// the authoritative cross-platform index.
+// hygiene control for skill ownership; the journal is the authoritative
+// cross-platform index of what's installed where.
 //
 // Manifest is NOT a security boundary — it lives in user-writable platform skill
 // dirs and a determined attacker can forge one. Cross-check ownership claims
-// against installations.json before acting on them.
+// against the journal before acting on them.
 //
 // Schema invariants (v1):
 // - manifestVersion === 1

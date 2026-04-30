@@ -403,9 +403,9 @@ export interface VerifyResult {
 
 // ─── Public API ─────────────────────────────────────────────
 // Lean surface for augment authors and setup scripts.
-// Internal modules (state management, installations, platform scans,
-// snapshots, credentials, etc.) are NOT exported here — callers that
-// need them import directly from src/lib/*.
+// Internal modules (state management, platform scans, snapshots,
+// credentials, etc.) are NOT exported here — callers that need them
+// import directly from src/lib/*.
 
 export {
   // Core
