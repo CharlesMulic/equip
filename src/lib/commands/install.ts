@@ -13,7 +13,6 @@ import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { acquireLock } from "../fs";
-import { withInstallationsBatch } from "../installations";
 import { JsonStore } from "../storage/datastore";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
@@ -75,7 +74,7 @@ export interface ApplyOptions {
  * behavioral rules, skills, runs verification, reconciles state, and
  * re-estimates token weight from the persisted def.
  *
- * Acquires the equip-wide lock and wraps writes in withInstallationsBatch.
+ * Acquires the equip-wide lock for the duration.
  * Safe to call from any caller; the lock is re-entrant via reconcileState.
  *
  * Caller MUST have already filtered disabled platforms out of `platforms`.
@@ -125,8 +124,6 @@ export function apply(
   const releaseLock = acquireLock();
 
   try {
-    withInstallationsBatch(() => {
-
       // MCP Server (skipped when augment has no server — rules/skills-only
       // augments are valid; matches bridge.ts install-path gating).
       if (hasMcpServer) {
@@ -234,7 +231,6 @@ export function apply(
         }
       }
 
-    }); // withInstallationsBatch
   } finally {
     releaseLock();
   }
