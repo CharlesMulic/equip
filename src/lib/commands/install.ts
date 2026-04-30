@@ -14,7 +14,7 @@ import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { acquireLock } from "../fs";
 import { withInstallationsBatch } from "../installations";
-import { readInstall } from "../installs-store";
+import { JsonStore } from "../storage/datastore";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
@@ -346,9 +346,9 @@ export function writeAugmentDefAndApply(
   // 3. Resolve target platforms.
   let platformIds = opts.platforms;
   if (platformIds === undefined) {
-    // Cleanup B Pkg 03: read via per-augment installs-store (was readInstallations).
-    const record = readInstall(def.name);
-    platformIds = record?.platforms ?? [];
+    // Phase A: read via journal-canonical resolver.
+    const resolved = JsonStore.resolve(def.name);
+    platformIds = resolved?.installedPlatforms ?? [];
   }
 
   // No platforms equipped → nothing to propagate.
