@@ -297,20 +297,25 @@ export class OAuthProvider implements Provider {
 
 function defaultOpenBrowser(url: string): (() => void) | void {
   const platform = process.platform;
-  let cmd: string;
-  let args: string[];
-  if (platform === "darwin") {
-    cmd = "open";
-    args = [url];
-  } else if (platform === "win32") {
-    cmd = "cmd";
-    args = ["/c", "start", "", url];
-  } else {
-    cmd = "xdg-open";
-    args = [url];
-  }
   try {
-    const child = childProcess.spawn(cmd, args, { detached: true, stdio: "ignore" });
+    if (platform === "win32") {
+      // Windows-specific: cmd.exe treats `&` as command separator. Without
+      // `windowsVerbatimArguments` and explicit double-quoting around the
+      // URL, OAuth URLs (which carry `&` between params) truncate at the
+      // first `&` — the browser opens to a partial URL and the AS rejects
+      // it with `client_id and redirect_uri required`. Mirrors the same
+      // fix in equip-app/sidecar/bridge.ts:createAppModeBrowserOpener.
+      const escapedUrl = url.replace(/"/g, '""');
+      const child = childProcess.spawn(
+        "cmd.exe",
+        ["/d", "/s", "/c", `start "" "${escapedUrl}"`],
+        { detached: true, stdio: "ignore", windowsVerbatimArguments: true },
+      );
+      child.unref();
+      return () => { try { child.kill(); } catch { /* ignore */ } };
+    }
+    const cmd = platform === "darwin" ? "open" : "xdg-open";
+    const child = childProcess.spawn(cmd, [url], { detached: true, stdio: "ignore" });
     child.unref();
     return () => { try { child.kill(); } catch { /* ignore */ } };
   } catch {
