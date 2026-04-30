@@ -425,6 +425,7 @@ describe("equip.json", () => {
 // ─── Auto-wrapping MCP servers ──────────────────────────────
 
 const { readAugmentDef, hasAugmentDef, writeAugmentDef } = require("../dist/lib/augment-defs");
+const { JsonStore } = require("../dist/lib/storage/datastore");
 
 describe("Auto-wrapping MCP servers during scan", () => {
   beforeEach(setupTempHome);
@@ -453,22 +454,16 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     const { scans } = scanAllPlatforms(detected, new Set());
 
-    // Verify the augment was auto-wrapped
-    assert.ok(hasAugmentDef("my-server"), "Augment should be created");
-    const def = readAugmentDef("my-server");
-    assert.equal(def.source, "wrapped");
-    assert.equal(def.transport, "stdio");
-    assert.equal(def.stdio.command, "npx");
-    assert.deepEqual(def.stdio.args, ["-y", "my-mcp-server"]);
-    assert.equal(def.wrappedFrom.type, "mcp");
-    assert.equal(def.wrappedFrom.platform, "test-platform");
-    assert.equal(def.wrappedFrom.originalName, "my-server");
-
-    // Verify installation record was created
-    const inst = readInstallations();
-    assert.ok(inst.augments["my-server"]);
-    assert.equal(inst.augments["my-server"].source, "wrapped");
-    assert.deepEqual(inst.augments["my-server"].platforms, ["test-platform"]);
+    // Verify the augment was auto-wrapped into the journal.
+    const resolved = JsonStore.resolve("my-server");
+    assert.ok(resolved, "Augment should be wrapped into the journal");
+    assert.equal(resolved.transport, "stdio");
+    assert.equal(resolved.stdio.command, "npx");
+    assert.deepEqual(resolved.stdio.args, ["-y", "my-mcp-server"]);
+    assert.equal(resolved.installed, true);
+    assert.deepEqual(resolved.installedPlatforms, ["test-platform"]);
+    assert.equal(resolved.contentSource.kind, "wrapped");
+    assert.equal(resolved.contentSource.fromPlatform, "test-platform");
 
     // Verify scan marks it as managed
     assert.equal(scans["test-platform"].augments["my-server"].managed, true);
@@ -568,35 +563,30 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     scanAllPlatforms(detected, new Set());
 
-    // Verify the skill was auto-wrapped
-    assert.ok(hasAugmentDef("my-custom-skill"), "Skill augment should be created");
-    const def = readAugmentDef("my-custom-skill");
-    assert.equal(def.source, "wrapped");
-    assert.equal(def.wrappedFrom.type, "skill");
-    assert.equal(def.wrappedFrom.platform, "claude-code");
-    assert.equal(def.wrappedFrom.originalName, "my-custom-skill");
+    // Verify the skill was auto-wrapped into the journal.
+    const resolved = JsonStore.resolve("my-custom-skill");
+    assert.ok(resolved, "Skill augment should be wrapped into the journal");
+    assert.equal(resolved.contentSource.kind, "wrapped");
+    assert.equal(resolved.contentSource.fromPlatform, "claude-code");
+    assert.equal(resolved.installed, true);
+    assert.deepEqual(resolved.installedPlatforms, ["claude-code"]);
 
-    // Verify skill content is captured in augment def
-    assert.equal(def.skills.length, 1, "Should have 1 skill");
-    assert.equal(def.skills[0].name, "do-thing");
-    assert.deepEqual(def.skills[0].files.map((file) => file.path), [
+    // Verify skill content is captured.
+    assert.equal(resolved.skills.length, 1, "Should have 1 skill");
+    assert.equal(resolved.skills[0].name, "do-thing");
+    assert.deepEqual(resolved.skills[0].files.map((file) => file.path), [
       "SKILL.md",
       "assets/example.json",
       "references/usage.md",
       "scripts/check.ps1",
     ]);
-    assert.equal(def.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
-    assert.equal(def.skills[0].files.find((file) => file.path === "references/usage.md").content, "# Usage\n");
-    assert.equal(def.skills[0].files.find((file) => file.path === "scripts/check.ps1").content, "Write-Output 'ok'\n");
-    assert.equal(def.skills[0].files.find((file) => file.path === "assets/example.json").content, "{\"ok\":true}\n");
+    assert.equal(resolved.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
+    assert.equal(resolved.skills[0].files.find((file) => file.path === "references/usage.md").content, "# Usage\n");
+    assert.equal(resolved.skills[0].files.find((file) => file.path === "scripts/check.ps1").content, "Write-Output 'ok'\n");
+    assert.equal(resolved.skills[0].files.find((file) => file.path === "assets/example.json").content, "{\"ok\":true}\n");
 
-    // Verify description extracted from SKILL.md heading
-    assert.equal(def.description, "Do Thing");
-
-    // Verify installation record
-    const inst = readInstallations();
-    assert.ok(inst.augments["my-custom-skill"]);
-    assert.deepEqual(inst.augments["my-custom-skill"].artifacts["claude-code"].skills, ["do-thing"]);
+    // Verify description extracted from SKILL.md heading.
+    assert.equal(resolved.description, "Do Thing");
   });
 
   it("extracts description from SKILL.md skipping YAML frontmatter", () => {
@@ -619,11 +609,11 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     scanAllPlatforms(detected, new Set());
 
-    const def = readAugmentDef("fancy-skill");
-    assert.ok(def, "Skill augment should be created");
-    assert.equal(def.description, "Friendly Greeter", "Should skip frontmatter and extract heading");
-    assert.equal(def.skills.length, 1);
-    assert.equal(def.skills[0].name, "greet");
+    const resolved = JsonStore.resolve("fancy-skill");
+    assert.ok(resolved, "Skill augment should be wrapped into the journal");
+    assert.equal(resolved.description, "Friendly Greeter", "Should skip frontmatter and extract heading");
+    assert.equal(resolved.skills.length, 1);
+    assert.equal(resolved.skills[0].name, "greet");
   });
 
   it("does not wrap skills owned by managed augments", () => {
@@ -670,11 +660,18 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     // First scan
     scanAllPlatforms(detected, new Set());
-    assert.ok(hasAugmentDef("idempotent-server"));
+    assert.ok(JsonStore.resolve("idempotent-server"), "wrapped after first scan");
+    const intentsAfterFirst = JsonStore.readIntents().filter(
+      (i) => i.name === "idempotent-server",
+    ).length;
 
-    // Second scan — should not error or duplicate
+    // Second scan — should not duplicate the install intent.
     scanAllPlatforms(detected, new Set());
-    const def = readAugmentDef("idempotent-server");
-    assert.equal(def.source, "wrapped");
+    const resolved = JsonStore.resolve("idempotent-server");
+    assert.equal(resolved.contentSource.kind, "wrapped");
+    const intentsAfterSecond = JsonStore.readIntents().filter(
+      (i) => i.name === "idempotent-server",
+    ).length;
+    assert.equal(intentsAfterSecond, intentsAfterFirst, "second scan must not append a duplicate intent");
   });
 });

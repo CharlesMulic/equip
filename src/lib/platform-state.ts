@@ -14,9 +14,9 @@ import { getEquipHome } from "./equip-home";
 import type { DetectedPlatform } from "./platforms";
 import { PLATFORM_REGISTRY, platformName } from "./platforms";
 import { readMcpEntry } from "./mcp";
-import { wrapUnmanaged, hasAugmentDef } from "./augment-defs";
 import { JsonStore } from "./storage/datastore";
-import { trackInstallation, withInstallationsBatch } from "./installations";
+import type { AugmentContent } from "./storage/content-store";
+import type { SkillConfig } from "./skills";
 import { normalizeSkillFilePath, type SkillFile } from "./skills";
 import { validatePathWithinDir } from "./validation";
 
@@ -350,6 +350,51 @@ export function scanPlatform(
 }
 
 /**
+ * Auto-wrap an unmanaged MCP server / orphan skill directory into the
+ * journal as a wrapped augment. Puts the content blob and appends an
+ * install intent with `contentSource.kind === "wrapped"` so subsequent
+ * reconciles treat it as managed and the provenance is recoverable.
+ */
+function autoWrapToJournal(opts: {
+  name: string;
+  title?: string;
+  description?: string;
+  transport?: "http" | "stdio";
+  url?: string;
+  command?: string;
+  args?: string[];
+  skills?: SkillConfig[];
+  fromPlatform: string;
+}): void {
+  const content: AugmentContent = {
+    name: opts.name,
+    title: opts.title || opts.name,
+    description: opts.description || "",
+    transport: opts.transport,
+    serverUrl: opts.transport === "http" ? opts.url : undefined,
+    stdio: opts.command
+      ? { command: opts.command, args: opts.args || [] }
+      : undefined,
+    requiresAuth: false,
+    skills: opts.skills,
+    hooks: undefined,
+  };
+  const contentHash = JsonStore.putContent(content);
+  JsonStore.appendIntent({
+    type: "install-augment",
+    clock: JsonStore.newClock(),
+    name: opts.name,
+    contentHash,
+    contentSource: {
+      kind: "wrapped",
+      fromPlatform: opts.fromPlatform,
+      createdAt: new Date().toISOString(),
+    },
+    platforms: [opts.fromPlatform],
+  });
+}
+
+/**
  * Scan all detected platforms and write per-platform scan files.
  * Also updates platforms.json metadata.
  */
@@ -360,24 +405,24 @@ export function scanAllPlatforms(
   // Update metadata
   const meta = updatePlatformsMeta(detected);
 
-  // Scan each platform — batch installations.json writes so the orphan-wrap
-  // loops below produce one disk write at the end instead of one per
-  // discovered augment per platform (Package 05 of equip-skill-ownership).
+  // Scan each platform. Auto-wrap of unmanaged MCP entries / orphan
+  // skill dirs lands on the journal directly via autoWrapToJournal —
+  // each appendIntent is a single-line atomic append, so no batching is
+  // needed (the prior legacy installations.json batch wrap is gone).
   const scans: Record<string, PlatformScan> = {};
-  withInstallationsBatch(() => {
   for (const p of detected) {
     const scan = scanPlatform(p, managedNames);
     writePlatformScan(p.platform, scan);
     scans[p.platform] = scan;
 
-    // Auto-wrap unmanaged MCP servers as local augments
+    // Auto-wrap unmanaged MCP servers as wrapped augments in the journal.
     for (const [name, entry] of Object.entries(scan.augments)) {
       if (entry.managed) continue;
-      if (hasAugmentDef(name)) continue; // already exists (registry, local, or previously wrapped)
+      if (JsonStore.resolve(name)) continue; // already in the journal
 
       try {
         const transport = entry.transport === "http" || entry.transport === "stdio" ? entry.transport : "stdio";
-        wrapUnmanaged({
+        autoWrapToJournal({
           name,
           title: name,
           transport,
@@ -385,30 +430,15 @@ export function scanAllPlatforms(
           command: entry.command,
           args: entry.args,
           fromPlatform: p.platform,
-          wrappedFromMeta: {
-            type: "mcp",
-            platform: p.platform,
-            path: p.configPath,
-            originalName: name,
-          },
         });
 
-        // Create InstallationRecord so it's recognized as managed on next scan
-        trackInstallation(name, {
-          source: "wrapped",
-          title: name,
-          transport,
-          platforms: [p.platform],
-          artifacts: { [p.platform]: { mcp: true } },
-        });
-
-        // Mark as managed in current scan results
+        // Mark as managed in current scan results.
         entry.managed = true;
         scan.managedCount = (scan.managedCount || 0) + 1;
       } catch { /* best effort — don't break scan for wrapping failures */ }
     }
 
-    // Auto-wrap orphan skill files
+    // Auto-wrap orphan skill files.
     const platformDef = PLATFORM_REGISTRY.get(p.platform);
     if (platformDef?.skillsPath) {
       try {
@@ -420,11 +450,11 @@ export function scanAllPlatforms(
           });
 
           for (const toolDir of topDirs) {
-            // Skip if this tool dir is owned by a managed augment
+            // Skip if this tool dir is owned by a managed augment.
             if (managedNames.has(toolDir)) continue;
-            if (hasAugmentDef(toolDir)) continue;
+            if (JsonStore.resolve(toolDir)) continue;
 
-            // Check for SKILL.md files inside subdirectories
+            // Check for SKILL.md files inside subdirectories.
             const toolSkillPath = path.join(skillsBase, toolDir);
             const skillSubDirs = fs.readdirSync(toolSkillPath).filter((s: string) => {
               try { return fs.statSync(path.join(toolSkillPath, s, "SKILL.md")).isFile(); }
@@ -433,8 +463,8 @@ export function scanAllPlatforms(
 
             if (skillSubDirs.length === 0) continue;
 
-            // Read all skill files into SkillConfig entries
-            const skills: { name: string; files: { path: string; content: string }[] }[] = [];
+            // Read all skill files into SkillConfig entries.
+            const skills: SkillConfig[] = [];
             let description = "";
 
             for (const skillName of skillSubDirs) {
@@ -446,7 +476,7 @@ export function scanAllPlatforms(
 
                 skills.push({ name: skillName, files });
 
-                // Extract description from first skill's SKILL.md (skip frontmatter)
+                // Extract description from first skill's SKILL.md (skip frontmatter).
                 if (!description) {
                   const lines = skillMd.split("\n");
                   let inFrontmatter = false;
@@ -466,27 +496,13 @@ export function scanAllPlatforms(
             }
 
             try {
-              wrapUnmanaged({
+              autoWrapToJournal({
                 name: toolDir,
                 title: toolDir,
                 description,
-                // No transport — skill-only augments don't have an MCP server
+                // No transport — skill-only augments don't have an MCP server.
                 skills,
                 fromPlatform: p.platform,
-                wrappedFromMeta: {
-                  type: "skill",
-                  platform: p.platform,
-                  path: toolSkillPath,
-                  originalName: toolDir,
-                },
-              });
-
-              trackInstallation(toolDir, {
-                source: "wrapped",
-                title: toolDir,
-                transport: "stdio",
-                platforms: [p.platform],
-                artifacts: { [p.platform]: { mcp: false, skills: skillSubDirs } },
               });
             } catch { /* best effort */ }
           }
@@ -494,7 +510,6 @@ export function scanAllPlatforms(
       } catch { /* skills directory may not exist */ }
     }
   }
-  }); // withInstallationsBatch
 
   return { meta, scans };
 }

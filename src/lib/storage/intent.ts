@@ -35,11 +35,15 @@ export type ContentHash = string;
 
 /**
  * Provenance of content. Registry-fetched content + locally-authored content
- * both land in the content store; this tag records which it was.
+ * both land in the content store; this tag records which it was. The
+ * `wrapped` variant marks an augment that was auto-discovered from an
+ * existing platform-side MCP entry or skill directory and wrapped into
+ * the journal so subsequent operations treat it as managed.
  */
 export type ContentSource =
   | { kind: "registry"; version: number; etag?: string; fetchedAt: string }
-  | { kind: "local-authored"; createdAt: string };
+  | { kind: "local-authored"; createdAt: string }
+  | { kind: "wrapped"; fromPlatform: string; createdAt: string };
 
 /**
  * Typed override (the "mod" allowlist). Only these three fields are
