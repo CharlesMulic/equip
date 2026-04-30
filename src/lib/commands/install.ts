@@ -17,8 +17,31 @@ import { JsonStore } from "../storage/datastore";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
-import type { AugmentDef } from "../augment-defs";
 import type { SkillManifestOwnerSource } from "../skill-manifest";
+import type { SkillConfig } from "../skills";
+import type { HookDefinition } from "../hooks";
+
+/**
+ * The minimal augment-shaped input writeAugmentDefAndApply consumes.
+ * Defined locally so install.ts has no dependency on legacy modules.
+ * AugmentDef and RegistryDef both structurally satisfy this contract,
+ * so existing callers keep working without code changes.
+ */
+export interface AugmentInput {
+  name: string;
+  source: SkillManifestOwnerSource;
+  title?: string;
+  description?: string;
+  transport?: "http" | "stdio";
+  serverUrl?: string;
+  stdio?: { command: string; args: string[]; envKey?: string };
+  envKey?: string;
+  requiresAuth?: boolean;
+  rules?: { content: string; version: string; marker: string; fileName?: string };
+  skills?: SkillConfig[];
+  hooks?: HookDefinition[];
+  hookDir?: string;
+}
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
@@ -85,7 +108,7 @@ export interface ApplyOptions {
  */
 export function apply(
   equip: Augment,
-  toolDef: RegistryDef | AugmentDef,
+  toolDef: RegistryDef | AugmentInput,
   platforms: ReturnType<Augment["detect"]>,
   apiKey: string | null,
   opts: ApplyOptions = {},
@@ -270,14 +293,14 @@ export interface WriteAugmentDefAndApplyOptions extends ApplyOptions {
 }
 
 /**
- * Inline AugmentDef → AugmentConfig adapter. Was `augmentDefToConfig` in
- * the legacy augment-defs module; lives here now so install.ts has no
+ * AugmentInput → AugmentConfig adapter. Was `augmentDefToConfig` in
+ * the legacy augment-defs module; inlined here so install.ts has no
  * dependency on a module being deleted in A4.
  */
-function defToAugmentConfig(def: AugmentDef): AugmentConfig {
+function defToAugmentConfig(def: AugmentInput): AugmentConfig {
   const config: AugmentConfig = {
     name: def.name,
-    source: def.source as SkillManifestOwnerSource,
+    source: def.source,
   };
   if (def.serverUrl) config.serverUrl = def.serverUrl;
   if (def.rules) {
@@ -302,9 +325,9 @@ function defToAugmentConfig(def: AugmentDef): AugmentConfig {
 }
 
 export function writeAugmentDefAndApply(
-  def: AugmentDef,
+  def: AugmentInput,
   opts: WriteAugmentDefAndApplyOptions = {},
-): { def: AugmentDef; applyReport: InstallReportBuilder | null } {
+): { def: AugmentInput; applyReport: InstallReportBuilder | null } {
   // Resolve target platforms from the journal (or caller override).
   let platformIds = opts.platforms;
   if (platformIds === undefined) {
