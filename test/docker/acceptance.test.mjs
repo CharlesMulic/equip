@@ -173,15 +173,25 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
     "legacy {skillsPath}/{augment}/ wrapper should not be created",
   );
 
-  const installations = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "installations.json"), "utf-8"));
-  const installation = installations.augments["demo-direct-install"];
-  assert.ok(installation, "installations.json should record the installed augment");
-  assert.deepEqual([...installation.platforms].sort(), ["claude-code", "codex"]);
-  assert.equal(installation.serverUrl, serverUrl);
-  assert.deepEqual(installation.artifacts["claude-code"].skills, ["registry-helper"]);
-  assert.deepEqual(installation.artifacts.codex.skills, ["registry-helper"]);
-  assert.equal(installation.artifacts["claude-code"].rules, "1.0.0");
-  assert.equal(installation.artifacts.codex.rules, "1.0.0");
+  // Verify installation via the journal-canonical resolved view.
+  // Storage redesign Phase A4 retired installations.json + per-platform
+  // artifact records; the install intent + content blob now describe
+  // what was installed, derived as `installedPlatforms` + content
+  // fields (rules, skills) on the resolved view.
+  process.env.EQUIP_HOME = path.join(homeDir, ".equip");
+  try {
+    const { JsonStore } = await import(path.join(repoRoot, "dist", "lib", "storage", "datastore.js"));
+    const resolved = JsonStore.resolve("demo-direct-install");
+    assert.ok(resolved, "journal should have an installed entry for the augment");
+    assert.equal(resolved.installed, true);
+    assert.deepEqual([...resolved.installedPlatforms].sort(), ["claude-code", "codex"]);
+    assert.equal(resolved.serverUrl, serverUrl);
+    assert.equal(resolved.skills.length, 1);
+    assert.equal(resolved.skills[0].name, "registry-helper");
+    assert.equal(resolved.rules?.version, "1.0.0");
+  } finally {
+    delete process.env.EQUIP_HOME;
+  }
 
   const platformsMeta = JSON.parse(fs.readFileSync(path.join(homeDir, ".equip", "platforms.json"), "utf-8"));
   assert.equal(platformsMeta.platforms["claude-code"].detected, true);
