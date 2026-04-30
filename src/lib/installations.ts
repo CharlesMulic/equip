@@ -17,6 +17,14 @@ import { getEquipHome } from "./equip-home";
 import { ensureStorageMigrated } from "./migration-trigger";
 import { mirrorWriteInstallations } from "./dual-write-mirror";
 import { isLegacyStorageRetired } from "./migrate-storage";
+// Phase A journal-bridge: every legacy trackInstallation/trackUninstallation
+// call also lands in the canonical journal so journal-canonical readers
+// (doctor, skills, status — all migrated in A3a/A3b) see the full picture
+// during the transition. Lazy-loaded via dynamic getter to avoid load-order
+// issues. The bridge is removed in A4 along with this entire module.
+import { JsonStore } from "./storage/datastore";
+import type { ContentSource, PlatformInstallMode } from "./storage/intent";
+import type { AugmentContent } from "./storage/content-store";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -238,6 +246,91 @@ export function trackInstallation(
 
   inst.lastUpdated = now;
   writeInstallations(inst);
+
+  // Journal-bridge: also append InstallAugmentIntent so the canonical journal
+  // reflects this install. The merged record (post-write) is the source of
+  // truth for platforms/installModes since trackInstallation may merge with
+  // an existing record (broker preservation, multi-platform installs).
+  bridgeInstallToJournal(augmentName, inst.augments[augmentName]);
+}
+
+function bridgeInstallToJournal(name: string, record: InstallationRecord): void {
+  try {
+    const content = buildContentBlobFor(name, record);
+    if (!content) return;
+    const contentHash = JsonStore.putContent(content);
+    const contentSource: ContentSource = record.source === "registry"
+      ? { kind: "registry", version: 1, fetchedAt: record.updatedAt }
+      : { kind: "local-authored", createdAt: record.installedAt };
+
+    // Preserve broker mode that was already in the journal — install intents
+    // replace (not merge) installModes, so consecutive calls would silently
+    // drop broker mode if not carried forward here.
+    const existing = JsonStore.resolve(name);
+    const installModes: Record<string, PlatformInstallMode> = {};
+    if (existing) {
+      for (const platformId of record.platforms) {
+        if (existing.installModes[platformId] === "broker") {
+          installModes[platformId] = "broker";
+        }
+      }
+    }
+    for (const platformId of record.platforms) {
+      const mode = record.artifacts?.[platformId]?.installMode;
+      if (mode === "broker") installModes[platformId] = "broker";
+    }
+
+    JsonStore.appendIntent({
+      type: "install-augment",
+      clock: JsonStore.newClock(),
+      name,
+      contentHash,
+      contentSource,
+      platforms: record.platforms,
+      ...(Object.keys(installModes).length > 0 ? { installModes } : {}),
+    });
+  } catch {
+    // Best effort — never let journal-bridge failure break legacy writes.
+  }
+}
+
+function buildContentBlobFor(name: string, record: InstallationRecord): AugmentContent | null {
+  // Resolve the augment via the legacy resolver to get its content shape.
+  // Lazy require to avoid module-load cycles between installations →
+  // augment-resolver → installs-store → installations.
+  let resolved: { skills?: { name: string; files?: { path: string; content: string }[] }[]; rules?: { content: string; version: string; marker: string }; hooks?: { event: string; matcher?: string; script: string; name: string }[]; transport?: string; serverUrl?: string; stdio?: { command: string; args: string[] }; requiresAuth?: boolean; description?: string; title?: string } | null = null;
+  try {
+    const mod = require("./augment-resolver");
+    resolved = mod.augmentResolver?.resolve?.(name) ?? null;
+  } catch {
+    return null;
+  }
+  if (!resolved) {
+    // No legacy def available → can't build a meaningful content blob.
+    // Skipping is safe: the journal-canonical writers (reconcile, the
+    // sidecar bridge, future authoring flows) write content + intents
+    // directly, so a missing legacy def usually means the journal is
+    // already authoritative for this augment. Returning null tells the
+    // bridge to skip the appendIntent.
+    return null;
+  }
+  const transport = resolved.transport === "http" || resolved.transport === "stdio"
+    ? resolved.transport
+    : record.transport;
+  return {
+    name,
+    title: resolved.title || record.title,
+    description: resolved.description || "",
+    transport,
+    serverUrl: transport === "http" ? (resolved.serverUrl || record.serverUrl) : undefined,
+    stdio: resolved.stdio
+      ? { command: resolved.stdio.command, args: resolved.stdio.args }
+      : undefined,
+    requiresAuth: resolved.requiresAuth ?? false,
+    rules: resolved.rules,
+    skills: (resolved.skills || []).map((s) => ({ name: s.name, files: s.files || [] })),
+    hooks: resolved.hooks || [],
+  };
 }
 
 /**
@@ -271,6 +364,18 @@ export function trackUninstallation(
 
   inst.lastUpdated = new Date().toISOString();
   writeInstallations(inst);
+
+  // Journal-bridge: append UninstallAugmentIntent so the journal-canonical
+  // readers see the uninstall. If platforms unspecified the uninstall is
+  // total; otherwise only the named platforms are dropped.
+  try {
+    JsonStore.appendIntent({
+      type: "uninstall-augment",
+      clock: JsonStore.newClock(),
+      name: augmentName,
+      ...(platforms ? { platforms } : {}),
+    });
+  } catch { /* best effort */ }
 }
 
 /**
