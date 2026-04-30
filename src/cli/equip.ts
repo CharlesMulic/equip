@@ -13,7 +13,6 @@ import { ParsedArgs, parseArgs, isLocalPath, YELLOW, DIM, RESET, BOLD, GREEN, cr
 import * as cli from "../lib/cli.js";
 import { readEquipMeta } from "../lib/equip-meta.js";
 import { fetchRegistryDef, RegistryDef } from "../lib/registry.js";
-import { ensureCacheFreshForInstall } from "../lib/install-cache-gate.js";
 import { getEquipHome } from "../lib/equip-home.js";
 import { validateCredential, readStoredCredential } from "../lib/auth-engine.js";
 import { runStatus } from "../lib/commands/status.js";
@@ -122,11 +121,6 @@ async function cmdUpdate(parsedArgs: ParsedArgs): Promise<void> {
 
     // Clear cache to get fresh definition
     try { fs.unlinkSync(path.join(getEquipHome(), "cache", `${toolName}.json`)); } catch {}
-
-    // Cleanup B Pkg 02: hard-TTL cache-freshness gate (kill switch:
-    // EQUIP_CACHE_INSTALL_GATE_DISABLED=true). The unlink above clears
-    // any stale cache; the gate ensures the next read sees fresh data.
-    await ensureCacheFreshForInstall(toolName, { logger });
 
     const toolDef = await fetchRegistryDef(toolName, { logger });
     if (!toolDef) {
@@ -263,10 +257,6 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
 
   // Fetch augment definition from registry API (with cache fallback)
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
-
-  // Cleanup B Pkg 02: hard-TTL cache-freshness gate. Bypassable via
-  // EQUIP_CACHE_INSTALL_GATE_DISABLED=true.
-  await ensureCacheFreshForInstall(alias, { logger });
 
   const toolDef = await fetchRegistryDef(alias, { logger });
 
