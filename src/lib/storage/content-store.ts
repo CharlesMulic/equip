@@ -37,8 +37,10 @@ export interface AugmentContent {
   transport?: "http" | "stdio";
   /** HTTP endpoint (if transport=http). */
   serverUrl?: string;
-  /** stdio invocation (if transport=stdio). */
-  stdio?: { command: string; args: string[] };
+  /** stdio invocation (if transport=stdio). `envKey` is the env-var
+   *  name the platform should populate with the user's credential when
+   *  invoking the command — publisher-declared, immutable per version. */
+  stdio?: { command: string; args: string[]; envKey?: string };
   /** Whether this augment requires user-provided auth. */
   requiresAuth?: boolean;
   /**
