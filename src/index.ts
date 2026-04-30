@@ -19,9 +19,7 @@ import { NOOP_LOGGER, InstallReportBuilder, makeResult, type ArtifactResult, typ
 import type { ReadMcpResult } from "./lib/mcp";
 import { fetchRegistryDef, registryDefToConfig, type RegistryDef, type PostInstallAction } from "./lib/registry";
 import { resolveAuth, validateCredential, readStoredCredential, writeStoredCredential, deleteStoredCredential, listStoredCredentials, isCredentialExpired, refreshCredential, refreshAllExpired, type AuthConfig, type StoredCredential, type AuthResult, type RefreshResult } from "./lib/auth-engine";
-import { readAugmentDef, writeAugmentDef, listAugmentDefs, deleteAugmentDef, hasAugmentDef, syncFromRegistry, createLocalAugment, wrapUnmanaged, promoteWrappedToLocal, modAugmentRules, resetAugmentRules, getAugmentsDir, type AugmentDef, type AugmentSource, type AugmentRules, type WrappedFromMeta, type LocalAugmentConfig, type WrapConfig } from "./lib/augment-defs";
 import { readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled, getEnabledPlatformIds, isPlatformEnabled, readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms, getPlatformsDir, type PlatformsMeta, type PlatformMeta, type PlatformScan, type PlatformAugmentEntry } from "./lib/platform-state";
-import { readInstallations, writeInstallations, trackInstallation, trackUninstallation, getAugmentsForPlatform, getManagedAugmentNames, type Installations, type InstallationRecord, type ArtifactRecord } from "./lib/installations";
 import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, updatePreferences, getInstallId, type EquipMeta, type EquipPreferences } from "./lib/equip-meta";
 import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSnapshot, hasInitialSnapshot, ensureInitialSnapshots, pruneSnapshots, type Snapshot, type SnapshotSummary, type RestoreResult } from "./lib/snapshots";
 import { reconcileState } from "./lib/reconcile";
