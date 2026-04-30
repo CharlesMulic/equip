@@ -17,6 +17,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getEquipHome } from "../equip-home";
+import { posixMode } from "../posix-mode";
 import { type Intent, isIntent } from "./intent";
 
 const STORAGE_JOURNAL_FILENAME = "storage/intents.jsonl";
@@ -28,7 +29,7 @@ function getJournalPath(): string {
 function ensureJournalDir(): void {
   const dir = path.dirname(getJournalPath());
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(dir, { recursive: true, mode: posixMode(0o700) });
   }
 }
 
@@ -48,7 +49,7 @@ export function appendIntent(intent: Intent): void {
       `Spike limitation: large content goes in content-store, not the intent.`,
     );
   }
-  fs.appendFileSync(getJournalPath(), line, { encoding: "utf-8", mode: 0o600 });
+  fs.appendFileSync(getJournalPath(), line, { encoding: "utf-8", mode: posixMode(0o600) });
 }
 
 /**

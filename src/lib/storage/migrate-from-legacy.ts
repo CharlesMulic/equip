@@ -22,6 +22,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getEquipHome } from "../equip-home";
+import { posixMode } from "../posix-mode";
 import { JsonStore } from "./datastore";
 import { type AugmentContent } from "./content-store";
 import { type Intent, type ContentSource, type ModOverrides } from "./intent";
@@ -141,7 +142,7 @@ export function currentSchemaVersion(home: string): number {
 }
 
 function writeSchemaVersion(home: string, version: number): void {
-  if (!fs.existsSync(home)) fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+  if (!fs.existsSync(home)) fs.mkdirSync(home, { recursive: true, mode: posixMode(0o700) });
   fs.writeFileSync(path.join(home, SCHEMA_VERSION_FILE), String(version), "utf-8");
 }
 
@@ -149,7 +150,7 @@ function writeSchemaVersion(home: string, version: number): void {
 
 function backupLegacyFiles(home: string, hasPreRefactor: boolean, hasPostRefactor: boolean): string {
   const backupDir = path.join(home, BACKUP_DIRNAME);
-  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true, mode: posixMode(0o700) });
 
   if (hasPreRefactor) {
     const augSrc = path.join(home, LEGACY_AUGMENTS_DIRNAME);
@@ -169,7 +170,7 @@ function backupLegacyFiles(home: string, hasPreRefactor: boolean, hasPostRefacto
 
 function copyDirRecursive(src: string, dst: string): void {
   if (!fs.existsSync(src)) return;
-  fs.mkdirSync(dst, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(dst, { recursive: true, mode: posixMode(0o700) });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const s = path.join(src, entry.name);
     const d = path.join(dst, entry.name);

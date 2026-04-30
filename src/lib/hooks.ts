@@ -7,6 +7,7 @@ import * as path from "path";
 import { PLATFORM_REGISTRY, type DetectedPlatform, type PlatformHookCapabilities } from "./platforms";
 import { safeReadJsonSync, atomicWriteFileSync } from "./fs";
 import { validateHookName } from "./validation";
+import { posixMode } from "./posix-mode";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
 
@@ -92,7 +93,7 @@ export function installHooks(platform: DetectedPlatform, hookDefs: HookDefinitio
     validateHookName(def.name);
     const filePath = path.join(hookDir, def.name + ".js");
     if (!dryRun) {
-      fs.writeFileSync(filePath, def.script, { mode: 0o755 });
+      fs.writeFileSync(filePath, def.script, { mode: posixMode(0o755) });
     }
     installedScripts.push(def.name + ".js");
   }

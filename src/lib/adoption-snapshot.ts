@@ -23,6 +23,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getEquipHome } from "./equip-home";
+import { posixMode } from "./posix-mode";
 
 const ADOPTION_DIR_NAME = "adopted-entries";
 
@@ -116,15 +117,15 @@ export function writeAdoptionSnapshot(snapshot: AdoptionSnapshot): {
   baselinePath: string | null;
 } {
   const dir = path.join(getEquipHome(), ADOPTION_DIR_NAME);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(dir, { recursive: true, mode: posixMode(0o700) });
   // Best-effort chmod (mkdirSync mode is OS-specific on existing dirs).
-  try { fs.chmodSync(dir, 0o700); } catch { /* ignore */ }
+  try { if (process.platform !== "win32") fs.chmodSync(dir, 0o700); } catch { /* ignore */ }
 
   // Drop a README on first write so users / agents who stumble in
   // know what this is.
   const readmePath = path.join(dir, "README.md");
   if (!fs.existsSync(readmePath)) {
-    fs.writeFileSync(readmePath, ADOPTION_README, { encoding: "utf-8", mode: 0o600 });
+    fs.writeFileSync(readmePath, ADOPTION_README, { encoding: "utf-8", mode: posixMode(0o600) });
   }
 
   const ts = isoStamp();
@@ -182,9 +183,11 @@ function writeMode0o600(filePath: string, contents: string): void {
   // credential-store-file. Chmod after rename in case the tempfile
   // had a different mode.
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tempPath, contents, { encoding: "utf-8", mode: 0o600 });
+  fs.writeFileSync(tempPath, contents, { encoding: "utf-8", mode: posixMode(0o600) });
   fs.renameSync(tempPath, filePath);
-  try { fs.chmodSync(filePath, 0o600); } catch { /* ignore */ }
+  if (process.platform !== "win32") {
+    try { fs.chmodSync(filePath, 0o600); } catch { /* ignore */ }
+  }
 }
 
 function isoStamp(): string {

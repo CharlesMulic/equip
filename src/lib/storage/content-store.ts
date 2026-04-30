@@ -17,6 +17,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { getEquipHome } from "../equip-home";
+import { posixMode } from "../posix-mode";
 import type { ContentHash } from "./intent";
 
 /**
@@ -86,7 +87,7 @@ function getContentDir(): string {
 function ensureContentDir(): void {
   const dir = getContentDir();
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(dir, { recursive: true, mode: posixMode(0o700) });
   }
 }
 
@@ -142,7 +143,7 @@ export function putContent(blob: AugmentContent): ContentHash {
   }
   // Atomic write: temp + rename.
   const tempPath = finalPath + ".tmp." + process.pid + "." + Date.now();
-  fs.writeFileSync(tempPath, JSON.stringify(blob, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+  fs.writeFileSync(tempPath, JSON.stringify(blob, null, 2) + "\n", { encoding: "utf-8", mode: posixMode(0o600) });
   fs.renameSync(tempPath, finalPath);
   return hash;
 }
