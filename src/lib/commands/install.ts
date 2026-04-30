@@ -18,7 +18,8 @@ import { JsonStore } from "../storage/datastore";
 import { readEquipMeta, getInstallId } from "../equip-meta";
 import { ensureInitialSnapshots } from "../snapshots";
 import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
-import { readAugmentDef, writeAugmentDef, augmentDefToConfig, type AugmentDef } from "../augment-defs";
+import type { AugmentDef } from "../augment-defs";
+import type { SkillManifestOwnerSource } from "../skill-manifest";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
@@ -243,76 +244,97 @@ export function apply(
 
 // ─── writeAugmentDefAndApply: explicit "user save" boundary ────────────────
 //
-// Use this helper instead of plain `writeAugmentDef` whenever a user-driven
-// edit lands a new def state and the change should propagate immediately to
-// installed platform copies. Examples:
+// User-driven edits land a new def state that should propagate immediately
+// to installed platform copies. Examples:
 //   - authoring "Save" flows
 //   - future publisher draft commit-to-live flows
-//   - CLI `equip apply <augment>` (Package 04 — falls through to apply directly)
+//   - CLI `equip apply <augment>` (falls through to apply directly)
 //
-// Internal-only writes (migrations, normalizations, registry-tracking sentinel
-// stamps, draft state mutations that don't touch live resources) MUST keep
-// using plain `writeAugmentDef` and skip apply. Architect's review (2026-04-26)
-// rejected file-watcher-on-augments-dir as a trap because multiple internal
-// code paths write to the def file; the explicit write boundary in this helper
-// is the correct discipline.
+// Journal-canonical: the act of applying produces an InstallAugmentIntent
+// (via apply → reconcile) that records the new content. There is no
+// separate "save the def" step — content is implicit in the install intent.
 //
-// If the augment isn't equipped to any platform (no installations.json record
-// or empty platforms array), apply is skipped — there's nowhere to propagate.
+// If the augment isn't equipped to any platform, this is a no-op (drafts
+// without an active install are out of scope for this surface; they live
+// in whatever authoring state store the caller maintains).
 //
-// Returns the persisted def + apply report. apply report is null when apply
-// was skipped (no platforms to write to).
+// Returns the input def unchanged + apply report. Apply report is null
+// when apply was skipped (no platforms to write to).
 
 export interface WriteAugmentDefAndApplyOptions extends ApplyOptions {
   /**
-   * Override platform list. Default: read from installations.json — every
-   * platform the augment is currently equipped to. Pass an explicit list to
-   * apply to only specific platforms (used by Package 05 platform-enable
-   * backfill: `apply this augment to only the newly-enabled platform`).
+   * Override platform list. Default: every platform the augment is
+   * currently equipped to (read from the journal). Pass an explicit
+   * list to apply to only specific platforms (e.g. platform-enable
+   * backfill: "apply this augment to only the newly-enabled platform").
    *
    * Apply NEVER writes to a disabled platform — caller must filter.
    */
   platforms?: string[];
 }
 
+/**
+ * Inline AugmentDef → AugmentConfig adapter. Was `augmentDefToConfig` in
+ * the legacy augment-defs module; lives here now so install.ts has no
+ * dependency on a module being deleted in A4.
+ */
+function defToAugmentConfig(def: AugmentDef): AugmentConfig {
+  const config: AugmentConfig = {
+    name: def.name,
+    source: def.source as SkillManifestOwnerSource,
+  };
+  if (def.serverUrl) config.serverUrl = def.serverUrl;
+  if (def.rules) {
+    config.rules = {
+      content: def.rules.content,
+      version: def.rules.version,
+      marker: def.rules.marker,
+      ...(def.rules.fileName && { fileName: def.rules.fileName }),
+    };
+  }
+  if (def.stdio) {
+    config.stdio = {
+      command: def.stdio.command,
+      args: def.stdio.args,
+      envKey: def.stdio.envKey ?? def.envKey ?? "",
+    };
+  }
+  if (def.hooks && def.hooks.length > 0) config.hooks = def.hooks;
+  if (def.hookDir) config.hookDir = def.hookDir;
+  if (def.skills && def.skills.length > 0) config.skills = def.skills;
+  return config;
+}
+
 export function writeAugmentDefAndApply(
   def: AugmentDef,
   opts: WriteAugmentDefAndApplyOptions = {},
 ): { def: AugmentDef; applyReport: InstallReportBuilder | null } {
-  // 1. Write the def.
-  writeAugmentDef(def);
-
-  // 2. Read the persisted shape back. Mirrors Package 02's mod-preservation
-  //    discipline — apply must operate on the persisted shape, not the input,
-  //    so any normalization/merge done by writeAugmentDef is reflected.
-  const persisted = readAugmentDef(def.name);
-  if (!persisted) {
-    // Should not happen — writeAugmentDef just succeeded — but defensive.
-    return { def, applyReport: null };
-  }
-
-  // 3. Resolve target platforms.
+  // Resolve target platforms from the journal (or caller override).
   let platformIds = opts.platforms;
   if (platformIds === undefined) {
-    // Phase A: read via journal-canonical resolver.
     const resolved = JsonStore.resolve(def.name);
     platformIds = resolved?.installedPlatforms ?? [];
   }
 
-  // No platforms equipped → nothing to propagate.
+  // No platforms equipped → nothing to propagate. Drafts that have
+  // never been installed are not represented in the journal.
   if (platformIds.length === 0) {
-    return { def: persisted, applyReport: null };
+    return { def, applyReport: null };
   }
 
-  // 4. Construct Augment instance from persisted def, run apply.
-  //    apiKey is null on the update path — installMcp updates the MCP config
-  //    in-place and existing credentials persist in the platform-specific
-  //    config. First-time install via `runInstall` resolves auth before apply.
-  const config = augmentDefToConfig(persisted);
+  // Construct Augment from def, run apply. apply→reconcile puts the
+  // content blob and appends the install intent; the journal's view of
+  // this augment is updated atomically.
+  //
+  // apiKey is null on the update path — installMcp updates the MCP
+  // config in-place and existing credentials persist in the platform-
+  // specific config. First-time install via runInstall resolves auth
+  // before apply.
+  const config = defToAugmentConfig(def);
   const equip = new Augment(config);
   const platforms = platformIds.map((id) => createManualPlatform(id));
 
-  const applyReport = apply(equip, persisted, platforms, null, {
+  const applyReport = apply(equip, def, platforms, null, {
     dryRun: opts.dryRun,
     takeover: opts.takeover,
     adopt: opts.adopt,
@@ -320,7 +342,7 @@ export function writeAugmentDefAndApply(
     report: opts.report,
   });
 
-  return { def: persisted, applyReport };
+  return { def, applyReport };
 }
 
 /**
