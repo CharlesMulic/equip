@@ -17,6 +17,22 @@ import { JsonStore } from "./storage/datastore";
  * Returns key-value pairs as a plain object. Supports string, number, boolean, arrays.
  * This is NOT a full TOML parser — only handles flat tables needed for MCP config.
  */
+/**
+ * Parse a TOML scalar string value. Handles:
+ *   - Basic strings ("..."): unescape `\\` and `\"` (TOML basic-string escapes).
+ *   - Literal strings ('...'): raw, no escape processing.
+ * Returns null if the form isn't a recognized TOML string.
+ */
+function parseTomlString(val: string): string | null {
+  if (val.startsWith('"') && val.endsWith('"') && val.length >= 2) {
+    return val.slice(1, -1).replace(/\\\\/g, "\\").replace(/\\"/g, '"');
+  }
+  if (val.startsWith("'") && val.endsWith("'") && val.length >= 2) {
+    return val.slice(1, -1);
+  }
+  return null;
+}
+
 export function parseTomlServerEntry(tomlContent: string, rootKey: string, serverName: string): Record<string, unknown> | null {
   const tableHeader = `[${rootKey}.${serverName}]`;
   const idx = tomlContent.indexOf(tableHeader);
@@ -34,8 +50,9 @@ export function parseTomlServerEntry(tomlContent: string, rootKey: string, serve
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
     const val = trimmed.slice(eq + 1).trim();
-    if (val.startsWith('"') && val.endsWith('"')) {
-      result[key] = val.slice(1, -1);
+    const asString = parseTomlString(val);
+    if (asString !== null) {
+      result[key] = asString;
     } else if (val === "true") {
       result[key] = true;
     } else if (val === "false") {
@@ -74,8 +91,8 @@ export function parseTomlSubTables(tomlContent: string, rootKey: string, serverN
       if (eq === -1) continue;
       const k = t.slice(0, eq).trim();
       const v = t.slice(eq + 1).trim();
-      if (v.startsWith('"') && v.endsWith('"')) sub[k] = v.slice(1, -1);
-      else sub[k] = v;
+      const asString = parseTomlString(v);
+      sub[k] = asString !== null ? asString : v;
     }
     if (Object.keys(sub).length > 0) result[subName] = sub;
     idx++;
@@ -86,6 +103,28 @@ export function parseTomlSubTables(tomlContent: string, rootKey: string, serverN
 /**
  * Build TOML text for a server entry.
  */
+/**
+ * Format a string value as a valid TOML string literal.
+ *
+ * TOML basic strings (double-quoted) treat `\` as an escape introducer —
+ * `\d`, `\C` etc. are reserved sequences and parsers reject them. Windows
+ * paths like `c:\dev\CG3\...exe` are invalid in basic strings without
+ * escaping every backslash. Codex's TOML parser rejects them outright,
+ * breaking augment install. Workaround that ships:
+ *   - If the value contains a backslash AND no single quote, emit a
+ *     literal string ('single-quoted') — TOML literal strings are raw
+ *     and don't process escapes. This is the right shape for Windows
+ *     paths and matches what the working pre-drift codex entries had.
+ *   - Otherwise emit a basic string with `\` and `"` escaped.
+ */
+function tomlString(v: string): string {
+  if (v.includes("\\") && !v.includes("'")) {
+    return `'${v}'`;
+  }
+  const escaped = v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
 export function buildTomlEntry(rootKey: string, serverName: string, config: Record<string, unknown>): string {
   const lines = [`[${rootKey}.${serverName}]`];
   const subTables: Record<string, Record<string, unknown>> = {};
@@ -94,18 +133,18 @@ export function buildTomlEntry(rootKey: string, serverName: string, config: Reco
     if (typeof v === "object" && v !== null && !Array.isArray(v)) {
       subTables[k] = v as Record<string, unknown>;
     } else if (typeof v === "string") {
-      lines.push(`${k} = "${v}"`);
+      lines.push(`${k} = ${tomlString(v)}`);
     } else if (typeof v === "boolean" || typeof v === "number") {
       lines.push(`${k} = ${v}`);
     } else if (Array.isArray(v)) {
-      lines.push(`${k} = [${v.map(x => typeof x === "string" ? `"${x}"` : x).join(", ")}]`);
+      lines.push(`${k} = [${v.map(x => typeof x === "string" ? tomlString(x) : x).join(", ")}]`);
     }
   }
 
   for (const [subName, subObj] of Object.entries(subTables)) {
     lines.push("", `[${rootKey}.${serverName}.${subName}]`);
     for (const [k, v] of Object.entries(subObj)) {
-      if (typeof v === "string") lines.push(`${k} = "${v}"`);
+      if (typeof v === "string") lines.push(`${k} = ${tomlString(v)}`);
       else lines.push(`${k} = ${v}`);
     }
   }
