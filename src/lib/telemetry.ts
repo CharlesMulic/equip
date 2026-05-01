@@ -46,7 +46,7 @@ export const COUNTER_NAMES = {
   INSTALL_MODE_TOTAL: "equip_install_mode_total",
   /** Cache-store reads, by freshness outcome. Emitted from cache-store.ts. */
   CACHE_READ_TOTAL: "equip_cache_read_total",
-  /** Cache refresh outcomes (200/304/error). Emitted from registry-refresh.ts. */
+  /** Cache refresh outcomes (200/304/error). Emitted from the registry cache refresh path. */
   CACHE_REFRESH_TOTAL: "equip_cache_refresh_total",
   /** Install-time hard-TTL block events. Emitted from cache-store.ts ensureCacheFresh. */
   CACHE_INSTALL_BLOCK_TOTAL: "equip_cache_install_block_total",

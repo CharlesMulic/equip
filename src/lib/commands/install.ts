@@ -1,5 +1,5 @@
 // equip <augment> — direct-mode install.
-// Handles auth, platform detection, MCP/rules/skills/hooks install, verification,
+// Handles auth, platform detection, MCP/rules/skills install, verification,
 // state reconciliation, telemetry, and post-install actions.
 
 import * as os from "os";
@@ -120,8 +120,8 @@ export function apply(
   // Plan progress steps for CLI output. We read fields directly off `toolDef`
   // (rather than building an AugmentConfig adapter inside apply) so apply works
   // for both RegistryDef inputs (registry-fetched flow via runInstall) and
-  // AugmentDef inputs (local-author edit propagation, registry-refresh
-  // propagation). The Augment instance — which actually drives per-resource
+  // AugmentInput flows (local-author edits and registry refreshes). The
+  // Augment instance — which actually drives per-resource
   // writes — is the caller's responsibility.
   //
   // hasMcpServer mirrors the gate used by bridge.ts install paths: an augment
@@ -291,8 +291,7 @@ export interface WriteAugmentDefAndApplyOptions extends ApplyOptions {
 }
 
 /**
- * AugmentInput → AugmentConfig adapter. (Was `augmentDefToConfig`
- * in the now-deleted augment-defs module.)
+ * AugmentInput → AugmentConfig adapter.
  */
 function defToAugmentConfig(def: AugmentInput): AugmentConfig {
   const config: AugmentConfig = {
@@ -459,7 +458,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
 
   // ── Apply ──
   // The install-loop and state-reconciliation half lives in `apply()` so
-  // it can be reused by registry-refresh, authoring save, platform-enable
+  // it can be reused by registry refreshes, authoring save, platform-enable
   // backfill, and the equip apply CLI command.
   const report = apply(equip, toolDef, platforms, apiKey, {
     dryRun,

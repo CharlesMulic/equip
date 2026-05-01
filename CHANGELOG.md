@@ -4,6 +4,37 @@ All notable changes to Equip are documented here.
 
 ## [Unreleased]
 
+## [0.19.3] - 2026-05-01
+
+### Added
+
+- **Journal-canonical storage** under `~/.equip/storage/intents.jsonl` and `~/.equip/storage/content/`. First run migrates prior on-disk formats into the journal/content model.
+- **Registry-scoped cache metadata** under `~/.equip/cache/registries/`, including ETag/content metadata for safer offline fallback.
+- **Managed MCP config plumbing** for platforms that can delegate runtime credential handling, with doctor/status output that preserves the per-platform install mode.
+- **OIDC auth metadata** now accepts optional `audience` and `scopes`; `"oauth-dcr"` registry metadata is accepted as a schema-only stub until runtime acquisition support ships.
+- **Hook orphan detection** in `equip doctor`, plus `equip doctor --fix-orphan-hooks` to prune hook entries whose script files no longer exist.
+
+### Fixed
+
+- Rules-only and skills-only augments no longer attempt MCP config installation.
+- State reconciliation preserves local-vs-registry source data and per-platform install mode.
+- Windows OAuth browser launches correctly escape URLs containing shell-sensitive characters.
+- Windows storage writes avoid POSIX file-mode calls that can create deny-all DACLs.
+- Registry content-hash mismatches warn and continue instead of failing an otherwise usable live definition.
+- Codex TOML output emits Windows paths as valid TOML literal strings and reads them back without self-induced drift.
+- OIDC token exchange handles wrapped error responses defensively instead of throwing from the error path.
+- Public repository surface no longer includes private-facing agent notes.
+
+### Changed
+
+- The old multi-file install/augment storage cluster was retired from the current implementation. Public docs now describe the journal/content storage layer and registry-scoped cache paths.
+- Docs tests and hook tests use isolated platform homes/settings paths instead of writing into a contributor's real platform config.
+
+### Migration notes
+
+- Existing installs should continue to reconcile from platform config and migrate local Equip state on first use.
+- If you maintain release automation, note that `0.19.3` is already the package version on `main`. Pending changesets for the 0.19 line have been folded into this changelog so the Changesets workflow can publish `0.19.3` instead of opening a `0.20.0` version PR.
+
 ## [0.18.0] — 2026-04-25
 
 ### ⚠️ Breaking Changes
@@ -19,12 +50,12 @@ All notable changes to Equip are documented here.
 - **Manifest-driven uninstall** preserves user-modified files. For each file in the manifest, current SHA-256 is compared to the install-time hash; matching files are deleted, drifted (user-modified) and user-added foreign files are preserved. If anything survives, a tombstone manifest is written so the dir is recognizable as "Equip once owned this."
 - **Refcounted shared-root semantics** for `~/.agents/skills/` (read by Codex, Windsurf, VS Code; partially by Cursor). An augment installing the same skill across multiple platforms appends new owner entries to `manifest.owners[]` instead of stomping. Unequip removes only the requesting (augment, platform) tuple's owner; files survive until the last owner unequips. Closes the latent "unequip Cursor wipes a skill Codex still uses" bug.
 - **mtime-keyed checksum cache at `~/.equip/checksum-cache.json`** keyed by `(mtimeMs, size)`. Verify operations hit the fast path on cache match; install seeds the cache from freshly-computed hashes; uninstall prunes pruned entries. Self-healing: drifted files get fresh cache entries on the next verify.
-- **Batched state writes** collapse multiple install/uninstall bookkeeping updates in one logical operation into a single disk write.
+- **Batched state writes** collapse multiple install/uninstall bookkeeping updates in one logical operation into a single disk write. This was the 0.18 storage path; current main supersedes it with the 0.19 journal/content storage layer.
 - **`--takeover` and `--adopt` CLI flags** for `equip <augment>` to override install-time skill collision refusals.
 - **CLI help text now lists `--api-key-file <path>`** (the flag itself was already implemented). The README, CLI reference, and augment-author guide now surface and recommend it for CI and shell-safe usage.
 - **New error codes** on `ArtifactResult.errorCode` for skill collision branches: `SKILL_COLLISION_OTHER_AUGMENT`, `SKILL_COLLISION_USER_AUTHORED`, `SKILL_COLLISION_FORGED_MANIFEST`. CLI surfaces appropriate flag suggestions per error.
 - **`Augment.installSkill` aggregates partial-install results** — a multi-skill augment with one colliding skill installs the remaining skills and surfaces the conflict via the result `errorCode`/`error` fields, instead of fail-fasting on the first refusal.
-- **Public exports:** `UninstallSkillResult`, `InstallSkillOptions`, `SkillManifest`, `SkillManifestOwner`, `SkillManifestHash`, `SkillManifestFile`, `SkillManifestOwnerSource`, `MANIFEST_FILENAME`, `manifestPath`, `readManifest`, `writeManifest`, `buildManifestForInstall`, `buildTombstoneManifest`, `isTombstone`, `findOwner`, `manifestSoleOwner`, `verifyFileAgainstManifest`, `computeFileEntries`, `sha256OfString`, `getCachedHash`, `setCachedHash`, `setCachedHashes`, `pruneCacheEntries`, `pruneStaleEntries`, `beginInstallationsBatch`, `commitInstallationsBatch`, `abortInstallationsBatch`, `withInstallationsBatch`, `isInstallationsBatchActive`, `findAugmentsOwningSkill`.
+- **Public API surface:** `uninstallSkill()` and `Augment.uninstallSkill()` now expose the richer `UninstallSkillResult`; `installSkill()` accepts the additive `InstallSkillOptions` fields described below. Internal manifest/checksum helpers back those flows but are not documented as root package imports.
 
 ### Fixed
 

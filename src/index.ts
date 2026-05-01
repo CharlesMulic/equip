@@ -432,9 +432,8 @@ export {
   findOrphanHookEntries,
 };
 
-// `installMcpForReplaceAdopt` is the single-writer adopt-mode install
-// used by broker adoption flows. Validation that no other module calls it
-// lives in `equip/test/adoption-single-writer.test.js`.
+// `installMcpForReplaceAdopt` is the single-writer adopt-mode install used by
+// managed MCP adoption flows.
 export { installMcpForReplaceAdopt } from "./lib/mcp";
 export {
   writeAdoptionSnapshot,

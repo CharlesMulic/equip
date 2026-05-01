@@ -8,11 +8,13 @@ The version is not decided by git tags.
 
 The source of truth is:
 
-1. pending `.changeset/*.md` files
+1. pending `.changeset/*.md` files for unreleased work
 2. the version bump committed by the `Version packages` release PR
 3. the published `package.json` version on `main`
 
 Tags and GitHub releases are outputs of the release workflow after the version is already decided.
+
+If `package.json` has already been bumped manually for an unpublished release, fold any matching pending changesets into `CHANGELOG.md` and remove those pending files before publishing. Leaving both the manual version bump and pending changesets in place makes `changesets/action` open the next version PR instead of publishing the already-versioned package.
 
 ## Contributor Flow
 
@@ -102,3 +104,21 @@ npm run release
 ```
 
 Typical maintainers should not run `npm run release` locally for normal stable releases. The intended stable publish path is the GitHub Actions workflow on `main`.
+
+## Publish Readiness Check
+
+Before expecting the workflow to publish an already-versioned package, check:
+
+```bash
+npm view @cg3/equip version
+git status --short .changeset
+npm pack --dry-run
+```
+
+Expected state:
+
+- `package.json` is ahead of the npm version you intend to replace
+- `.changeset/` has no pending release-note files except `README.md`
+- `npm pack --dry-run` includes only the expected package payload
+
+For the normal changeset-driven path, run `npx changeset status --verbose` from a clean tree before merging the `Version packages` PR. In the already-versioned path, that command may report local package changes with no changeset until the release-prep commit itself is committed.

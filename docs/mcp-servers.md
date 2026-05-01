@@ -250,4 +250,4 @@ url = "https://api.example.com/mcp"
 Authorization = "Bearer sk-xxx"
 ```
 
-The TOML handler supports strings, numbers, booleans, arrays, and nested sub-tables. It is not a full TOML parser -- it covers exactly the subset needed for MCP configuration.
+The TOML handler supports strings, numbers, booleans, arrays, and nested sub-tables. Values containing Windows backslashes are emitted as TOML literal strings so paths like `C:\dev\my-server.cmd` remain valid TOML, and the reader recognizes those literal strings on round-trip. It is not a full TOML parser -- it covers exactly the subset needed for MCP configuration.

@@ -183,7 +183,8 @@ The `auth` block in your registry definition declares what authentication your a
 | `"api_key"` | User has a key | Prompt or an explicit CLI key source (`--api-key-file` recommended, `--api-key` also supported) |
 | `"oauth"` | OAuth 2.1 browser flow | PKCE flow, token in config |
 | `"oauth_to_api_key"` | OAuth + key exchange | Browser flow, exchange for long-lived key |
-| `"oidc"` | CG3 delegated user auth | Reuse Equip's CG3 session, exchange it for a short-lived delegated access token |
+| `"oidc"` | Delegated user auth | Reuse Equip's signed-in session, exchange it for a short-lived delegated access token |
+| `"oauth-dcr"` | Third-party OAuth with Dynamic Client Registration | Registry schema is accepted; runtime acquisition is not implemented in this package version |
 
 For `api_key`:
 ```json
@@ -198,7 +199,7 @@ For `api_key`:
 }
 ```
 
-For `oauth_to_api_key` (like Prior):
+For `oauth_to_api_key`:
 ```json
 {
   "auth": {
@@ -222,12 +223,31 @@ For `oidc` delegated auth:
 ```json
 {
   "auth": {
-    "type": "oidc"
+    "type": "oidc",
+    "audience": "my-augment",
+    "scopes": ["identity:read"]
   }
 }
 ```
 
 Equip resolves `oidc` auth by exchanging the signed-in user's Equip session for a short-lived delegated access token and injecting that token into MCP config according to the augment definition.
+
+For `oauth-dcr` metadata:
+```json
+{
+  "auth": {
+    "type": "oauth-dcr",
+    "audience": "https://mcp.example.com",
+    "scopes": ["tools:read"],
+    "dcr": {
+      "publisherSlug": "example",
+      "dcrEndpoint": "https://auth.example.com/register"
+    }
+  }
+}
+```
+
+Equip accepts this shape in registry metadata so definitions can be validated consistently. Runtime acquisition and refresh for `oauth-dcr` return `not_implemented` until runtime support ships, so do not publish an augment that requires this auth type for general users yet.
 
 Equip handles the full OAuth PKCE flow, key exchange, credential storage (`~/.equip/credentials/`), and automatic token refresh.
 

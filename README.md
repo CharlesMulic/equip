@@ -73,6 +73,8 @@ For the PR-creation step, either enable `Settings -> Actions -> General -> Workf
 
 The committed `package.json` version on `main` is the canonical release version. Tags and GitHub releases are outputs of that flow, not the mechanism that decides the version.
 
+When `package.json` is already ahead of npm for an unpublished release, there should be no pending `.changeset/*.md` files for that same release line. Otherwise the workflow will prepare the next version PR instead of publishing the current package.
+
 See [Release Management](./docs/release-management.md) for the full release and publishing contract.
 
 ## How Augments Work
