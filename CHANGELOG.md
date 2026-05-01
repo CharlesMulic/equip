@@ -6,6 +6,8 @@ All notable changes to Equip are documented here.
 
 ## [0.19.3] - 2026-05-01
 
+Released to npm as `@cg3/equip@0.19.3` on 2026-05-01.
+
 ### Added
 
 - **Journal-canonical storage** under `~/.equip/storage/intents.jsonl` and `~/.equip/storage/content/`. First run migrates prior on-disk formats into the journal/content model.
@@ -33,7 +35,7 @@ All notable changes to Equip are documented here.
 ### Migration notes
 
 - Existing installs should continue to reconcile from platform config and migrate local Equip state on first use.
-- If you maintain release automation, note that `0.19.3` is already the package version on `main`. Pending changesets for the 0.19 line have been folded into this changelog so the Changesets workflow can publish `0.19.3` instead of opening a `0.20.0` version PR.
+- Pending changesets for the 0.19 line were folded into this changelog before publication, so this release shipped as `0.19.3` without opening a `0.20.0` version PR.
 
 ## [0.18.0] — 2026-04-25
 
