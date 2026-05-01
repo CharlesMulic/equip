@@ -201,7 +201,9 @@ function normalizeArtifactNames(artifacts) {
 
 function deriveEvidenceFileNames(artifacts) {
   return Object.fromEntries(
-    Object.entries(normalizeArtifactPaths(artifacts)).map(([key, value]) => [key, path.basename(value)]),
+    Object.entries(normalizeArtifactPaths(artifacts))
+      .filter(([, value]) => value)
+      .map(([key, value]) => [key, path.basename(value)]),
   );
 }
 
@@ -347,6 +349,9 @@ export function buildChangesetsReleaseReport({
             version: pkg?.version || "",
           }))
         : [],
+      artifacts: normalizeArtifactPaths(normalizedResult?.artifacts),
+      evidenceFileNames: normalizeArtifactNames(normalizedResult?.evidenceFileNames),
+      artifactNames: normalizeArtifactNames(normalizedResult?.artifactNames),
     },
     assertion: assertionArtifact?.assertion
       ? {
@@ -444,6 +449,9 @@ export function writeChangesetsReleaseAssertionArtifact({
       publishedPackages: Array.isArray(normalizedResult?.publishedPackages)
         ? normalizedResult.publishedPackages
         : [],
+      artifacts: normalizeArtifactPaths(normalizedResult?.artifacts),
+      evidenceFileNames: normalizeArtifactNames(normalizedResult?.evidenceFileNames),
+      artifactNames: normalizeArtifactNames(normalizedResult?.artifactNames),
     },
     workflowContext: normalizeWorkflowContext(workflowContext || normalizedResult?.workflowContext),
     inputs: normalizedInputs,

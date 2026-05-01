@@ -846,16 +846,19 @@ test("assert-changesets-release-result writes a failure artifact when the result
   const assertionPath = path.join(root, "changesets-release-assertion.json");
   const summaryPath = path.join(root, "changesets-release-summary.md");
   const reportPath = path.join(root, "changesets-release-report.json");
+  const releaseVerificationReportPath = path.join(root, "release-verification-report.json");
 
   const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
     CHANGESETS_RELEASE_RESULT_PATH: resultPath,
     CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
     CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
     CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_REPORT_PATH: releaseVerificationReportPath,
     CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
     CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     ...createWorkflowEnv(),
   });
 
@@ -869,10 +872,27 @@ test("assert-changesets-release-result writes a failure artifact when the result
   assert.equal(assertion.inputs.hasAssertionArtifact, false);
   assert.equal(assertion.result.stepOutcome, "missing");
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.result.artifacts.resultPath, path.resolve(resultPath));
+  assert.equal(assertion.result.artifacts.assertionPath, path.resolve(assertionPath));
+  assert.equal(assertion.result.artifacts.summaryPath, path.resolve(summaryPath));
+  assert.equal(assertion.result.artifacts.reportPath, path.resolve(reportPath));
+  assert.equal(
+    assertion.result.artifacts.releaseVerificationReportPath,
+    path.resolve(releaseVerificationReportPath),
+  );
   assert.equal(assertion.evidenceFileNames.resultPath, "missing-changesets-release-result.json");
   assert.equal(assertion.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
   assert.equal(assertion.evidenceFileNames.summaryPath, "changesets-release-summary.md");
   assert.equal(assertion.evidenceFileNames.reportPath, "changesets-release-report.json");
+  assert.equal(
+    assertion.evidenceFileNames.releaseVerificationReportPath,
+    "release-verification-report.json",
+  );
+  assert.equal(assertion.artifactNames.result, "changesets-release-result");
+  assert.equal(assertion.artifactNames.assertion, "changesets-release-assertion");
+  assert.equal(assertion.artifactNames.summary, "changesets-release-summary");
+  assert.equal(assertion.artifactNames.report, "changesets-release-report");
+  assert.equal(assertion.artifactNames.releaseVerification, "release-verification-report");
   assert.match(assertion.assertion.error, /result artifact not found/i);
 });
 
@@ -882,6 +902,7 @@ test("write-changesets-release-summary and report still render when the result a
   const assertionPath = path.join(root, "changesets-release-assertion.json");
   const summaryPath = path.join(root, "changesets-release-summary.md");
   const reportPath = path.join(root, "changesets-release-report.json");
+  const releaseVerificationReportPath = path.join(root, "release-verification-report.json");
 
   fs.writeFileSync(
     assertionPath,
@@ -904,10 +925,13 @@ test("write-changesets-release-summary and report still render when the result a
     CHANGESETS_RELEASE_RESULT_PATH: resultPath,
     CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
     CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
+    CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_REPORT_PATH: releaseVerificationReportPath,
     CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
     CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
   });
 
   const reportResult = runScript("scripts/ci/write-changesets-release-report.mjs", {
@@ -915,10 +939,12 @@ test("write-changesets-release-summary and report still render when the result a
     CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
     CHANGESETS_RELEASE_SUMMARY_PATH: summaryPath,
     CHANGESETS_RELEASE_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_REPORT_PATH: releaseVerificationReportPath,
     CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
     CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
   });
 
   assert.equal(summaryResult.status, 0, summaryResult.stderr || summaryResult.stdout);
@@ -929,8 +955,30 @@ test("write-changesets-release-summary and report still render when the result a
   assert.match(summary, /Outcome: `missing`/i);
   assert.match(summary, /## Input presence/i);
   assert.match(summary, /Result artifact: `missing`/i);
+  assert.match(summary, /Release verification: `release-verification-report`/i);
+  assert.match(summary, /Report Path: `changesets-release-report\.json`/i);
+  assert.match(summary, /Release Verification Report Path: `release-verification-report\.json`/i);
   assert.equal(report.status, "missing");
   assert.equal(report.effectiveStatus, "failed");
   assert.equal(report.inputs.hasResultArtifact, false);
   assert.equal(report.inputs.hasAssertionArtifact, true);
+  assert.equal(report.result.artifacts.resultPath, path.resolve(resultPath));
+  assert.equal(report.result.artifacts.assertionPath, path.resolve(assertionPath));
+  assert.equal(report.result.artifacts.summaryPath, path.resolve(summaryPath));
+  assert.equal(report.result.artifacts.reportPath, path.resolve(reportPath));
+  assert.equal(
+    report.result.artifacts.releaseVerificationReportPath,
+    path.resolve(releaseVerificationReportPath),
+  );
+  assert.equal(report.result.artifactNames.result, "changesets-release-result");
+  assert.equal(report.result.artifactNames.assertion, "changesets-release-assertion");
+  assert.equal(report.result.artifactNames.summary, "changesets-release-summary");
+  assert.equal(report.result.artifactNames.report, "changesets-release-report");
+  assert.equal(report.result.artifactNames.releaseVerification, "release-verification-report");
+  assert.equal(report.artifactNames.releaseVerification, "release-verification-report");
+  assert.equal(report.evidenceFileNames.resultPath, "missing-changesets-release-result.json");
+  assert.equal(
+    report.evidenceFileNames.releaseVerificationReportPath,
+    "release-verification-report.json",
+  );
 });

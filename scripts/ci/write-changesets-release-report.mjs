@@ -23,6 +23,11 @@ const resultArtifactName = process.env.CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME |
 const assertionArtifactName = process.env.CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME || "";
 const summaryArtifactName = process.env.CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME || "";
 const reportArtifactName = process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "";
+const releaseVerificationReportPath =
+  process.env.RELEASE_VERIFICATION_REPORT_PATH ||
+  path.join(".generated", "release", "release-verification-report.json");
+const releaseVerificationReportArtifactName =
+  process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "";
 
 function readOptionalJson(filePath) {
   if (!filePath || !fs.existsSync(filePath)) {
@@ -48,6 +53,20 @@ const result =
     stepOutcome: "missing",
     published: false,
     publishedPackages: [],
+    artifacts: {
+      resultPath: path.resolve(resultPath),
+      assertionPath: path.resolve(assertionPath),
+      summaryPath: path.resolve(summaryPath),
+      reportPath: path.resolve(reportPath),
+      releaseVerificationReportPath: path.resolve(releaseVerificationReportPath),
+    },
+    artifactNames: {
+      result: resultArtifactName,
+      assertion: assertionArtifactName,
+      summary: summaryArtifactName,
+      report: reportArtifactName,
+      releaseVerification: releaseVerificationReportArtifactName,
+    },
     workflowContext: readGitHubWorkflowContext(process.env),
   });
 const assertionArtifact = readOptionalJson(assertionPath);
@@ -73,6 +92,7 @@ const report = buildChangesetsReleaseReport({
     assertion: assertionArtifactName,
     summary: summaryArtifactName,
     report: reportArtifactName,
+    releaseVerification: releaseVerificationReportArtifactName,
   },
 });
 
