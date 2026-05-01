@@ -72,7 +72,7 @@ export interface PostInstallAction {
 
 export interface RegistryDef {
   name: string;
-  /** @deprecated Use title. Kept for backward compat during backend migration. */
+  /** @deprecated Use title. Kept for backward compatibility with older registry responses. */
   displayName?: string;
   title: string;
   description: string;

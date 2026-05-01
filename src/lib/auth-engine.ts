@@ -876,8 +876,8 @@ export async function oauthBrowserFlow(
   const codeVerifier = crypto.randomBytes(32).toString("base64url");
   const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
   const state = crypto.randomBytes(16).toString("hex");
-  // Sent unconditionally — backend requires it when `openid` is in scope (OIDC),
-  // and tolerates it otherwise. Saves us parsing scope strings client-side.
+  // Sent unconditionally: OIDC authorization servers require it when `openid`
+  // is in scope, and OAuth servers that do not use it should tolerate it.
   const nonce = crypto.randomBytes(16).toString("hex");
 
   return new Promise((resolve) => {

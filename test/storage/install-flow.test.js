@@ -85,7 +85,7 @@ test("install flow: fetch from registry → store content → append intent → 
   assert.equal(resolved.pinnedTo, null);
   assert.equal(resolved.contentSource.kind, "registry");
 
-  // === Verify platform write (downstream consumer) ===
+  // === Verify platform write (consumer view) ===
   const write = platform.applyAugmentToPlatform(resolved, "claude-code");
   assert.equal(write.platformId, "claude-code");
   assert.equal(write.augmentName, "demo-tool");

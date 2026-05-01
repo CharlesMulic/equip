@@ -1,7 +1,7 @@
 // Phase A.3b coverage — reconcileState writes content + install intent to
 // the journal directly when called with a toolDef. Locks the contract that
 // the apply→reconcile pipeline produces journal-canonical state for
-// downstream readers (doctor, skills, status).
+// readers such as doctor, skills, and status.
 //
 // This test pre-stages a Codex platform with the augment present in its
 // MCP config so the platform-presence scan finds it; then asserts the

@@ -100,7 +100,7 @@ const hooks: HookDefinition[] = [
     script: `
       // Runs after Write or Edit tool calls.
       // Hook scripts receive context via stdin (JSON).
-      const input = require("fs").readFileSync("/dev/stdin", "utf-8");
+      const input = require("fs").readFileSync(0, "utf-8");
       const { tool_input } = JSON.parse(input);
       if (tool_input?.file_path?.endsWith(".ts")) {
         console.log("Reminder: verify API versions with my-tool after code changes.");
@@ -134,12 +134,13 @@ const equip = new Augment({
 const result = equip.installHooks(platform, { dryRun: false });
 ```
 
-**Returns:** `{ installed: boolean, scripts: string[], hookDir: string } | null`
+**Returns:** `ArtifactResult`
 
-- `installed` -- true if hooks were written
+- `artifact` -- `"hooks"`
+- `success` -- true when hook scripts and settings registration succeeded
+- `action` -- `"created"` when hooks were written, `"skipped"` when the platform has no hook support or no valid hooks were defined
 - `scripts` -- list of installed script filenames (e.g., `["check-api-version.js"]`)
 - `hookDir` -- directory where scripts were written
-- Returns `null` if the platform doesn't support hooks or no valid hooks were defined
 
 **Options:**
 - `hookDir` -- override the default hook directory

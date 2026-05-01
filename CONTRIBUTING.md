@@ -57,7 +57,7 @@ Tests use Node.js built-in test runner (`node --test`). Key test files:
 | `test/registry.test.js` | Registry fetch, augment definition parsing |
 | `test/auth.test.js` | Credential storage, OAuth flows, validation |
 | `test/docs.test.js` | Documentation examples actually work |
-| `test/augment-defs.test.js` | Augment definition CRUD, sync, modding |
+| `test/storage/*.test.js` | Journal/content storage, migration, modding, refresh |
 | `test/platform-state.test.js` | Platform metadata, scan results |
 | `test/snapshots.test.js` | Config snapshots, initial capture, restore |
 | `test/security.test.js` | Input validation, path traversal, URL scheme checks |
@@ -116,4 +116,4 @@ Open an issue at [github.com/CharlesMulic/equip/issues](https://github.com/Charl
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under FSL-1.1-ALv2 as described in [`LICENSE`](./LICENSE).

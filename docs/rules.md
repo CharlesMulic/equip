@@ -2,7 +2,7 @@
 
 Behavioral rules are markdown instructions injected into platform-specific rules files. They tell AI agents when and how to use your augment. Without rules, agents may have your augment available but never use it — or use it incorrectly.
 
-**Note:** Rules are installed only on platforms with writable rules paths. Platforms like Cursor and VS Code that lack global rules files are skipped (rules installation returns `{ action: "skipped" }`).
+**Note:** Rules are installed only on platforms with writable rules paths. Platforms that lack global rules files are skipped (rules installation returns `{ action: "skipped" }`).
 
 ## Why Rules Matter
 
@@ -64,7 +64,7 @@ Claude Code (`CLAUDE.md`), Windsurf (`global_rules.md`), Codex (`AGENTS.md`), an
 
 ### Directory-based platforms (standalone file)
 
-Cline (`~/Documents/Cline/Rules/`) and Roo Code (`~/.roo/rules/`) use a rules directory where each file is loaded independently. Equip writes a standalone file using the `fileName` option:
+Cline (`~/Documents/Cline/Rules/`), Roo Code (`~/.roo/rules/`), and Tabnine (`~/.tabnine/guidelines/`) use a rules directory where each file is loaded independently. Equip writes a standalone file using the `fileName` option:
 
 ```typescript
 const equip = new Augment({
@@ -85,7 +85,7 @@ This auto-detection means you can set `fileName` for all platforms and equip doe
 
 ## Platforms Without Rules Support
 
-Cursor and VS Code don't have a writable global rules file. On these platforms, `installRules` returns `{ action: "skipped" }`. These are MCP-only platforms -- use skills for knowledge delivery on these platforms.
+Cursor, VS Code, Junie, Copilot JetBrains, Copilot CLI, and Amazon Q don't have a writable global rules file in Equip's platform registry. On these platforms, `installRules` returns `{ action: "skipped" }`. Use MCP and, where supported, skills for knowledge delivery on these platforms.
 
 ## API Reference
 

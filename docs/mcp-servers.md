@@ -21,7 +21,7 @@ Platforms use different top-level keys to hold MCP server definitions:
 
 | Root Key | Platforms |
 |---|---|
-| `mcpServers` | Claude Code, Cursor, Windsurf, Cline, Roo Code, Gemini CLI, Junie, Copilot JetBrains, Copilot CLI |
+| `mcpServers` | Claude Code, Cursor, Windsurf, Cline, Roo Code, Gemini CLI, Junie, Copilot JetBrains, Copilot CLI, Amazon Q, Tabnine |
 | `servers` | VS Code |
 | `mcp_servers` | Codex |
 
@@ -29,7 +29,7 @@ Platforms use different top-level keys to hold MCP server definitions:
 
 | Field | Platforms |
 |---|---|
-| `url` | Claude Code, Cursor, VS Code, Cline, Roo Code, Codex, Junie, Copilot JetBrains, Copilot CLI |
+| `url` | Claude Code, Cursor, VS Code, Cline, Roo Code, Codex, Junie, Copilot JetBrains, Copilot CLI, Amazon Q, Tabnine |
 | `serverUrl` | Windsurf |
 | `httpUrl` | Gemini CLI |
 
@@ -47,8 +47,9 @@ Some platforms require an explicit transport type field:
 
 | Field | Platforms |
 |---|---|
-| `headers` | All except Codex |
+| `headers` | All except Codex and Tabnine |
 | `http_headers` | Codex |
+| `requestInit.headers` | Tabnine |
 
 ### Config Format
 
@@ -192,9 +193,10 @@ Write the MCP config entry to a platform's config file.
 
 ```typescript
 const platforms = equip.detect();
+const apiKey = process.env.MY_AUGMENT_API_KEY || null;
 for (const p of platforms) {
   const result = equip.installMcp(p, apiKey, { transport: "http", dryRun: false });
-  // result: { success: true, method: "json" }
+  // result: { artifact: "mcp", success: true, action: "created", method: "json" }
 }
 ```
 
@@ -202,7 +204,7 @@ for (const p of platforms) {
 - `transport` -- `"http"` (default) or `"stdio"`
 - `dryRun` -- `true` to skip file writes
 
-**Returns:** `{ success: boolean, method: string }` where `method` is `"json"` or `"toml"`.
+**Returns:** `ArtifactResult` with MCP-specific `method` set to `"json"` or `"toml"`.
 
 ### `equip.uninstallMcp(platform, dryRun?)`
 
@@ -231,7 +233,7 @@ Update the API key in an existing config entry. Functionally equivalent to `inst
 
 ```typescript
 const result = equip.updateMcpKey(platform, newApiKey);
-// { success: true, method: "json" }
+// { artifact: "mcp", success: true, action: "updated", method: "json" }
 ```
 
 ### Low-Level Functions

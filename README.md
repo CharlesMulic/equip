@@ -150,7 +150,7 @@ Equip handles authentication for augments that require it:
 - **API key** — prompt, `--api-key-file <path>` (recommended for CI and shell safety), or `--api-key <key>` when you accept shell-history/process-list exposure
 - **OAuth** — browser PKCE flow with automatic token refresh
 - **OAuth + key exchange** — browser flow to provider-issued API key
-- **OIDC delegated auth** — brokered token exchange that injects a short-lived delegated access token according to the augment definition
+- **OIDC delegated auth** — token exchange that injects a short-lived delegated access token according to the augment definition
 
 Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-refreshed on every equip command.
 
@@ -180,7 +180,7 @@ Equip tracks everything in `~/.equip/`:
 - **`snapshots/`** — Platform config snapshots for rollback (initial state captured automatically)
 - **`equip.json`** — Preferences such as telemetry and local config metadata
 
-State is reconciled from disk after every install/uninstall — equip scans actual platform config files rather than relying solely on its records. Initial snapshots are captured before any modifications, guaranteeing you can always restore to your pre-equip state.
+Install and local-script flows reconcile state from disk by scanning platform config files after writes. `equip status` reads current platform config files directly, and initial snapshots are captured before modifications so you can restore to your pre-equip state.
 
 ## Design Principles
 

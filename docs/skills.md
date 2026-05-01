@@ -67,9 +67,9 @@ Equip writes `{skillDir}/.equip-meta.json` beside managed skill files. That mani
 | Codex | `~/.agents/skills/` |
 | Gemini CLI | `~/.gemini/skills/` |
 
-Platforms without a confirmed skills path (Junie, Copilot JetBrains, Copilot CLI) have `skillsPath: null` and skill installation is silently skipped.
+Platforms without a confirmed skills path (Junie, Copilot JetBrains, Copilot CLI, Amazon Q, Tabnine) have `skillsPath: null` and skill installation is silently skipped.
 
-The `~/.agents/skills/` path is a cross-platform convention -- all 8 skill-supporting platforms scan this directory. Equip uses each platform's native path when one exists, falling back to `~/.agents/skills/` for platforms like Windsurf, VS Code, and Codex that don't have a platform-specific global skills directory.
+The `~/.agents/skills/` path is the shared convention Equip uses for platforms without a platform-specific global skills directory, currently Windsurf, VS Code, and Codex. Platforms with native skill roots use their native paths instead.
 
 ## How Skills Get Loaded by Agents
 
@@ -202,8 +202,9 @@ Install skill files to a platform's skills directory.
 const result = equip.installSkill(platform, { dryRun: false });
 ```
 
-**Returns:** `{ action: string }` where `action` is one of:
+**Returns:** `ArtifactResult` where `action` is one of:
 - `"created"` -- skill files were written
+- `"updated"` -- an existing Equip-owned skill was updated
 - `"skipped"` -- SKILL.md already exists with identical content, or platform has no skillsPath
 
 ### `equip.uninstallSkill(platform, dryRun?)`
@@ -211,11 +212,11 @@ const result = equip.installSkill(platform, { dryRun: false });
 Remove the skill directory from a platform.
 
 ```typescript
-const removed = equip.uninstallSkill(platform);
-// true if the directory was found and removed, false otherwise
+const result = equip.uninstallSkill(platform);
+// { removed: true, preservedFiles: [], tombstone: false, viaManifest: true }
 ```
 
-Removes owned files from the flat skill directory (for example, `~/.claude/skills/docs-lookup/`). User-modified or foreign files are preserved.
+Returns `UninstallSkillResult` with `removed`, `preservedFiles`, `tombstone`, and `viaManifest`. It removes owned files from the flat skill directory (for example, `~/.claude/skills/docs-lookup/`). User-modified or foreign files are preserved.
 
 ### `equip.hasSkill(platform)`
 

@@ -16,7 +16,7 @@ Equip installs all layers across every detected platform in a single command: `e
 
 ## Quick Start: The Pirate Hat
 
-Let's build a simple augment that makes agents talk like pirates. No MCP server needed — just rules and a skill.
+Let's build a simple augment that makes agents talk like pirates. No MCP server needed — just rules.
 
 ### 1. Create a setup script
 
@@ -60,10 +60,9 @@ equip doctor    # Validates config integrity
 
 ### 4. Publish
 
-Publish your augment to Equip's registry to make it discoverable and installable by anyone:
+Publish your augment to Equip's registry to make it discoverable and installable by anyone. The CLI installs published augments; publishing is handled by the registry service:
 
 ```bash
-# Via the desktop app: use the Publish button on the edit form
 # Via API: POST to https://api.cg3.io/equip/augments (requires publisher profile + auth)
 ```
 
@@ -88,6 +87,7 @@ const augment = new Augment({
   },
 });
 
+const apiKey = process.env.MY_AUGMENT_API_KEY || null;
 const platforms = augment.detect();
 for (const p of platforms) {
   augment.installMcp(p, apiKey);   // MCP config with auth header
@@ -121,6 +121,7 @@ Use this when the user asks about...`,
   }],
 });
 
+const apiKey = process.env.MY_AUGMENT_API_KEY || null;
 const platforms = augment.detect();
 for (const p of platforms) {
   augment.installMcp(p, apiKey);
@@ -299,7 +300,7 @@ interface AugmentConfig {
 
 ## Instance Methods
 
-All install methods return `ArtifactResult`:
+Install methods return `ArtifactResult`:
 
 ```typescript
 interface ArtifactResult {
@@ -311,6 +312,19 @@ interface ArtifactResult {
   error?: string;                  // Human-readable message
   warnings: EquipWarning[];
   method?: string;                 // "json" | "toml" for mcp
+  scripts?: string[];              // installed script filenames for hooks
+  hookDir?: string;                // hook directory for hooks
+}
+```
+
+Uninstall methods return booleans except `uninstallSkill()`, which returns details about preserved files:
+
+```typescript
+interface UninstallSkillResult {
+  removed: boolean;
+  preservedFiles: string[];
+  tombstone: boolean;
+  viaManifest: boolean;
 }
 ```
 

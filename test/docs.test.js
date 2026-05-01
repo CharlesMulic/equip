@@ -147,7 +147,7 @@ for (const p of platforms) {
 
 // ─── Pirate Hat: Layer 2 (Rule + Skill) ─────────────────────
 //
-// FROM: docs/tool-author.md → "Layer 2: Add a Skill"
+// FROM: docs/augment-author.md → local script examples with rules + skills
 // Tests both rules and skills installation together.
 
 describe("docs/augment-author.md — Pirate Hat Layer 2 (Rules + Skills)", () => {
@@ -265,7 +265,7 @@ for (const p of platforms) {
 
 // ─── Local Package Dispatch (equip .) ───────────────────────
 //
-// FROM: docs/tool-author.md → "From Local Script to equip <name>" → Step 1
+// FROM: docs/augment-author.md → "Local Development"
 // Tests `equip .` reading package.json bin field.
 
 describe("docs/augment-author.md — equip . (local package)", () => {

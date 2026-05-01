@@ -5,7 +5,7 @@
 //   - Counter storage is whoever wires the port. Standalone CLI gets
 //     `noopCounter` (no telemetry). Other callers can pass their own
 //     implementation through the install/apply opts.
-//   - Emit sites are inside this lib only; collection is downstream.
+//   - Emit sites are inside this lib only; callers supply any collection.
 //
 // Why a port and not an exported counter object: equip lib has no
 // awareness of who collects metrics. The port is the ergonomic mirror
@@ -71,7 +71,7 @@ export const COUNTER_LABELS = {
   },
   [COUNTER_NAMES.CACHE_REFRESH_TOTAL]: {
     // 200=content updated; 304=not modified (etag round-trip succeeded);
-    // error=network or backend failure during refresh.
+    // error=network or service failure during refresh.
     result: ["200", "304", "error"] as const,
   },
   [COUNTER_NAMES.CACHE_INSTALL_BLOCK_TOTAL]: {

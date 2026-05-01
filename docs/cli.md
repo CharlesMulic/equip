@@ -73,7 +73,7 @@ equip update prior                 # Re-fetch definition, re-install augment
 equip update                       # Self-update equip + migrate configs
 ```
 
-With an augment name: clears the cache, re-fetches the definition from the API, validates stored credentials, and re-installs. Rules update if the registry has a newer version.
+With an augment name: fetches the current definition from the registry API, validates stored credentials when the definition provides a validation URL, and re-installs. Rules update if the registry has a newer version. If the API is unreachable, equip falls back to the registry-scoped cache.
 
 Without an augment name: updates equip itself and runs config migrations.
 
@@ -218,7 +218,7 @@ Equip manages state across multiple files in `~/.equip/`:
 | `cache/registries/<registry-key>/<name>.json` | Cached registry API responses (fallback when offline). |
 | `snapshots/<platform>/<id>.json` | Config snapshots — captured platform state for rollback. |
 
-State is reconciled from disk after every install/uninstall — equip scans what's actually in platform config files rather than relying solely on its records.
+Install and local-script flows reconcile state from disk by scanning the platform config files after writes. Uninstall records the removal in Equip's journal, and `equip status` reads the current platform config files directly.
 
 ### Disabled Platforms
 
@@ -237,14 +237,14 @@ Equip uses several strategies to prevent data loss and recover from bad state:
 
 **Concurrent operation safety.** A process-level lockfile (`~/.equip/.lock`) prevents multiple equip commands from racing on shared state files. The lock is advisory and auto-expires after 60 seconds.
 
-**Reconciliation from disk.** After every install/uninstall, equip scans the actual platform config files to rebuild its state — it doesn't rely solely on its own records. This means manually editing a config file won't cause drift; the next equip command picks up the real state.
+**Reconciliation from disk.** Install and local-script flows scan the actual platform config files after writes — equip doesn't rely solely on its own records. `equip status` also reads platform config files directly, so manually edited MCP entries show up on the next status run.
 
 **Recovery steps:**
 
 | Problem | Fix |
 |---|---|
 | Config file is corrupt or empty | Restore from `.bak` file in the same directory, or re-run `equip <augment>` to re-install |
-| `equip status` shows stale data | Run `equip update` to re-scan all platforms |
+| `equip status` looks stale | Run `equip status` again; it reads platform config files directly. If an augment definition is out of date, run `equip update <augment>`. |
 | Lock file prevents operation | Delete `~/.equip/.lock` manually (the holding process likely crashed) |
 | Credentials invalid or expired | Run `equip reauth <augment>` for a fresh auth flow |
 | Augment definition out of date | Run `equip update <augment>` to re-fetch from registry |
@@ -254,4 +254,4 @@ Equip uses several strategies to prevent data loss and recover from bad state:
 
 Augment definitions fetched from the API are cached under `~/.equip/cache/registries/<registry-key>/<augment>.json`. The registry key keeps local, staging, and production registries from sharing cache entries.
 
-`equip update <augment>` clears the cache before re-fetching to ensure the latest definition.
+`equip update <augment>` tries the live registry first and uses the cache only as an offline fallback.

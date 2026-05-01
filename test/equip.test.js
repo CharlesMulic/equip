@@ -2639,7 +2639,7 @@ describe("config migration", () => {
   });
 });
 
-// ─── apply (commands/install): the refresh+apply pipeline's downstream half ──
+// ─── apply (commands/install): the refresh+apply pipeline's writer half ──────
 //
 // Behavior preservation is proven by the rest of this suite — every install-
 // path test routes through runInstall, which now delegates to apply. If apply

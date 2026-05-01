@@ -55,7 +55,7 @@ All paths are resolved at runtime relative to the user's home directory. On Wind
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | VS Code | `<VS Code User Dir>/mcp.json` |
 | Cline | `<VS Code User Dir>/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
-| Roo Code | `<VS Code User Dir>/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json` |
+| Roo Code | `<VS Code User Dir>/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json` (falls back to `cline_mcp_settings.json` when only the legacy file exists) |
 | Codex | `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`) |
 | Gemini CLI | `~/.gemini/settings.json` |
 | Junie | `~/.junie/mcp/mcp.json` |
@@ -86,6 +86,10 @@ The **github-copilot dir** is:
 | Tabnine | `~/.tabnine/guidelines/` | Directory (standalone file) |
 | Cursor | -- | Not supported |
 | VS Code | -- | Not supported |
+| Junie | -- | Not supported |
+| Copilot (JetBrains) | -- | Not supported |
+| Copilot CLI | -- | Not supported |
+| Amazon Q | -- | Not supported |
 
 For platforms with a directory-based rules path (Cline, Roo Code, Tabnine), equip writes a standalone file named via the `fileName` option in your rules config. See [rules.md](./rules.md) for details.
 
@@ -102,7 +106,7 @@ For platforms with a directory-based rules path (Cline, Roo Code, Tabnine), equi
 | Codex | `~/.agents/skills/` |
 | Gemini CLI | `~/.gemini/skills/` |
 
-Platforms without a verified skills path (Junie, Copilot JetBrains, Copilot CLI) have `skillsPath: null` and skill installation is skipped.
+Platforms without a verified skills path (Junie, Copilot JetBrains, Copilot CLI, Amazon Q, Tabnine) have `skillsPath: null` and skill installation is skipped.
 
 ## Enabled / Disabled Platforms
 
