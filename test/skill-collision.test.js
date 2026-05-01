@@ -1,5 +1,5 @@
 // Tests for the install-time collision-check decision tree
-// (Package 01 of equip-skill-ownership). Exercises every branch:
+// Exercises every skill collision branch:
 // - Target absent
 // - Present with our manifest (update path)
 // - Present with no manifest, no installations.json claim (user-authored)
@@ -8,7 +8,7 @@
 // - Present with manifest naming different augment + installations.json doesn't confirm (forged advisory)
 // - --takeover overrides cross-augment collision
 // - --adopt overrides user-authored
-// - Multi-skill augment with one collision continues installing the rest (ENG-0011)
+// - Multi-skill augment with one collision continues installing the rest
 
 "use strict";
 
@@ -282,7 +282,7 @@ describe("installSkill collision-check decision tree", () => {
   });
 });
 
-// ─── Augment class: partial-augment install (ENG-0011) ──────────
+// ─── Augment class: partial augment install ──────────
 
 describe("Augment.installSkill — partial install when one of N skills collides", () => {
   beforeEach(setupTempHome);

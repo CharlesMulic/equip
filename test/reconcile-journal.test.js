@@ -75,14 +75,14 @@ describe("Phase A.3b — reconcileState journal writes", () => {
 
   it("preserves broker installMode across consecutive reconciles", () => {
     const codexConfigPath = path.join(tempHome, "config.toml");
-    fs.writeFileSync(codexConfigPath, `[mcp_servers.broker-aug]\ncommand = "/opt/equip-app/bin/equip-broker-shim"\nargs = ["--augment", "broker-aug"]\n`);
+    fs.writeFileSync(codexConfigPath, `[mcp_servers.broker-aug]\ncommand = "/opt/equip/bin/equip-broker-shim"\nargs = ["--augment", "broker-aug"]\n`);
 
     const toolDef = {
       name: "broker-aug",
       title: "Broker Augment",
       description: "broker-managed",
       transport: "stdio",
-      stdioCommand: "/opt/equip-app/bin/equip-broker-shim",
+      stdioCommand: "/opt/equip/bin/equip-broker-shim",
       stdioArgs: ["--augment", "broker-aug"],
       requiresAuth: false,
       version: 1,
@@ -97,7 +97,7 @@ describe("Phase A.3b — reconcileState journal writes", () => {
       title: "Broker Augment",
       description: "broker-managed",
       transport: "stdio",
-      stdio: { command: "/opt/equip-app/bin/equip-broker-shim", args: ["--augment", "broker-aug"] },
+      stdio: { command: "/opt/equip/bin/equip-broker-shim", args: ["--augment", "broker-aug"] },
       requiresAuth: false,
     };
     const seedHash = JsonStore.putContent(seedContent);

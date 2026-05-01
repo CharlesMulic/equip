@@ -6,4 +6,5 @@ dist/
 
 # Internal planning docs (not for public repo)
 planning/
+.local-notes/
 equip-sidecar.exe

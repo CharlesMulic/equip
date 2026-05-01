@@ -1,9 +1,9 @@
 "use strict";
 
-// Tests for Package 05 — Cursor's writeBrokerConfig strategy hook.
+// Tests for Cursor's writeBrokerConfig strategy hook.
 //
 // The hook produces a `mcpServers["<name>"]` JSON entry pointing at
-// equip-broker-shim. Bypass discipline (per spike Cursor section):
+// equip-broker-shim. Bypass discipline:
 //   - command + args ONLY
 //   - NEVER include `url` (Cursor probes /.well-known/oauth-* on URL entries)
 //   - NEVER include `headers.Authorization` (would trigger OAuth)
@@ -15,17 +15,17 @@ const { getBrokerStrategy } = require("../dist/lib/platforms");
 
 function callHook(opts) {
   const strat = getBrokerStrategy("cursor");
-  assert.ok(strat, "Cursor must declare a brokerStrategy by Package 05");
+  assert.ok(strat, "Cursor must declare a brokerStrategy");
   assert.ok(typeof strat.writeBrokerConfig === "function");
   return strat.writeBrokerConfig(opts.augmentName, {
     augmentName: opts.augmentName,
-    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip-app/bin/equip-broker-shim",
+    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip/bin/equip-broker-shim",
     shimExtraArgs: opts.shimExtraArgs,
     loopbackUrl: opts.loopbackUrl,
   });
 }
 
-describe("Package 05 — Cursor writeBrokerConfig: shape", () => {
+describe("Cursor writeBrokerConfig: shape", () => {
   it("returns a stdio-transport result", () => {
     const result = callHook({ augmentName: "notion-mcp" });
     assert.equal(result.transport, "stdio");
@@ -57,13 +57,13 @@ describe("Package 05 — Cursor writeBrokerConfig: shape", () => {
   it("entry.args[0] is --shim (single-binary subcommand dispatch)", () => {
     const result = callHook({ augmentName: "notion-mcp" });
     assert.equal(result.entry.args[0], "--shim",
-      "broker-production-wiring Pkg 01: --shim selects shim mode in equip-sidecar dispatcher");
+      "--shim selects shim mode in equip-sidecar dispatcher");
   });
 });
 
-describe("Package 05 — Cursor writeBrokerConfig: OAuth-bypass contract", () => {
+describe("Cursor writeBrokerConfig: OAuth-bypass contract", () => {
   // url is the load-bearing absence here — Cursor probes
-  // /.well-known/oauth-authorization-server on URL entries (per spike).
+  // /.well-known/oauth-authorization-server on URL entries.
 
   it("entry MUST NOT include `url`", () => {
     const result = callHook({ augmentName: "notion-mcp" });

@@ -2,11 +2,11 @@
 "@cg3/equip": minor
 ---
 
-feat(auth): uniform augment-def shape + OAuthDcrProvider stub (Pkg 03)
+feat(auth): uniform auth metadata + OAuthDcrProvider stub
 
-mcp-resource-server-cutover Wave 1 / Pkg 03. Equip-side schema +
-provider rewrite. Behavior-preserving: legacy registry rows still
-work; new uniform shape adds audience + scopes + dcr fields.
+Equip now accepts uniform auth metadata for augments. The provider rewrite is
+behavior-preserving for existing registry rows; the new shape adds audience,
+scopes, and DCR metadata for future delegated-auth flows.
 
 - AuthConfig adds `audience?`, `scopes?`, `dcr?`, plus `"oauth-dcr"` to
   the type discriminated union.
@@ -14,6 +14,6 @@ work; new uniform shape adds audience + scopes + dcr fields.
   with consistent claims without re-reading auth-config.
 - OidcProvider passes auth.audience + auth.scopes to /token; falls
   back to legacy values (audience=augmentName, scope=identity:read)
-  when overrides are absent — W1 compat for unmigrated registry rows.
+  when overrides are absent.
 - New OAuthDcrProvider schema-only stub (acquire/refresh return
-  ok:false code "not_implemented" until first publisher integration).
+  ok:false code "not_implemented" until runtime support ships).

@@ -223,8 +223,7 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
   const moddedFields: ("rules" | "skills" | "hooks")[] = [];
 
   // For each typed-allowlist field: mod wins if present (including explicit
-  // null which means "explicit reset to publisher version" — for the spike,
-  // null collapses to "use content"; production may differ).
+  // null which means "explicit reset to publisher version".
   const rules = mod?.rules !== undefined
     ? (mod.rules ?? content.rules)
     : content.rules;

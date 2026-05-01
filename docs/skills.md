@@ -36,23 +36,23 @@ The `name` and `description` fields are required. Everything else is optional.
 
 ## How Equip Installs Skills
 
-Equip copies skill files to each platform's skills directory using a scoped layout:
+Equip copies skill files to each platform's skills directory using the flat Agent Skills layout:
 
 ```
-{skillsPath}/{toolName}/{skillName}/SKILL.md
+{skillsPath}/{skillName}/SKILL.md
 ```
 
-For example, an augment named `prior` with a skill named `search` installed on Claude Code:
+For example, an augment with a skill named `docs-search` installed on Claude Code:
 
 ```
-~/.claude/skills/prior/search/SKILL.md
+~/.claude/skills/docs-search/SKILL.md
 ```
 
-The `toolName` scope prevents naming collisions between different tools that might use the same skill name.
+Equip writes `{skillDir}/.equip-meta.json` beside managed skill files. That manifest records which augment and platform own the skill, prevents accidental cross-augment collisions, and lets shared roots such as `~/.agents/skills/` keep one skill directory alive until the last owning platform uninstalls it.
 
 ### Installation is idempotent. If the SKILL.md file already exists with identical content, equip skips the write and returns `{ action: "skipped" }`.
 
-### Uninstallation removes the skill directory and cleans up the parent augment directory if it's empty afterward.
+### Uninstallation removes only files Equip owns. User-modified or foreign files are preserved, and Equip leaves a tombstone manifest when preserved content remains.
 
 ## Platform Skills Paths
 
@@ -131,12 +131,12 @@ The description is the most important field. It determines whether the skill get
 
 Bad:
 ```yaml
-description: Prior knowledge base integration
+description: Documentation integration
 ```
 
 Good:
 ```yaml
-description: Search Prior for solutions other agents already found. Use when you hit an error, stack trace, or unexpected behavior.
+description: Search the project documentation for API examples and migration notes.
 ```
 
 ### Frontmatter
@@ -183,7 +183,7 @@ const equip = new Augment({
 All files are installed relative to the skill directory:
 
 ```
-~/.claude/skills/my-tool/docs-lookup/
+~/.claude/skills/docs-lookup/
   SKILL.md
   scripts/validate.sh
   references/api-guide.md
@@ -215,7 +215,7 @@ const removed = equip.uninstallSkill(platform);
 // true if the directory was found and removed, false otherwise
 ```
 
-Removes the entire skill directory (e.g., `~/.claude/skills/my-tool/docs-lookup/`). If the parent augment directory is empty afterward, it is also removed.
+Removes owned files from the flat skill directory (for example, `~/.claude/skills/docs-lookup/`). User-modified or foreign files are preserved.
 
 ### `equip.hasSkill(platform)`
 
@@ -223,5 +223,5 @@ Check if the skill is installed on a platform.
 
 ```typescript
 const installed = equip.hasSkill(platform);
-// true if {skillsPath}/{toolName}/{skillName}/SKILL.md exists
+// true if {skillsPath}/{skillName}/SKILL.md exists
 ```

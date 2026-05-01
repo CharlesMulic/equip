@@ -1,4 +1,4 @@
-// Tests for Package 04 of equip-skill-ownership: mtime-keyed checksum cache
+// Tests for the mtime-keyed checksum cache.
 // + lazy verification.
 //
 // Coverage:

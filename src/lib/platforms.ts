@@ -63,8 +63,8 @@ export interface PlatformBrokerCapabilities {
 
   /**
    * Can the platform's MCP config accept a `command` + `args` entry that
-   * we can point at the equip-broker-shim binary? This is the primary
-   * broker transport (per spike: stdio shim >> loopback HTTP).
+   * we can point at the equip-broker-shim binary? This is the preferred
+   * broker transport when supported.
    */
   supportsStdioShim?: boolean;
 
@@ -82,15 +82,14 @@ export interface PlatformBrokerCapabilities {
    * When true, the loopback HTTP broker MUST return 404 for those paths
    * AND never emit `WWW-Authenticate`, or the platform will hijack the
    * request into an OAuth flow and ignore configured headers.
-   * (Per spike: Cursor exhibits this; Claude Code and Codex do not.)
    */
   oauthDiscoveryProbing?: boolean;
 
   /**
    * Does this platform persist a "needs auth" cache (with a TTL) that can
    * block reconnection even after the broker has refreshed credentials?
-   * (Per spike: Claude Code's `~/.claude/mcp-needs-auth-cache.json` has a
-   * 15-minute TTL that is a real recovery hazard.) When true, broker-side
+   * Some platforms cache this state with a TTL, which can be a recovery
+   * hazard. When true, broker-side
    * recovery flows must explicitly invalidate the cache after a successful
    * refresh — not rely on the platform's TTL expiring naturally.
    */
@@ -168,7 +167,6 @@ export interface DiscoverySuppressionRules {
    * If true, the broker MUST NOT emit `WWW-Authenticate` headers on any
    * 401 response for installs of this platform — the platform would
    * otherwise interpret it as an OAuth challenge and hijack the flow.
-   * (Per spike: required for Cursor.)
    */
   suppressWwwAuthenticate: boolean;
 }
@@ -284,14 +282,11 @@ function getClaudeCodeVersion(): string | null {
 
 // ─── Augment-name validation for broker-shim args ───────────
 //
-// Defense against argv-injection via a malicious registry augment name
-// (broker-production-wiring Pkg 01, sec-pen requirement). The shim is
-// spawned by every MCP-supporting platform via its config's `command`
-// + `args` fields; an augment name containing a newline / quote /
-// leading `--` could escape its argv slot on platforms that
-// shell-quote inconsistently. Allowlist is also enforced server-side
-// at registry submit time (separate concern, backend), and inline in
-// the shim's argv parser as defense in depth.
+// Defense against argv injection via a malicious registry augment name. The
+// shim is spawned by MCP-supporting platforms via `command` + `args`; an
+// augment name containing a newline, quote, or leading `--` could escape its
+// argv slot on platforms that shell-quote inconsistently. The allowlist is
+// also enforced at registry submit time and by the shim parser.
 //
 // Regex: starts with [a-z0-9], 2-64 chars total, [a-z0-9_-] only.
 //   - Lowercase only (no case-collision attacks via Unicode normalization)
@@ -346,12 +341,11 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     },
     skillsPath: () => path.join(home(), ".claude", "skills"),
     // Broker capabilities — stdio shim is the cleanest path. Loopback HTTP
-    // works when `auth` is omitted from the .mcp.json entry (per spike).
+    // works when `auth` is omitted from the .mcp.json entry.
     // mcpNeedsAuthRecovery=true: 15-min mcp-needs-auth-cache.json TTL is a
     // real recovery hazard that broker code must invalidate on refresh.
     // oauthDiscoveryProbing=false: Claude Code does not auto-probe OAuth
     // discovery against loopback URLs.
-    // Strategy hook implementations land in Package 05.
     brokerCapabilities: {
       supportsBroker: true,
       supportsStdioShim: true,
@@ -359,10 +353,10 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       oauthDiscoveryProbing: false,
       mcpNeedsAuthRecovery: true,
     },
-    // Claude Code broker writer (Package 05). Stdio-only entry into
-    // ~/.claude.json's `mcpServers` map.
+    // Claude Code broker writer. Stdio-only entry into ~/.claude.json's
+    // `mcpServers` map.
     //
-    // OAuth-bypass discipline (per spike Claude Code section):
+    // OAuth-bypass discipline:
     //   - NEVER include the `auth` field — its presence on a managed
     //     entry triggers Claude Code's `/mcp authenticate` flow which
     //     defeats the broker.
@@ -405,13 +399,11 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     },
     hooks: null,
     skillsPath: () => path.join(home(), ".cursor", "skills"),
-    // Broker capabilities — stdio shim is the strongest path (mcp-remote is
-    // exact prior art on Cursor today). Loopback HTTP is viable only with
+    // Broker capabilities — stdio shim is the strongest path. Loopback HTTP is viable only with
     // strict discovery suppression: broker MUST 404 on /.well-known/oauth-*
     // AND never emit WWW-Authenticate. oauthDiscoveryProbing=true is the
     // load-bearing flag that triggers the suppressOAuthDiscovery hook in
     // broker daemon code. mcpNeedsAuthRecovery=false: no documented cache.
-    // Strategy hook implementations land in Package 05.
     brokerCapabilities: {
       supportsBroker: true,
       supportsStdioShim: true,
@@ -419,10 +411,10 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       oauthDiscoveryProbing: true,
       mcpNeedsAuthRecovery: false,
     },
-    // Cursor broker writer (Package 05). Stdio-only entry into
-    // ~/.cursor/mcp.json's `mcpServers` map.
+    // Cursor broker writer. Stdio-only entry into ~/.cursor/mcp.json's
+    // `mcpServers` map.
     //
-    // OAuth-bypass discipline (per spike Cursor section):
+    // OAuth-bypass discipline:
     //   - NEVER include `url` — Cursor probes /.well-known/oauth-* on
     //     URL entries (see oauthDiscoveryProbing=true on capabilities).
     //     Stdio shim entries are not URL-shaped and are therefore
@@ -433,7 +425,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // Loopback HTTP transport for Cursor would need broker-side
     // suppressOAuthDiscovery (404 on /.well-known/oauth-* + suppress
     // WWW-Authenticate); deferred until loopback-HTTP is actually wanted
-    // (stdio is the strongest path; mcp-remote is exact prior art).
+    // (stdio is the strongest path for Cursor-compatible MCP proxies).
     brokerStrategy: {
       writeBrokerConfig: (augmentName, endpoint) => {
         assertValidAugmentNameForShim(augmentName);
@@ -537,12 +529,10 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     skillsPath: () => path.join(home(), ".agents", "skills"),
     // Broker capabilities — Codex stdio MCP entries are first-class and
     // most reliable; bypass discipline for Codex is "never run codex mcp
-    // login + never set bearer_token_env_var/scopes/oauth_resource" (per
-    // spike). oauthDiscoveryProbing=false: Codex's OAuth login is opt-in.
+    // login + never set bearer_token_env_var/scopes/oauth_resource".
+    // oauthDiscoveryProbing=false: Codex's OAuth login is opt-in.
     // mcpNeedsAuthRecovery=false: no documented persistent needs-auth
-    // cache. Codex is the worst-broken platform on refresh today and is
-    // our first end-to-end demo target. Strategy hook implementations
-    // land in Package 04.
+    // cache. Broker-managed entries avoid platform-managed token refresh.
     brokerCapabilities: {
       supportsBroker: true,
       supportsStdioShim: true,
@@ -550,10 +540,10 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       oauthDiscoveryProbing: false,
       mcpNeedsAuthRecovery: false,
     },
-    // Codex broker writer (Package 04). The hook produces a stdio-only
+    // Codex broker writer. The hook produces a stdio-only
     // [mcp_servers.<name>] entry that points at equip-broker-shim.
     //
-    // OAuth-bypass discipline (per spike Codex section + ENGINEERING_PLAN):
+    // OAuth-bypass discipline:
     //   - NEVER set bearer_token_env_var → Codex would otherwise spawn
     //     `codex mcp login` to mint that env var, defeating the whole
     //     point of brokering.
@@ -719,7 +709,7 @@ export function createManualPlatform(platformId: string): DetectedPlatform {
 }
 
 // ─── Broker capability accessors ────────────────────────────
-// Thin wrappers so broker code (Packages 02-05) doesn't have to reach
+// Thin wrappers so broker code doesn't have to reach
 // into optional nested fields with `?.` ladders. All return safe baseline
 // values (false / undefined) when capabilities aren't declared.
 

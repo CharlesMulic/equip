@@ -1,9 +1,9 @@
 "use strict";
 
-// Tests for Package 05 — Claude Code's writeBrokerConfig strategy hook.
+// Tests for Claude Code's writeBrokerConfig strategy hook.
 //
 // The hook produces a `mcpServers["<name>"]` JSON entry pointing at
-// equip-broker-shim. Bypass discipline (per spike Claude Code section):
+// equip-broker-shim. Bypass discipline:
 //   - command + args ONLY
 //   - NEVER include `auth` (would trigger /mcp authenticate)
 //   - NEVER include `url` or `headers` (broker is stdio-only)
@@ -15,17 +15,17 @@ const { getBrokerStrategy } = require("../dist/lib/platforms");
 
 function callHook(opts) {
   const strat = getBrokerStrategy("claude-code");
-  assert.ok(strat, "Claude Code must declare a brokerStrategy by Package 05");
+  assert.ok(strat, "Claude Code must declare a brokerStrategy");
   assert.ok(typeof strat.writeBrokerConfig === "function");
   return strat.writeBrokerConfig(opts.augmentName, {
     augmentName: opts.augmentName,
-    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip-app/bin/equip-broker-shim",
+    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip/bin/equip-broker-shim",
     shimExtraArgs: opts.shimExtraArgs,
     loopbackUrl: opts.loopbackUrl,
   });
 }
 
-describe("Package 05 — Claude Code writeBrokerConfig: shape", () => {
+describe("Claude Code writeBrokerConfig: shape", () => {
   it("returns a stdio-transport result", () => {
     const result = callHook({ augmentName: "notion-mcp" });
     assert.equal(result.transport, "stdio");
@@ -34,9 +34,9 @@ describe("Package 05 — Claude Code writeBrokerConfig: shape", () => {
   it("entry.command points at the injected shim binary path", () => {
     const result = callHook({
       augmentName: "notion-mcp",
-      shimBinaryPath: "/Users/test/Library/equip-app/bin/equip-broker-shim",
+      shimBinaryPath: "/Users/test/Library/equip/bin/equip-broker-shim",
     });
-    assert.equal(result.entry.command, "/Users/test/Library/equip-app/bin/equip-broker-shim");
+    assert.equal(result.entry.command, "/Users/test/Library/equip/bin/equip-broker-shim");
   });
 
   it("entry.args includes --augment <name>", () => {
@@ -58,7 +58,7 @@ describe("Package 05 — Claude Code writeBrokerConfig: shape", () => {
   it("entry.args[0] is --shim (single-binary subcommand dispatch)", () => {
     const result = callHook({ augmentName: "notion-mcp" });
     assert.equal(result.entry.args[0], "--shim",
-      "broker-production-wiring Pkg 01: --shim selects shim mode in equip-sidecar dispatcher");
+      "--shim selects shim mode in equip-sidecar dispatcher");
   });
 
   it("returns a human-readable note", () => {
@@ -68,7 +68,7 @@ describe("Package 05 — Claude Code writeBrokerConfig: shape", () => {
   });
 });
 
-describe("Package 05 — Claude Code writeBrokerConfig: OAuth-bypass contract", () => {
+describe("Claude Code writeBrokerConfig: OAuth-bypass contract", () => {
   // The auth field is the load-bearing absence here — its presence on
   // a managed entry causes Claude Code to launch /mcp authenticate.
 
@@ -102,7 +102,7 @@ describe("Package 05 — Claude Code writeBrokerConfig: OAuth-bypass contract", 
   });
 });
 
-describe("Package 05 — Claude Code writeBrokerConfig: augment-name allowlist (broker-production-wiring Pkg 01)", () => {
+describe("Claude Code writeBrokerConfig: augment-name allowlist", () => {
   // Argv-injection defense. The writer hook must refuse to embed an
   // unsafe name in shim argv. Mirrored at the shim's argv parser too.
 

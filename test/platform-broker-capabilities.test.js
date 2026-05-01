@@ -1,15 +1,15 @@
 "use strict";
 
-// Tests for Package 01 — broker capability flags + accessors on
+// Tests for broker capability flags + accessors on
 // PlatformDefinition. See ADR:
-// equip-app/planning/ADR-cross-platform-strategy-pattern.md
+// The concrete per-platform cases below are the public contract.
 //
 // Coverage:
 //   - getBrokerCapabilities returns safe defaults for unknown platforms
 //   - getBrokerCapabilities returns safe defaults for known platforms
 //     that haven't declared capabilities (additive guarantee)
 //   - The three broker-target platforms (Codex, Claude Code, Cursor)
-//     declare the flags the spike's per-platform table requires
+//     declare the flags their platform-specific behavior requires
 //   - platformSupportsBroker is the canonical gate
 //   - getBrokerStrategy returns undefined for platforms without overrides
 
@@ -23,7 +23,7 @@ const {
   PLATFORM_REGISTRY,
 } = require("../dist/lib/platforms");
 
-describe("Package 01 — broker capability accessors", () => {
+describe("broker capability accessors", () => {
   it("returns all-false baseline for unknown platforms (no throw)", () => {
     const caps = getBrokerCapabilities("does-not-exist");
     assert.equal(caps.supportsBroker, false);
@@ -47,7 +47,7 @@ describe("Package 01 — broker capability accessors", () => {
   });
 
   it("getBrokerStrategy returns undefined for platforms without overrides", () => {
-    // No platform in Package 01 declares a brokerStrategy; hooks land in
+    // Platforms without brokerStrategy hooks fall back to baseline behavior.
     // Packages 04 (Codex) and 05 (Claude Code, Cursor). Verify the
     // accessor honors the absent-baseline contract.
     assert.equal(getBrokerStrategy("vscode"), undefined);
@@ -55,15 +55,15 @@ describe("Package 01 — broker capability accessors", () => {
   });
 });
 
-describe("Package 01 — broker-target platforms (per spike table)", () => {
+describe("broker-target platforms", () => {
   // The three targets the broker MVP must demo against. Capability flags
-  // must match the spike's per-platform analysis exactly so broker code
+  // must match the platform capability analysis so broker code
   // (Packages 02-05) makes correct decisions.
 
   it("Codex declares broker-target capabilities", () => {
     const caps = getBrokerCapabilities("codex");
     assert.equal(caps.supportsBroker, true);
-    assert.equal(caps.supportsStdioShim, true, "stdio shim is the strongest path on Codex per spike");
+    assert.equal(caps.supportsStdioShim, true, "stdio shim is the strongest path on Codex");
     assert.equal(caps.supportsLoopbackHttp, true);
     assert.equal(caps.oauthDiscoveryProbing, false, "Codex's OAuth login is opt-in, not auto-probed");
     assert.equal(caps.mcpNeedsAuthRecovery, false);
@@ -100,7 +100,7 @@ describe("Package 01 — broker-target platforms (per spike table)", () => {
   });
 });
 
-describe("Package 01 — additive contract", () => {
+describe("broker capability additive contract", () => {
   it("PLATFORM_REGISTRY entries without brokerCapabilities still resolve", () => {
     // Iterate every registry entry; getBrokerCapabilities must return a
     // fully-populated baseline regardless of whether the entry declares

@@ -1,4 +1,4 @@
-// Test-only mock registry for v2 spike tests.
+// Test-only mock registry for storage tests.
 //
 // Stands in for the real registry HTTP API. Tests construct one with a
 // preloaded set of (name, version) → AugmentContent mappings; the install

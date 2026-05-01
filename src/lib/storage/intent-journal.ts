@@ -46,7 +46,7 @@ export function appendIntent(intent: Intent): void {
     throw new Error(
       `Intent too large for atomic append (>${4096} bytes). ` +
       `Type=${intent.type} name=${intent.name}. ` +
-      `Spike limitation: large content goes in content-store, not the intent.`,
+      `Large content goes in content-store, not the intent.`,
     );
   }
   fs.appendFileSync(getJournalPath(), line, { encoding: "utf-8", mode: posixMode(0o600) });
@@ -55,7 +55,7 @@ export function appendIntent(intent: Intent): void {
 /**
  * Read all intents from the journal. Returns them in append order (which
  * matches clock order for single-writer scenarios; multi-writer scenarios
- * may need clock-based sort but the spike doesn't exercise that).
+ * may need clock-based sort.
  *
  * Corrupt lines (parse failures, schema mismatches) are skipped with a
  * stderr warning. Defensive — a single bad line shouldn't block the rest.
@@ -90,9 +90,8 @@ export function readIntents(): Intent[] {
 }
 
 /**
- * Read all intents for a specific augment. Common materializer query —
- * fold the per-augment slice instead of the whole journal. For the spike
- * we just filter the full read; production might use an index.
+ * Read all intents for a specific augment. Common materializer query: fold
+ * the per-augment slice instead of the whole journal.
  */
 export function readIntentsFor(name: string): Intent[] {
   return readIntents().filter((i) => i.name === name);
@@ -113,8 +112,7 @@ let _seqInitialized = false;
 /**
  * Returns the next sequence number for this process. Initialized lazily by
  * scanning the existing journal for the maximum seq + 1, so that restarts
- * don't collide. Spike-grade — production needs persistent seq with
- * crash-safety.
+ * don't collide.
  */
 export function nextSeq(): number {
   if (!_seqInitialized) {
@@ -138,9 +136,9 @@ export function _resetSeqForTests(): void {
 }
 
 /**
- * Stable node identifier. Spike uses a placeholder; multi-device sync will
- * derive this from a per-machine UUID stored in user config.
+ * Stable node identifier. Multi-device sync can later derive this from a
+ * per-machine UUID stored in user config.
  */
 export function getNodeId(): string {
-  return "spike-node";
+  return "local-node";
 }

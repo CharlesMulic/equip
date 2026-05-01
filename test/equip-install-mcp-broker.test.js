@@ -1,4 +1,4 @@
-// Tests for Package 04 — Augment.installMcpBroker dispatch.
+// Tests for Augment.installMcpBroker dispatch.
 //
 // Coverage:
 //   - happy path: Codex install via broker writes the broker-shim entry
@@ -37,9 +37,9 @@ function mockCodexPlatform(overrides = {}) {
 
 function cleanup(p) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
 
-const SHIM_BIN = "/opt/equip-app/bin/equip-broker-shim";
+const SHIM_BIN = "/opt/equip/bin/equip-broker-shim";
 
-describe("Package 04 — Augment.installMcpBroker on Codex", () => {
+describe("Augment.installMcpBroker on Codex", () => {
   it("writes a broker-shim entry to the platform config", () => {
     const p = mockCodexPlatform();
     cleanup(p.configPath);
@@ -109,10 +109,10 @@ describe("Package 04 — Augment.installMcpBroker on Codex", () => {
   });
 });
 
-describe("Package 04 — installMcpBroker fall-through behavior", () => {
+describe("installMcpBroker fall-through behavior", () => {
   it("returns BROKER_NOT_SUPPORTED on a platform without broker capabilities", () => {
     // Pick a platform we know hasn't been opted into broker mode (gemini-cli
-    // doesn't declare brokerCapabilities as of Pkg 04).
+    // doesn't declare brokerCapabilities.
     const p = {
       platform: "gemini-cli",
       configPath: tmpPath("gemini-config") + ".json",
@@ -135,7 +135,7 @@ describe("Package 04 — installMcpBroker fall-through behavior", () => {
   });
 });
 
-describe("Package 04 — additive guarantee: direct-mode unchanged", () => {
+describe("installMcpBroker additive guarantee: direct-mode unchanged", () => {
   it("installMcp on Codex still produces the legacy direct-mode entry", () => {
     const p = mockCodexPlatform();
     cleanup(p.configPath);

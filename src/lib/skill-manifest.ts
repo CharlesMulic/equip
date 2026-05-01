@@ -12,7 +12,7 @@
 // Schema invariants (v1):
 // - manifestVersion === 1
 // - skill === parent dir name (Agent Skills spec invariant)
-// - owners[] is an array (single-element for v1; refcounted in package 03)
+// - owners[] is an array (single-element for v1; refcounted when shared roots are used)
 // - files[] preserves insertion order; rewrites must keep stable ordering
 // - Unknown top-level fields are tolerated and round-tripped by readManifest +
 //   writeManifest so future schema extensions (tombstone, loadout, set, ...)

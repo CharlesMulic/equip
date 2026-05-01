@@ -147,8 +147,8 @@ Equip handles authentication for augments that require it:
 
 - **API key** — prompt, `--api-key-file <path>` (recommended for CI and shell safety), or `--api-key <key>` when you accept shell-history/process-list exposure
 - **OAuth** — browser PKCE flow with automatic token refresh
-- **OAuth + key exchange** — browser flow → API key (for augments like Prior)
-- **OIDC delegated auth** — first-party brokered token exchange that writes a short-lived delegated access token such as `PRIOR_ACCESS_TOKEN`
+- **OAuth + key exchange** — browser flow to provider-issued API key
+- **OIDC delegated auth** — brokered token exchange that injects a short-lived delegated access token according to the augment definition
 
 Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-refreshed on every equip command.
 
@@ -169,12 +169,14 @@ Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-
 
 Equip tracks everything in `~/.equip/`:
 
-- **`augments/`** — Augment definitions: what each augment IS (synced from registry, locally editable)
-- **`installations.json`** — What equip installed and on which platforms
+- **`storage/intents.jsonl`** — Append-only install/update/uninstall journal
+- **`storage/content/`** — Immutable content blobs for registry definitions and local edits
+- **`cache/registries/`** — Registry-scoped HTTP cache for offline fallback
 - **`platforms.json`** — Detected platforms with capabilities and enabled/disabled preferences
 - **`platforms/`** — Per-platform scan results (all MCP servers, managed and unmanaged)
 - **`credentials/`** — Stored auth credentials per augment
 - **`snapshots/`** — Platform config snapshots for rollback (initial state captured automatically)
+- **`equip.json`** — Preferences such as telemetry and local config metadata
 
 State is reconciled from disk after every install/uninstall — equip scans actual platform config files rather than relying solely on its records. Initial snapshots are captured before any modifications, guaranteeing you can always restore to your pre-equip state.
 
@@ -189,10 +191,10 @@ State is reconciled from disk after every install/uninstall — equip scans actu
 
 ## Telemetry
 
-Equip sends anonymous install metrics (augment name, platform, OS, equip version) to help improve equip. **No credentials, file paths, or personal data are included.**
+Equip sends privacy-preserving install metrics (augment name, platform, OS, architecture, Node version, equip version, and a generated install ID) to help improve equip. **No credentials, file paths, or user-authored content are included.**
 
 Telemetry is on by default. To disable, edit `~/.equip/equip.json` and set `preferences.telemetry` to `false`.
 
 ## License
 
-MIT — Charles Mulic / [CG3, Inc.](https://cg3.io)
+FSL-1.1-ALv2 — [CG3, Inc.](https://cg3.io)

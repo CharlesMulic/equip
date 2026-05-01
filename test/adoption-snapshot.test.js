@@ -1,6 +1,6 @@
 "use strict";
 
-// Tests for broker-production-wiring Pkg 03 — adoption snapshot.
+// Tests for broker adoption snapshots.
 //
 // On adoption-modal accept, the bridge calls writeAdoptionSnapshot to
 // capture (1) the existing entry being replaced, redacted, and (2) on
@@ -29,7 +29,7 @@ afterEach(() => {
   try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 
-describe("Pkg-03 — redactSecrets()", () => {
+describe("redactSecrets()", () => {
   it("redacts top-level Authorization header value", () => {
     const input = { headers: { Authorization: "Bearer ask_secret_xyz" }, url: "https://api.example.com" };
     const out = redactSecrets(input);
@@ -71,7 +71,7 @@ describe("Pkg-03 — redactSecrets()", () => {
   });
 });
 
-describe("Pkg-03 — writeAdoptionSnapshot()", () => {
+describe("writeAdoptionSnapshot()", () => {
   it("writes per-entry snapshot with bearer redaction", () => {
     const result = writeAdoptionSnapshot({
       augmentName: "prior",

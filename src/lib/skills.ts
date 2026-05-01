@@ -90,11 +90,10 @@ function declaredSkillFilesAreCurrent(skillDir: string, files: SkillFile[]): boo
 /**
  * Options accepted by installSkill / Augment.installSkill.
  *
- * Identity / provenance fields populate the per-skill manifest written by
- * Package 01 of the equip-skill-ownership initiative. They're optional — local
- * installs and unit tests pass nothing and get sensible defaults — but the
- * registry-install path should populate them so the manifest reflects accurate
- * ownership.
+ * Identity / provenance fields populate the per-skill manifest. They're
+ * optional — local installs and unit tests pass nothing and get sensible
+ * defaults — but the registry-install path should populate them so the
+ * manifest reflects accurate ownership.
  */
 export interface InstallSkillOptions {
   dryRun?: boolean;
@@ -115,8 +114,8 @@ export interface InstallSkillOptions {
 
 /**
  * Reasons installSkill can refuse a write. Returned via ArtifactResult.errorCode
- * so callers can branch on the conflict type for tailored messaging or for
- * partial-augment-install handling (see ENG-0011).
+ * so callers can branch on the conflict type for tailored messaging or
+ * partial augment install handling.
  */
 export const SKILL_COLLISION_OTHER_AUGMENT = "SKILL_COLLISION_OTHER_AUGMENT" as const;
 export const SKILL_COLLISION_USER_AUTHORED = "SKILL_COLLISION_USER_AUTHORED" as const;
@@ -218,7 +217,7 @@ export function installSkill(
   // Skip the rewrite when files were skipped AND the existing manifest already
   // names us correctly with matching file count AND no shared-root owners need to
   // be added. Otherwise write a fresh manifest so it tracks current ownership +
-  // content. Under the shared-root case (Package 03), preserve other-platform
+      // content. Under the shared-root case, preserve other-platform
   // owners on rewrite so their claims survive our re-install.
   if (!options.dryRun) {
     // The existing-manifest-already-current shortcut: skip the manifest write
@@ -299,8 +298,7 @@ interface CollisionDecisionInput {
 
 /**
  * Returns an ArtifactResult representing a refusal, or null if install may proceed.
- * Implements the decision tree from
- * `operations/initiatives/shipped/equip-skill-ownership/work/01-manifest-schema-and-write.md`.
+ * Implements the manifest/journal ownership decision tree.
  */
 function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
   const { platform, toolName, skillName, existingManifest, options, logger } = input;
@@ -311,7 +309,7 @@ function decideCollision(input: CollisionDecisionInput): ArtifactResult | null {
     findOwner(existingManifest, toolName, platform) !== null;
   if (weOwnByManifest) return null;
 
-  // Shared-root case (Package 03): the manifest names US as owner for a DIFFERENT
+  // Shared-root case: the manifest names US as owner for a DIFFERENT
   // platform. This happens when an augment installs to multiple platforms whose
   // skillsPath() resolves to the same directory (e.g., codex + windsurf + vscode
   // all share `~/.agents/skills/`). The dir is ours; we just haven't registered
@@ -516,7 +514,7 @@ export interface UninstallSkillOptions {
  * - Manifest present + names a different augment → refuse and log a warning.
  *   We do not touch what we don't own.
  * - Manifest absent → log a warning and fall back to recursive delete (today's
- *   pre-Package-02 behavior). User-added files in this dir are lost — same
+ *   legacy behavior). User-added files in this dir are lost — same
  *   as before this package shipped, no regression.
  *
  * Legacy `{skillsPath}/{toolName}/{skillName}/` wrapper subtrees from older
@@ -554,7 +552,7 @@ export function uninstallSkill(
 
   if (skillDirExists) {
     // Read the manifest. Corrupt → treat as absent and fall through to
-    // legacy recursive delete (same UX as pre-Package-02; non-regression).
+    // legacy recursive delete (same UX as older releases; non-regression).
     let manifest;
     try {
       manifest = readManifest(skillDir);
@@ -575,7 +573,7 @@ export function uninstallSkill(
         });
         // Still attempt legacy cleanup below.
       } else {
-        // Refcount check (Package 03): if other (augment, platform) owners remain,
+        // Refcount check: if other (augment, platform) owners remain,
         // this is a shared-root install. Remove only OUR owner entry; leave files
         // and the dir intact for the surviving owners.
         const otherOwners = manifest.owners.filter(
@@ -602,7 +600,7 @@ export function uninstallSkill(
           return result;
         }
 
-        // Last-owner removal: fall through to Package 02's full cleanup.
+        // Last-owner removal: fall through to full cleanup.
         result.viaManifest = true;
         const { removed, preservedFiles, foreignFiles } = unlinkOwnedFiles(skillDir, manifest.files, dryRun);
         result.preservedFiles = preservedFiles;

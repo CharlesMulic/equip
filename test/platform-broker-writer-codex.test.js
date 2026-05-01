@@ -1,9 +1,9 @@
 "use strict";
 
-// Tests for Package 04 — Codex's writeBrokerConfig strategy hook.
+// Tests for Codex's writeBrokerConfig strategy hook.
 //
 // The hook produces a [mcp_servers.<name>] TOML entry that points at
-// equip-broker-shim. Bypass discipline (per spike Codex section):
+// equip-broker-shim. Bypass discipline:
 //   - command + args ONLY
 //   - NEVER bearer_token_env_var, scopes, oauth_resource (would trigger
 //     `codex mcp login` or OAuth discovery)
@@ -18,17 +18,17 @@ const { getBrokerStrategy } = require("../dist/lib/platforms");
 
 function callHook(opts) {
   const strat = getBrokerStrategy("codex");
-  assert.ok(strat, "Codex must declare a brokerStrategy by Package 04");
+  assert.ok(strat, "Codex must declare a brokerStrategy");
   assert.ok(typeof strat.writeBrokerConfig === "function", "writeBrokerConfig must be defined");
   return strat.writeBrokerConfig(opts.augmentName, {
     augmentName: opts.augmentName,
-    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip-app/bin/equip-broker-shim",
+    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip/bin/equip-broker-shim",
     shimExtraArgs: opts.shimExtraArgs,
     loopbackUrl: opts.loopbackUrl,
   });
 }
 
-describe("Package 04 — Codex writeBrokerConfig: shape", () => {
+describe("Codex writeBrokerConfig: shape", () => {
   it("returns a stdio-transport result", () => {
     const result = callHook({ augmentName: "notion-mcp" });
     assert.equal(result.transport, "stdio");
@@ -37,9 +37,9 @@ describe("Package 04 — Codex writeBrokerConfig: shape", () => {
   it("entry.command points at the injected shim binary path", () => {
     const result = callHook({
       augmentName: "notion-mcp",
-      shimBinaryPath: "/Users/test/Library/equip-app/bin/equip-broker-shim",
+      shimBinaryPath: "/Users/test/Library/equip/bin/equip-broker-shim",
     });
-    assert.equal(result.entry.command, "/Users/test/Library/equip-app/bin/equip-broker-shim");
+    assert.equal(result.entry.command, "/Users/test/Library/equip/bin/equip-broker-shim");
   });
 
   it("entry.args includes --augment <name>", () => {
@@ -63,7 +63,7 @@ describe("Package 04 — Codex writeBrokerConfig: shape", () => {
   it("entry.args[0] is --shim (single-binary subcommand dispatch)", () => {
     const result = callHook({ augmentName: "notion-mcp" });
     assert.equal(result.entry.args[0], "--shim",
-      "broker-production-wiring Pkg 01: --shim selects shim mode in equip-sidecar dispatcher");
+      "--shim selects shim mode in equip-sidecar dispatcher");
   });
 
   it("returns a human-readable note for `equip doctor` output", () => {
@@ -73,7 +73,7 @@ describe("Package 04 — Codex writeBrokerConfig: shape", () => {
   });
 });
 
-describe("Package 04 — Codex writeBrokerConfig: OAuth-bypass contract", () => {
+describe("Codex writeBrokerConfig: OAuth-bypass contract", () => {
   // These are the load-bearing absences. If any of them appear in entry,
   // Codex will spawn `codex mcp login` or hit OAuth discovery on the
   // upstream — both defeat the broker.
@@ -124,7 +124,7 @@ describe("Package 04 — Codex writeBrokerConfig: OAuth-bypass contract", () => 
   });
 });
 
-describe("Package 04 — Codex writeBrokerConfig: round-trip via TOML builder", () => {
+describe("Codex writeBrokerConfig: round-trip via TOML builder", () => {
   // Pin that the hook output composes cleanly with mcp.ts buildTomlEntry —
   // the entry will be merged into a real Codex config.toml at install time.
 

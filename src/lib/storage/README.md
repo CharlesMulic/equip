@@ -18,7 +18,7 @@ The single canonical storage layer for equip-lib. All reads + writes for augment
 
 ## Why this design
 
-Designed in the [`equip-storage-redesign`](../../../../operations/initiatives/equip-storage-redesign/) initiative, validated by a 4-agent first-principles spike that converged on intent-journal canonical with content-addressed blobs as the right axis (mutability) for decomposing storage. See the initiative's `BRIEF.md` + `work/00-architectural-review.md` for the full reasoning trail.
+The storage layer treats mutability as the key boundary: the journal is append-only and canonical, while registry/content payloads are immutable blobs referenced by hash. This keeps state transitions auditable without coupling platform writers to the raw registry shape.
 
 **Bug classes eliminated by construction:**
 - Stale cache (journal IS the truth; no derived state to be stale)
@@ -71,4 +71,4 @@ const all = JsonStore.listResolved();
 - Real registry HTTP fetching (lives in `../registry.ts`; this module accepts pre-fetched content)
 - Platform-specific config writers (live in `../platforms.ts` + per-platform modules; this module produces `ResolvedAugment`, the install path translates)
 - HTTP cache (the registry layer uses fetch's `Cache-Control` + `ETag` directly)
-- Migration from prior on-disk formats (lives in `migrate-from-legacy.ts` — same dir, separate concern, added in Phase A's A2 step)
+- Migration from previous on-disk formats (lives in `migrate-from-legacy.ts` — same dir, separate concern)

@@ -15,11 +15,11 @@ All notable changes to Equip are documented here.
 
 ### Added
 
-- **Per-skill ownership manifest at `{skillDir}/.equip-meta.json`** records the installing augment, install context, and per-file SHA-256 hashes. The manifest is hygiene/correctness, NOT a security boundary — `~/.equip/installations.json` remains authoritative. See `equip-app/planning/AUGMENT_AUTHORING_ARCHITECTURE.md` §21 for the design ADR.
+- **Per-skill ownership manifest at `{skillDir}/.equip-meta.json`** records the installing augment, install context, and per-file SHA-256 hashes. The manifest is hygiene/correctness, NOT a security boundary — Equip's local journal remains authoritative.
 - **Manifest-driven uninstall** preserves user-modified files. For each file in the manifest, current SHA-256 is compared to the install-time hash; matching files are deleted, drifted (user-modified) and user-added foreign files are preserved. If anything survives, a tombstone manifest is written so the dir is recognizable as "Equip once owned this."
 - **Refcounted shared-root semantics** for `~/.agents/skills/` (read by Codex, Windsurf, VS Code; partially by Cursor). An augment installing the same skill across multiple platforms appends new owner entries to `manifest.owners[]` instead of stomping. Unequip removes only the requesting (augment, platform) tuple's owner; files survive until the last owner unequips. Closes the latent "unequip Cursor wipes a skill Codex still uses" bug.
 - **mtime-keyed checksum cache at `~/.equip/checksum-cache.json`** keyed by `(mtimeMs, size)`. Verify operations hit the fast path on cache match; install seeds the cache from freshly-computed hashes; uninstall prunes pruned entries. Self-healing: drifted files get fresh cache entries on the next verify.
-- **Batched `installations.json` writer** via `withInstallationsBatch(fn)`. Collapses N `trackInstallation`/`trackUninstallation` calls in one logical operation into a single disk write. `scanAllPlatforms`, `commands/install.ts`, and `cli/unequip.ts` are wired to use it.
+- **Batched state writes** collapse multiple install/uninstall bookkeeping updates in one logical operation into a single disk write.
 - **`--takeover` and `--adopt` CLI flags** for `equip <augment>` to override install-time skill collision refusals.
 - **CLI help text now lists `--api-key-file <path>`** (the flag itself was already implemented). The README, CLI reference, and augment-author guide now surface and recommend it for CI and shell-safe usage.
 - **New error codes** on `ArtifactResult.errorCode` for skill collision branches: `SKILL_COLLISION_OTHER_AUGMENT`, `SKILL_COLLISION_USER_AUTHORED`, `SKILL_COLLISION_FORGED_MANIFEST`. CLI surfaces appropriate flag suggestions per error.

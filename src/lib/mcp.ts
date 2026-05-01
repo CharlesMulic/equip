@@ -375,9 +375,8 @@ function installMcpJsonInternal(platform: DetectedPlatform, serverName: string, 
   if (!config[rootKey]) config[rootKey] = {};
   const currentRoot = config[rootKey] as Record<string, unknown>;
   const hasExistingEntry = !!currentRoot[serverName];
-  // forceReplace bypasses the unmanaged-entry conflict guard. Only set
-  // by installMcpForReplaceAdopt (broker-production-wiring Pkg 03 — the
-  // explicit user-consented adoption path).
+  // forceReplace bypasses the unmanaged-entry conflict guard. Only set by
+  // installMcpForReplaceAdopt for the explicit user-consented adoption path.
   if (hasExistingEntry && !forceReplace && !hasManagedInstallOnPlatform(serverName, platformId)) {
     return conflictResult(configPath, serverName, platformId, "json", logger);
   }

@@ -4,7 +4,7 @@
 //
 // Sets `process.env.EQUIP_HOME` to a fresh temp dir at module load time so
 // every subsequent `require()` of equip lib code consults the temp seam, not
-// the user's real ~/.equip. See ENG-0031 in operations/ENGINEERING_LEDGER.md.
+// the user's real ~/.equip.
 //
 // Idempotent — if EQUIP_HOME is already set (e.g., by a parent harness or by
 // a prior `_isolation` require), this is a no-op.
@@ -21,7 +21,7 @@ if (!process.env.EQUIP_HOME) {
   fs.mkdirSync(process.env.EQUIP_HOME, { recursive: true });
 }
 
-// ─── Per-test isolation helper (prepass for equip-dual-write-retirement) ──
+// ─── Per-test isolation helper ──
 //
 // Tests that need a FRESH ~/.equip per test (not just one for the whole suite)
 // use `setupEquipHome()` in `beforeEach` / `afterEach` to mint + clean up a
@@ -93,9 +93,9 @@ function setupEquipHome(label = "equip") {
 // or write into platform-side dirs like ~/.claude/skills/. These need
 // `os.homedir()` itself to point at the temp dir — not just EQUIP_HOME.
 //
-// Pre-ENG-0031 tests did `os.homedir = () => tempHome` to fake the homedir.
-// That's process-global, survives a thrown test, and was the source of a
-// 2026-04-26 incident that wiped a user's real ~/.equip/installations.json.
+// Older tests did `os.homedir = () => tempHome` to fake the homedir.
+// That's process-global, survives a thrown test, and can leak writes into a
+// user's real home directory.
 //
 // This helper redirects via env vars instead. Node's `os.homedir()` resolves
 // to `$USERPROFILE` on Windows and `$HOME` on Unix at every call, so setting

@@ -147,7 +147,7 @@ export type RegistryValidationResult =
 /**
  * Fetch an augment definition. Resolution order:
  * 1. Registry API (with timeout)
- * 2. Local cache (~/.equip/cache/<name>.json)
+ * 2. Registry-scoped local cache (~/.equip/cache/registries/<registry-key>/<name>.json)
  *
  * Returns null if the augment is not found.
  */
@@ -247,21 +247,16 @@ async function fetchRegistryDefFromApi(
       logger.info("Augment definition fetched from API", { name, installMode: def.installMode });
 
       // Compute content hash for parity diagnostics. The check is logged
-      // but does NOT reject — there's a known protocol gap between the
-      // backend's `hashAlgorithm="sha256-v1"` responses and this client's
-      // `computeContentHash` that has been silently rejecting every fetch
-      // and falling back to cache. That broke the mcp-resource-server
-      // cutover because stale cache pinned legacy auth shape (oauth_to_api_key
-      // with `client_id=prior-cli`) even after the live registry started
-      // serving the new oidc shape. Until the v1/v2 dispatch issue is
-      // reconciled (ENG-0071), trust HTTPS+CDN for transport integrity
+      // but does not reject because older registry and client hash versions
+      // can disagree; rejecting would leave users on stale cache even when
+      // the fetched definition is usable. Trust HTTPS/CDN transport integrity
       // and surface the divergence as a warning. `EQUIP_TEST_SKIP_HASH_VERIFY=1`
       // suppresses the warning entirely for integration tests.
       if (def.contentHash && process.env.EQUIP_TEST_SKIP_HASH_VERIFY !== "1") {
         const { computeContentHash, extractManifest } = await import("./content-hash.js");
         const computed = computeContentHash(extractManifest(def));
         if (computed !== def.contentHash) {
-          logger.warn("Registry content hash mismatch (non-blocking; ENG-0071 protocol gap)", {
+          logger.warn("Registry content hash mismatch (non-blocking)", {
             name, expected: def.contentHash, computed, version: def.version,
           });
         }
@@ -334,11 +329,8 @@ export function registryDefToConfig(def: RegistryDef, options?: { logger?: Equip
   }
 
   if (def.stdioCommand) {
-    // For CG3 OIDC delegated-auth augments, default the env var name to the
-    // platform-standard `PRIOR_ACCESS_TOKEN`. Publishers can override by
-    // setting envKey explicitly. Convention is documented in
-    // demos/FULLSTACK_TESTING.md and demos/SECURITY_MCP_ENV_INJECTION.md;
-    // the demos themselves read from this env var name.
+    // Preserve the historical default for OIDC stdio augments that omit
+    // envKey. Registry authors should set envKey explicitly for new augments.
     const defaultEnvKeyForAuth = def.auth?.type === "oidc"
       ? "PRIOR_ACCESS_TOKEN"
       : "";

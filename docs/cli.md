@@ -31,11 +31,11 @@ equip prior --verbose              # Show detailed logging
 equip prior --non-interactive      # No prompts (fail if info missing)
 ```
 
-Equip fetches the augment definition from the registry API (`api.cg3.io/equip`), syncs it to a local augment definition (`~/.equip/augments/<name>.json`), and installs MCP config, rules, hooks, and skills across all detected enabled platforms.
+Equip fetches the augment definition from the registry API (`api.cg3.io/equip`), records the install in local state, and installs MCP config, rules, and skills across all detected enabled platforms.
 
 Disabled platforms are automatically skipped.
 
-If the API is unreachable, equip falls back to a locally cached definition (`~/.equip/cache/`).
+If the API is unreachable, equip falls back to a registry-scoped local cache under `~/.equip/cache/registries/`.
 
 ### `equip` (no arguments)
 
@@ -111,9 +111,9 @@ equip uninstall prior
 unequip prior                      # Alias — same behavior
 ```
 
-Removes MCP config entries, rules marker blocks, hook scripts, and skill files from all enabled platforms. Disabled platforms are left untouched. Does not remove stored credentials (use `equip reauth` to clear those).
+Removes MCP config entries, rules marker blocks, and skill files from all enabled platforms. Disabled platforms are left untouched. Does not remove stored credentials (use `equip reauth` to clear those).
 
-When all platforms are removed, the augment definition (`~/.equip/augments/<name>.json`) is also cleaned up.
+The uninstall is recorded in Equip's local journal so status, doctor, and future installs see the current resolved state.
 
 ### `equip ./script.js`
 
@@ -209,13 +209,13 @@ Equip manages state across multiple files in `~/.equip/`:
 
 | File | Purpose |
 |------|---------|
-| `augments/<name>.json` | Augment definitions — what each augment IS (server URL, rules, skills, hooks). Synced from registry on install, editable locally. |
-| `installations.json` | What equip has installed and on which platforms. Used by status, doctor, uninstall. |
+| `storage/intents.jsonl` | Append-only install/update/uninstall journal. |
+| `storage/content/<hash>.json` | Immutable content blobs referenced by the journal. |
 | `platforms.json` | Detected platform metadata and user preferences (enabled/disabled). |
 | `platforms/<id>.json` | Per-platform scan results — all MCP servers configured, managed vs unmanaged. |
 | `equip.json` | Equip version, timestamps, preferences. |
 | `credentials/<name>.json` | Stored auth credentials per augment. |
-| `cache/<name>.json` | Cached registry API responses (fallback when offline). |
+| `cache/registries/<registry-key>/<name>.json` | Cached registry API responses (fallback when offline). |
 | `snapshots/<platform>/<id>.json` | Config snapshots — captured platform state for rollback. |
 
 State is reconciled from disk after every install/uninstall — equip scans what's actually in platform config files rather than relying solely on its records.
@@ -252,6 +252,6 @@ Equip uses several strategies to prevent data loss and recover from bad state:
 
 ## Cache
 
-Augment definitions fetched from the API are cached at `~/.equip/cache/<augment>.json`. The cache is used as a fallback when the API is unreachable.
+Augment definitions fetched from the API are cached under `~/.equip/cache/registries/<registry-key>/<augment>.json`. The registry key keeps local, staging, and production registries from sharing cache entries.
 
 `equip update <augment>` clears the cache before re-fetching to ensure the latest definition.

@@ -171,9 +171,8 @@ export function hasContent(hash: ContentHash): boolean {
 }
 
 /**
- * List all content hashes currently stored. Used by GC sweeper (out-of-scope
- * for the spike, but exposed so the test harness can verify that "no orphan
- * blobs after operation X" assertions are checkable).
+ * List all content hashes currently stored. Exposed for cleanup and tests that
+ * verify orphaned blobs can be detected.
  */
 export function listContentHashes(): ContentHash[] {
   ensureContentDir();

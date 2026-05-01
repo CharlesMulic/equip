@@ -1,16 +1,10 @@
 // OAuthDcrProvider — third-party MCP servers with their own authorization
-// server (Path C in the BRIEF). The augment-def declares its publisher's
-// AS metadata; broker handles Dynamic Client Registration (RFC 7591),
-// auth-code + PKCE browser flow at the publisher's AS, and refresh.
+// server. The augment definition declares its publisher's authorization-server
+// metadata; broker runtime support will handle Dynamic Client Registration
+// (RFC 7591), auth-code + PKCE browser flow, and refresh.
 //
-// **Schema-only stub for mcp-resource-server-cutover Pkg 03.**
-//
-// The runtime implementation is deferred until a real third-party-with-own-
-// AS publisher integrates (ENG-0019 / first-publisher onboarding). The
-// schema shape (`auth.type === "oauth-dcr"` is accepted by the
-// augment-def parser) lands now so the database migration at Pkg 05 can
-// rewrite legacy `auth_to_api_key` rows into the uniform shape without
-// per-row schema mismatches.
+// Schema-only stub: `auth.type === "oauth-dcr"` is accepted by the parser, but
+// acquire/refresh return not_implemented until runtime support ships.
 //
 // Calling `acquire()` or `refresh()` in production today returns ok:false
 // with code "not_implemented" — the broker daemon is expected to surface
@@ -24,9 +18,8 @@
 //   3. Token storage with refresh-token rotation
 //   4. Refresh path using stored refresh_token at the same AS
 //
-// All gated by tri-binding on the backend (audience-host ∈ publisher's
-// verified_domains; pub:<slug>/<scope> slug must match the resolved
-// publisher).
+// Runtime implementations should bind the requested audience, publisher slug,
+// and granted scopes before accepting a delegated credential.
 
 import type {
   Provider,
@@ -53,7 +46,7 @@ export class OAuthDcrProvider implements Provider {
     return {
       ok: false,
       error:
-        "oauth-dcr runtime not implemented — schema accepted but acquisition deferred to first third-party-with-own-AS publisher integration (ENG-0019).",
+        "oauth-dcr runtime not implemented — schema accepted but acquisition is unavailable in this package version.",
       code: "not_implemented",
     };
   }
@@ -62,7 +55,7 @@ export class OAuthDcrProvider implements Provider {
     return {
       ok: false,
       error:
-        "oauth-dcr runtime not implemented — schema accepted but refresh deferred to first third-party-with-own-AS publisher integration (ENG-0019).",
+        "oauth-dcr runtime not implemented — schema accepted but refresh is unavailable in this package version.",
       code: "not_implemented",
     };
   }

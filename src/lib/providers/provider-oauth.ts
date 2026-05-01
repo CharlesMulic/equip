@@ -303,8 +303,7 @@ function defaultOpenBrowser(url: string): (() => void) | void {
       // `windowsVerbatimArguments` and explicit double-quoting around the
       // URL, OAuth URLs (which carry `&` between params) truncate at the
       // first `&` — the browser opens to a partial URL and the AS rejects
-      // it with `client_id and redirect_uri required`. Mirrors the same
-      // fix in equip-app/sidecar/bridge.ts:createAppModeBrowserOpener.
+      // it with `client_id and redirect_uri required`.
       const escapedUrl = url.replace(/"/g, '""');
       const child = childProcess.spawn(
         "cmd.exe",

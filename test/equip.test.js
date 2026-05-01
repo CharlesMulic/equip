@@ -98,8 +98,7 @@ function withTempHome(fn) {
 
   // Set USERPROFILE for code that still consults os.homedir() directly (e.g.,
   // platform-config paths owned by the platforms themselves). Set EQUIP_HOME
-  // explicitly so equip's own state resolves through getEquipHome() — the
-  // single seam introduced for ENG-0031.
+  // explicitly so equip's own state resolves through getEquipHome().
   process.env.HOME = tempHome;
   process.env.USERPROFILE = tempHome;
   process.env.EQUIP_HOME = tempEquip;
@@ -2602,10 +2601,7 @@ describe("config migration", () => {
 
   it("handles migration of multiple tools at once", () => {
     // Wrapped in withTempHome so this test no longer touches the user's real
-    // ~/.equip/installations.json. Pre-ENG-0031, this test wrote to live state
-    // and on test failures left tool-a/tool-b records lingering OR raced with
-    // other tests, contributing to the 2026-04-26 incident where a real user's
-    // cg3-internal-skills install record got wiped during a test run.
+    // platform config or Equip state.
     withTempHome(() => {
       const def = getPlatform("cursor");
       const configPath = def.configPath();
@@ -2644,16 +2640,13 @@ describe("config migration", () => {
 });
 
 // ─── apply (commands/install): the refresh+apply pipeline's downstream half ──
-// Extracted from runInstall on 2026-04-26 to support the propagation triggers
-// in operations/initiatives/equip-augment-update-propagation/.
 //
 // Behavior preservation is proven by the rest of this suite — every install-
 // path test routes through runInstall, which now delegates to apply. If apply
 // were broken, the install/skill/rules/MCP tests above would fail.
 //
 // This block adds a thin signature/integration smoke specifically for callers
-// that import apply directly (Package 02 registry refresh, Package 03
-// authoring save, Package 04 CLI command, Package 05 platform-enable backfill).
+// that import apply directly.
 describe("apply (commands/install)", () => {
   const { apply: applyFn } = require("../dist/lib/commands/install");
 
@@ -2668,9 +2661,8 @@ describe("apply (commands/install)", () => {
   });
 });
 
-// ─── writeAugmentDefAndApply (commands/install): Package 03 helper ────────────
-// The explicit "user save" boundary that the equip-app authoring UI calls when
-// committing edits — writes the def AND propagates to currently-installed
+// ─── writeAugmentDefAndApply (commands/install) ────────────
+// The explicit "user save" boundary writes the def AND propagates to currently-installed
 // platforms in one operation. Internal-only writes (migrations, normalizations,
 // draft-state mutations) still use plain `writeAugmentDef` and skip apply.
 describe("writeAugmentDefAndApply (commands/install)", () => {
@@ -2706,9 +2698,7 @@ describe("writeAugmentDefAndApply (commands/install)", () => {
   // pre-2026-04-27, apply() unconditionally called equip.installMcp(...) which
   // throws "serverUrl is required for MCP installation" when the augment has
   // no MCP server. The bridge.ts install paths gate on hasMcpServer; apply()
-  // had drifted from that gate when extracted (Package 02 of equip-augment-
-  // update-propagation). Reported by user 2026-04-27 saving the commit-and-
-  // release skill (rules+skills, no MCP) on an equipped platform.
+  // had drifted from that gate when extracted.
   it("does not call installMcp when augment is rules-only", () => {
     withTempHome(() => {
       trackInstallation("rules-only-augment", {
@@ -2886,22 +2876,18 @@ describe("writeAugmentDefAndApply (commands/install)", () => {
 // update-propagation initiative shipped writeAugmentDefAndApply as the
 // user-save boundary for ALL augment edits (including local), every save
 // of a local augment overwrote installations.json's source field to
-// "registry" — corrupting local state and tricking equip-app into
-// rendering the augment as a registry-published, uneditable item.
-//
-// Reported by user 2026-04-27 ("CG3 Internal Skills somehow got published")
-// — confirmed local-state corruption only; public registry returned 404,
-// nothing was actually exposed. Root cause: reconcile.ts:178 hardcode.
+// "registry" — corrupting local state and making the augment look like a
+// registry-published, uneditable item.
 //
 // These tests lock the property: trackInstallation source must reflect
 // the AugmentDef.source field, not be hardcoded.
 
-// Phase A migration note: this regression test was specific to a hardcode in
+// Storage migration note: this regression test was specific to a hardcode in
 // Source-preservation regression coverage moved to
-// test/storage/spike-install-flow.test.js (assertions on
+// test/storage/install-flow.test.js (assertions on
 // contentSource.kind through the journal install path). The legacy
 // installations.ts module + writeAugmentDefAndApply's source-mutating
-// behavior were deleted in storage redesign Phase A4 — this block
+// behavior were deleted during storage redesign — this block
 // referenced those deleted modules and was kept skipped as a historical
 // marker, but the require() at module load would have crashed if
 // un-skipped. Removed 2026-04-30.

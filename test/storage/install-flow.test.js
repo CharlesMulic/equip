@@ -5,7 +5,7 @@
 // materializer produces correct ResolvedAugment view → platform writer
 // produces fingerprinted output.
 //
-// Acceptance criteria for the spike: this test passes cleanly with no
+// Acceptance criteria for storage install flow: this test passes cleanly with no
 // rough edges in the v2 module surface area.
 
 "use strict";

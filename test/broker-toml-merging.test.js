@@ -1,4 +1,4 @@
-// Tests for Package 04 — installMcpBroker preserves pre-existing
+// Tests that installMcpBroker preserves pre-existing
 // [mcp_servers.*] TOML entries when merging into Codex's config.toml.
 //
 // Product strategist's "single most embarrassing failure mode" — a user has
@@ -39,7 +39,7 @@ function mockCodexPlatform(configPath) {
 
 function cleanup(p) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
 
-const SHIM_BIN = "/opt/equip-app/bin/equip-broker-shim";
+const SHIM_BIN = "/opt/equip/bin/equip-broker-shim";
 
 const PRE_EXISTING_TOML = `[mcp_servers.user-github]
 command = "npx"
@@ -55,7 +55,7 @@ url = "http://localhost:5499/mcp"
 X-User-Api-Key = "user-secret-placeholder"
 `;
 
-describe("Package 04 — installMcpBroker preserves pre-existing TOML entries", () => {
+describe("installMcpBroker preserves pre-existing TOML entries", () => {
   it("user-managed entries survive byte-for-byte after broker install", () => {
     const configPath = tmpPath("codex-merge") + ".toml";
     fs.writeFileSync(configPath, PRE_EXISTING_TOML);
@@ -112,10 +112,10 @@ describe("Package 04 — installMcpBroker preserves pre-existing TOML entries", 
         platforms: ["codex"],
       });
 
-      // Second install with different shim path (simulating an equip-app upgrade
+      // Second install with different shim path (simulating an Equip upgrade
       // that moved the binary). Now Equip recognizes its own managed entry and
       // overwrites without conflict.
-      const newShim = "/Library/equip-app/bin/equip-broker-shim";
+      const newShim = "/Library/equip/bin/equip-broker-shim";
       const r2 = augment.installMcpBroker(p, { shimBinaryPath: newShim });
       assert.equal(r2.success, true, `reinstall must succeed, got: ${r2.error}`);
 

@@ -114,18 +114,16 @@ class Augment {
   }
 
   /**
-   * Broker-mode install (Package 04 of equip-mcp-login-continuity-gate).
+   * Broker-mode install.
    *
    * Writes a platform config entry that points at `equip-broker-shim` so the
    * platform spawns the shim as its MCP server. The shim talks IPC to the
-   * broker daemon for credentials and proxies the upstream MCP traffic with
-   * fresh tokens injected per-request. The platform never sees an OAuth-shaped
-   * config — no `bearer_token_env_var`, no `auth`, no `oauth_resource`.
+   * broker daemon for credentials and proxies upstream MCP traffic with fresh
+   * tokens injected per request. The platform never sees an OAuth-shaped config.
    *
-   * The hook output for the platform is provided by
-   * `PlatformDefinition.brokerStrategy.writeBrokerConfig` (Codex first, then
-   * Claude Code + Cursor in Pkg 05). The caller injects `shimBinaryPath`
-   * at call time — equip lib does NOT know the path.
+   * The platform-specific output is provided by
+   * `PlatformDefinition.brokerStrategy.writeBrokerConfig`. The caller injects
+   * `shimBinaryPath` at call time; equip lib does not know the path.
    *
    * Returns a `mcp` ArtifactResult with `errorCode: "BROKER_NOT_SUPPORTED"`
    * when the platform doesn't declare broker support; the caller should fall
@@ -245,10 +243,9 @@ class Augment {
       if (result.action === "created") anyCreated = true;
       if (result.action === "updated") anyUpdated = true;
       if (!result.success) {
-        // Per ENG-0011: collision refusals don't fail-fast — surface the conflict
-        // and continue installing other skills so a multi-skill augment isn't held
-        // hostage by a single colliding name. Any non-collision failure (write error,
-        // disk full, etc.) still propagates immediately.
+        // Collision refusals don't fail fast: surface the conflict and continue
+        // installing other skills so a multi-skill augment isn't blocked by a
+        // single colliding name. Any non-collision failure still propagates.
         const isCollision = result.errorCode === "SKILL_COLLISION_OTHER_AUGMENT"
           || result.errorCode === "SKILL_COLLISION_USER_AUTHORED"
           || result.errorCode === "SKILL_COLLISION_FORGED_MANIFEST";
@@ -418,7 +415,7 @@ export {
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
-  // Platform broker capability accessors (Package 01)
+  // Platform broker capability accessors
   getBrokerCapabilities,
   platformSupportsBroker,
   getBrokerStrategy,
@@ -435,11 +432,9 @@ export {
   findOrphanHookEntries,
 };
 
-// broker-production-wiring Pkg 03 — adoption flow.
 // `installMcpForReplaceAdopt` is the single-writer adopt-mode install
-// (per architect rule #9); only the bridge's resolveConflict handler
-// should call it. Validation that no other module calls it lives in
-// `equip/test/adoption-single-writer.test.js`.
+// used by broker adoption flows. Validation that no other module calls it
+// lives in `equip/test/adoption-single-writer.test.js`.
 export { installMcpForReplaceAdopt } from "./lib/mcp";
 export {
   writeAdoptionSnapshot,
@@ -456,7 +451,7 @@ export type {
   SkillFile,
   ArtifactResult,
   EquipLogger,
-  // Broker-mode platform extensions (Package 01)
+  // Broker-mode platform extensions
   PlatformBrokerCapabilities,
   PlatformBrokerStrategy,
   BrokerConfigWriteResult,
@@ -464,8 +459,7 @@ export type {
   DiscoverySuppressionRules,
 };
 
-// Broker-mode auth abstractions. Re-exported for broker code in
-// Packages 02-05; see equip/src/lib/auth-broker-types.ts.
+// Broker-mode auth abstractions; see equip/src/lib/auth-broker-types.ts.
 export type {
   Provider,
   ProviderDescription,

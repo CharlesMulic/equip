@@ -1,4 +1,4 @@
-// Tests for Package 03 of equip-skill-ownership: refcounted shared-root semantics.
+// Tests for refcounted shared-root skill semantics.
 // Closes the latent Cursor/Codex bug where ~/.agents/skills/ shared between
 // platforms made "unequip cursor" wipe a skill Codex still owned.
 //
@@ -157,7 +157,7 @@ describe("Shared-root uninstall — refcount semantics", () => {
     assert.ok(!fs.existsSync(skillDir));
   });
 
-  it("last-owner removal preserves user-modified files (Package 02 path still fires)", () => {
+  it("last-owner removal preserves user-modified files", () => {
     const { codex, windsurf } = mockSharedRoot();
     installSkill(codex, "prior", SKILL, { source: "registry" });
     installSkill(windsurf, "prior", SKILL, { source: "registry" });
@@ -232,11 +232,11 @@ describe("Shared-root + cross-augment takeover", () => {
   });
 });
 
-describe("Single-owner manifests (Package 01/02 back-compat)", () => {
+describe("Single-owner manifests (back compat)", () => {
   beforeEach(setupTempHome);
   afterEach(teardownTempHome);
 
-  it("a v1 single-owner manifest still uninstalls correctly under Package 03 logic", () => {
+  it("a v1 single-owner manifest still uninstalls correctly", () => {
     const { codex } = mockSharedRoot();
     installSkill(codex, "prior", SKILL, { source: "registry" });
     const skillDir = path.join(codex.skillsPath, "search");

@@ -1,16 +1,15 @@
 // Integration tests for documentation examples.
-// These tests exercise the EXACT code shown in docs/tool-author.md.
+// These tests exercise representative code shown in docs/augment-author.md.
 // If a test breaks, the docs need updating too — keep them in sync.
 //
 // References:
-//   docs/tool-author.md — "The Pirate Hat Example" (Layer 1, Layer 2)
-//   docs/tool-author.md — "From Local Script to equip <name>"
+//   docs/augment-author.md — local setup examples
 //
 // Node 18+ built-in test runner, zero dependencies.
 
 "use strict";
 
-require("./_isolation");
+const { setupFullHome } = require("./_isolation");
 
 const { describe, it, after } = require("node:test");
 const assert = require("node:assert/strict");
@@ -20,11 +19,19 @@ const fs = require("fs");
 const { execSync } = require("child_process");
 
 const EQUIP_ROOT = path.join(__dirname, "..");
+const DOCS_HOME = setupFullHome("equip-docs-home");
+fs.mkdirSync(path.join(DOCS_HOME.home, ".claude"), { recursive: true });
+fs.mkdirSync(path.join(DOCS_HOME.home, ".codex"), { recursive: true });
+fs.mkdirSync(path.join(DOCS_HOME.home, ".agents"), { recursive: true });
+
+after(() => {
+  DOCS_HOME.dispose();
+});
+
 const { JsonStore } = require("../dist/lib/storage/datastore");
 
 // Journal-based test cleanup: append an UninstallAugmentIntent so the
-// resolved view stops listing the augment as installed. Replaces the legacy
-// trackUninstallation helper which mutated installations.json directly.
+// resolved view stops listing the augment as installed.
 function trackUninstallation(name) {
   JsonStore.appendIntent({
     type: "uninstall-augment",
@@ -56,15 +63,14 @@ function runEquip(args, options = {}) {
 
 // ─── Pirate Hat: Layer 1 (Just a Rule) ──────────────────────
 //
-// FROM: docs/tool-author.md → "Layer 1: Just a Rule"
-// This is the EXACT code from the docs, saved to a temp file
-// and run via `equip ./piratehat.js`.
+// Representative local-script rules example, saved to a temp file and run via
+// `equip ./piratehat.js`.
 
-describe("docs/tool-author.md — Pirate Hat Layer 1", { skip: !!process.env.CI && "requires detected platforms" }, () => {
+describe("docs/augment-author.md — Pirate Hat Layer 1", () => {
   const workDir = tmpDir("piratehat");
   const scriptPath = path.join(workDir, "piratehat.js");
 
-  // Write the exact script from the docs
+  // Write the local setup script used by the docs examples.
   fs.writeFileSync(scriptPath, `
 const { Augment, platformName, cli } = require("@cg3/equip");
 
@@ -95,7 +101,7 @@ for (const p of platforms) {
     runEquip(`${scriptPath}`, { stdio: "pipe" });
 
     // Verify rules were actually written to at least one platform file.
-    // Check Claude Code's CLAUDE.md if it exists (most likely on dev machine).
+    // Check the fake Claude Code home created for this test file.
     const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
     if (fs.existsSync(claudeMd)) {
       const content = fs.readFileSync(claudeMd, "utf-8");
@@ -109,7 +115,6 @@ for (const p of platforms) {
     // No error = success. The script outputs "already a pirate" for skipped.
   });
 
-  // FROM: docs/tool-author.md → "Fair warning — you'll want to undo this"
   // unequip piratehat won't work for rules-only tools since reconcileState
   // tracks by MCP entry presence. For a clean test, uninstall directly.
   it("rules can be removed via the Augment class", () => {
@@ -145,7 +150,7 @@ for (const p of platforms) {
 // FROM: docs/tool-author.md → "Layer 2: Add a Skill"
 // Tests both rules and skills installation together.
 
-describe("docs/tool-author.md — Pirate Hat Layer 2 (Rules + Skills)", { skip: !!process.env.CI && "requires detected platforms" }, () => {
+describe("docs/augment-author.md — Pirate Hat Layer 2 (Rules + Skills)", () => {
   const workDir = tmpDir("piratehat-skill");
   const scriptPath = path.join(workDir, "piratehat.js");
 
@@ -263,7 +268,7 @@ for (const p of platforms) {
 // FROM: docs/tool-author.md → "From Local Script to equip <name>" → Step 1
 // Tests `equip .` reading package.json bin field.
 
-describe("docs/tool-author.md — equip . (local package)", { skip: !!process.env.CI && "requires detected platforms" }, () => {
+describe("docs/augment-author.md — equip . (local package)", () => {
   const workDir = tmpDir("local-pkg");
 
   // Create a minimal package with a setup script

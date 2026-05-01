@@ -286,7 +286,7 @@ test("backup contents: legacy files copied to .backup-pre-storage-redesign/", as
 
 test("legacy files preserved on disk after migration (Phase A safety; not yet deleted)", async () => {
   // Phase A's migration BACKS UP but does not DELETE legacy files.
-  // Deletion happens in Phase C cutover after equip-app is also migrated.
+  // Deletion happens in a later cleanup pass after legacy readers are gone.
   // For Phase A, test that legacy files remain on disk for safety.
   const home = await freshHome();
   writePreRefactorAugment(home, "preserved", {

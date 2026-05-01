@@ -140,7 +140,7 @@ function reconcileStateInner(
   // Broker-managed installs look identical on disk to direct-mode (just a
   // command+args pointing at the broker shim), so without this preservation
   // step every reconcile would silently downgrade installMode "broker" back
-  // to "direct" (Pkg 04 + ENG-0052).
+  // to "direct".
   const existing = JsonStore.resolve(toolName);
 
   let count = 0;

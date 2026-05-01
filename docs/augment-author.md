@@ -227,7 +227,7 @@ For `oidc` delegated auth:
 }
 ```
 
-Equip resolves `oidc` auth by exchanging the signed-in user's Equip session for a short-lived delegated access token and injects that token into MCP config, typically via `PRIOR_ACCESS_TOKEN`.
+Equip resolves `oidc` auth by exchanging the signed-in user's Equip session for a short-lived delegated access token and injecting that token into MCP config according to the augment definition.
 
 Equip handles the full OAuth PKCE flow, key exchange, credential storage (`~/.equip/credentials/`), and automatic token refresh.
 

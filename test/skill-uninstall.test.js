@@ -1,4 +1,4 @@
-// Tests for Package 02 of equip-skill-ownership: uninstall with ownership.
+// Tests for uninstall with skill ownership.
 // Covers: clean uninstall path, user-modified file preservation, foreign-content
 // preservation + tombstone manifests, manifest-absent fallback (legacy), refusal
 // when manifest names a different augment, dry-run reporting, idempotent
@@ -205,7 +205,7 @@ describe("uninstallSkill — manifest-absent fallback", () => {
   beforeEach(setupTempHome);
   afterEach(teardownTempHome);
 
-  it("falls back to recursive delete when manifest is missing (no regression vs pre-Package-02)", () => {
+  it("falls back to recursive delete when manifest is missing", () => {
     const p = mockPlatform();
     // Plant a skill dir with no manifest (e.g., from older equip OR partial install crash).
     const skillDir = path.join(p.skillsPath, "legacy-flat");

@@ -103,8 +103,7 @@ export interface ApplyOptions {
  * Caller MUST have already filtered disabled platforms out of `platforms`.
  *
  * Returns the populated InstallReportBuilder for the caller to inspect or
- * surface. See `operations/initiatives/equip-augment-update-propagation/work/01-apply-extraction.md`
- * for architectural context.
+ * surface.
  */
 export function apply(
   equip: Augment,
@@ -201,7 +200,7 @@ export function apply(
             result.errorCode === "SKILL_COLLISION_USER_AUTHORED" ||
             result.errorCode === "SKILL_COLLISION_FORGED_MANIFEST"
           )) {
-            // Partial-augment install (ENG-0011): some skills landed, some refused.
+            // Partial augment install: some skills landed, some refused.
             cli.warn(`${platformName(p.platform)}   ${result.error}`);
             const hint = result.errorCode === "SKILL_COLLISION_USER_AUTHORED"
               ? "Re-run with --adopt to take ownership."

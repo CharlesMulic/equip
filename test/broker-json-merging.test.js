@@ -1,4 +1,4 @@
-// Tests for Package 05 — installMcpBroker preserves pre-existing
+// Tests that installMcpBroker preserves pre-existing
 // mcpServers[*] JSON entries when merging into Claude Code's
 // .claude.json or Cursor's mcp.json.
 //
@@ -37,7 +37,7 @@ function mockJsonPlatform(platformId, configPath) {
 
 function cleanup(p) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
 
-const SHIM_BIN = "/opt/equip-app/bin/equip-broker-shim";
+const SHIM_BIN = "/opt/equip/bin/equip-broker-shim";
 
 const PRE_EXISTING_JSON = JSON.stringify({
   mcpServers: {
@@ -92,7 +92,7 @@ function runPreserveTest(platformId) {
   cleanup(configPath);
 }
 
-describe("Package 05 — installMcpBroker preserves pre-existing JSON entries", () => {
+describe("installMcpBroker preserves pre-existing JSON entries", () => {
   it("Claude Code: user-managed entries survive byte-for-byte", () => {
     runPreserveTest("claude-code");
   });
@@ -119,7 +119,7 @@ describe("Package 05 — installMcpBroker preserves pre-existing JSON entries", 
         platforms: ["claude-code"],
       });
 
-      const newShim = "/Library/equip-app/bin/equip-broker-shim";
+      const newShim = "/Library/equip/bin/equip-broker-shim";
       const r2 = augment.installMcpBroker(p, { shimBinaryPath: newShim });
       assert.equal(r2.success, true, `reinstall must succeed; got: ${r2.error}`);
 

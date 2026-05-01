@@ -33,27 +33,25 @@ export interface AuthConfig {
 
   /**
    * Audience the issued bearer should target (RFC 8707 resource indicator).
-   * mcp-resource-server-cutover Pkg 03: uniform augment-def shape.
    * For type=oidc this is passed to /token; for type=oauth-dcr this is
    * the third-party MCP server URL.
    *
    * When omitted on type=oidc, OidcProvider falls back to legacy behavior
-   * (audience = augmentName) — W1 compatibility window. Pkg 05 cutover
-   * removes the fallback and makes audience required.
+   * (audience = augmentName) for older registry definitions.
    */
   audience?: string;
 
   /**
-   * Scopes the bearer should carry. mcp-resource-server-cutover Pkg 03.
-   * When omitted on type=oidc, falls back to legacy ["identity:read"] for W1.
+   * Scopes the bearer should carry. When omitted on type=oidc, falls back
+   * to legacy ["identity:read"] for older registry definitions.
    * For type=oauth-dcr these are passed through to the third-party AS.
    */
   scopes?: string[];
 
   /**
    * Dynamic Client Registration metadata for type=oauth-dcr (third-party
-   * MCP servers with their own authorization server). Schema only at Pkg 03;
-   * runtime support deferred per ENG-0019 / first-publisher integration.
+   * MCP servers with their own authorization server). Schema support exists
+   * before full runtime support.
    */
   dcr?: {
     publisherSlug: string;
@@ -110,14 +108,13 @@ export interface StoredCredential {
     clientId: string;
   };
   /**
-   * Audience the credential was issued with (RFC 8707).
-   * mcp-resource-server-cutover Pkg 03: persisted at acquire time so
-   * refresh can re-mint with consistent claims without re-reading auth-config.
+   * Audience the credential was issued with (RFC 8707). Persisted at acquire
+   * time so refresh can re-mint with consistent claims without re-reading
+   * auth-config.
    */
   audience?: string;
   /**
    * Scopes the credential was issued with.
-   * mcp-resource-server-cutover Pkg 03.
    */
   scopes?: string[];
   toolName: string;
@@ -150,7 +147,7 @@ export interface AuthResult {
 
 // ─── Paths ─────────────────────────────────────────────────
 
-// Resolve dynamically so tests can override via EQUIP_HOME (see ENG-0031).
+// Resolve dynamically so tests can override via EQUIP_HOME.
 import { getEquipHome } from "./equip-home";
 function getCredentialsDir(): string { return path.join(getEquipHome(), "credentials"); }
 
@@ -576,7 +573,7 @@ async function resolveOidc(
   }
 
   if (!session) {
-    return { credential: null, method: "oidc", error: "Not logged into Equip. Run 'equip login' first." };
+    return { credential: null, method: "oidc", error: "Not logged into Equip. Sign in to Equip before installing this augment." };
   }
 
   // If the session token is expired:
@@ -706,9 +703,8 @@ async function resolveOidc(
 }
 
 // `refreshOidcTokens` and `updatePlatformConfigs` were retired here
-// 2026-04-27 with the legacy identity-refresh-daemon. Bulk refresh is
-// no longer this module's concern; per-platform MCP writers handle
-// config rewriting (equip-mcp-login-continuity-gate Pkg 04 + Pkg 05).
+// 2026-04-27. Bulk refresh is no longer this module's concern; per-platform
+// MCP writers handle config rewriting.
 //
 // `resolveOidc` (the immediate-acquire path used by the install command)
 // still lives here — it's not refresh, it's first-time grant.

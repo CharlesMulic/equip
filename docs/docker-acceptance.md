@@ -19,17 +19,17 @@ The current acceptance scenario is intentionally small and durable:
   - Codex TOML MCP config
   - rules written to `CLAUDE.md` and `AGENTS.md`
   - skills copied to the expected platform skill directories
-  - `~/.equip/installations.json`
+  - `~/.equip/storage/` journal/content state
   - platform metadata and scan files
   - `equip status` and `equip doctor` still run cleanly afterward
 
 ## Why This Exists
 
-This fills the gap between fast host-side unit/integration tests and broader cross-repo ephemeral-stack testing:
+This fills the gap between fast host-side unit/integration tests and broader end-to-end registry testing:
 
 - use `equip` host tests for library behavior and small CLI surfaces
 - use Docker acceptance here for hermetic CLI installation behavior
-- use a specialized stack later for full publish/fetch/install flows against the Kotlin monolith routes
+- use a specialized stack later for full publish/fetch/install flows against live registry routes
 
 ## CI Model
 
@@ -47,4 +47,4 @@ After the first direct-install lane is stable, the next useful additions are:
 - authenticated direct-mode install with header injection
 - package-mode dispatch path
 - cached install fallback after an initial live fetch
-- later, a cross-repo flow where the monolith creates or serves an augment definition and `equip` installs it inside a specialized stack
+- later, a flow where the registry creates or serves an augment definition and `equip` installs it inside a specialized stack

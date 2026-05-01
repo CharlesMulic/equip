@@ -1,8 +1,7 @@
-// OidcProvider — RFC 8693 token-exchange against CG3.
+// OidcProvider — RFC 8693 token exchange for delegated augment auth.
 //
-// This is the dominant production case. Every prior-identity-integrated
-// augment uses auth.type="oidc"; the publisher's MCP server validates
-// the issued JWT offline via the @cg3/prior-identity SDK.
+// Augments can use auth.type="oidc" when the signed-in Equip session can
+// mint an audience-scoped token for the publisher's MCP server.
 //
 // Flow on acquire / refresh:
 //   1. Read user's CG3 session from `~/.equip/app/session.json`.
@@ -14,7 +13,7 @@
 //   4. On refresh (background): NEVER include consent_action — refresh must not be a
 //      consent-write path.
 //   5. Store the issued delegated access token. Validation at the publisher's MCP
-//      server uses jose.jwtVerify against the platform's JWKS — fully offline.
+//      server verifies the issued token against the platform's JWKS.
 //
 // This provider doesn't refresh `session.json` itself — that's whoever
 // owns the session lifecycle. If the session is stale at refresh time,
@@ -89,10 +88,8 @@ export class OidcProvider implements Provider {
 
   async invalidate(_augmentName: string): Promise<ProviderResult<void>> {
     // No upstream revoke here — the issued delegated access token has a
-    // 60-min TTL and is bound to the augment audience. Revocation
-    // semantics live in CG3's `/revoke` endpoint and the consent-revoke
-    // path; calling them is consent-management territory, not Provider
-    // territory. Local-only delete is the manager's job.
+    // short TTL and is bound to the augment audience. Consent revocation is
+    // handled outside this provider; local-only delete is the manager's job.
     return { ok: true, value: undefined };
   }
 
@@ -100,11 +97,10 @@ export class OidcProvider implements Provider {
    * Core RFC 8693 token-exchange flow. Used for both acquire (with
    * consent_action=accept) and refresh (without).
    *
-   * mcp-resource-server-cutover Pkg 03: audience + scopes plumbed
-   * through from auth-config (acquire) or stored credential (refresh).
+   * Audience + scopes are supplied from auth-config (acquire) or stored
+   * credential (refresh).
    * Falls back to legacy values (audience=augmentName, scope=identity:read)
-   * during the W1 window when registry rows haven't been migrated to
-   * the uniform shape yet.
+   * for older registry rows that do not carry the uniform shape yet.
    */
   private async tokenExchange(
     augmentName: string,
@@ -115,7 +111,7 @@ export class OidcProvider implements Provider {
     if (!session?.accessToken) {
       return {
         ok: false,
-        error: "no Equip session — user must run `equip login` first",
+        error: "no Equip session — sign in to Equip before installing this augment",
         code: "session_missing",
       };
     }
@@ -130,10 +126,8 @@ export class OidcProvider implements Provider {
     const tokenUrl = session.tokenUrl ?? DEFAULT_TOKEN_URL;
     const clientId = session.clientId ?? DEFAULT_CLIENT_ID;
 
-    // W1 fallbacks: if the registry def doesn't carry the new uniform
-    // shape yet, audience defaults to augmentName and scope defaults to
-    // identity:read (the pre-cutover behavior). Pkg 05 cutover migrates
-    // all registry rows; the fallbacks become unreachable post-cutover.
+    // Backward-compatible fallbacks for registry definitions that do not
+    // yet carry explicit audience/scopes.
     const audience = overrides.audience ?? augmentName;
     const scopeStr = overrides.scopes && overrides.scopes.length > 0
       ? overrides.scopes.join(" ")
@@ -173,7 +167,7 @@ export class OidcProvider implements Provider {
     }
 
     if (!response.ok || !body.access_token) {
-      // Coerce description to string defensively. The CG3 API can return
+      // Coerce description to string defensively. The token endpoint can return
       // either RFC-6749 flat `{error, error_description}` (the spec shape
       // /token is supposed to use) OR the wrapped `{ok: false, error: {code,
       // message, ...}}` envelope used by other routes when an exception
@@ -201,7 +195,7 @@ export class OidcProvider implements Provider {
     const accessToken = body.access_token as string;
     const now = new Date().toISOString();
     // Persist the audience + scopes the credential was issued with so
-    // refresh can re-mint with consistent claims (Pkg 03). Reading
+    // refresh can re-mint with consistent claims. Reading
     // response-side "scope" (RFC 8693 §2.2) when the AS narrows what
     // it issued vs. what was requested.
     const issuedScopeStr = typeof body.scope === "string" ? body.scope : scopeStr;

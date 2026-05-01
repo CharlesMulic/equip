@@ -1,9 +1,6 @@
 // Broker-mode auth abstractions: Provider interface + DeliveryDecision.
-// Sibling to auth-engine.ts; deliberately NOT inside it so the
-// 1207-line direct-mode file stays untouched (Package 01 scope rule).
-//
-// Comprehensive refactor of auth-engine.ts to use these types is broker
-// plan Phase 1 — explicitly out of scope for this initiative.
+// Sibling to auth-engine.ts so broker credential lifecycle can evolve without
+// coupling every provider to the direct-mode auth resolver.
 //
 // Zero non-Node dependencies; pure types + minimal runtime helpers.
 
@@ -17,9 +14,7 @@ import type { AuthConfig, StoredCredential } from "./auth-engine";
 // Provider implementation, instead of branching on auth.type strings
 // across 1000+ lines like the current direct-mode auth-engine does.
 //
-// Implementations land in Package 02 (broker daemon). Intentionally
-// minimal here — we add methods only when broker code needs them, not
-// preemptively.
+// Intentionally minimal: add methods only when broker code has a real callsite.
 
 export interface ProviderDescription {
   /** Stable id for telemetry + doctor surface (e.g., "oauth-pkce", "oauth-to-api-key"). */

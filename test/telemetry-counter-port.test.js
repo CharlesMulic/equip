@@ -1,6 +1,6 @@
 "use strict";
 
-// Tests for Pkg 06b — Counter port + noop default + name/label constants.
+// Tests for Counter port + noop default + name/label constants.
 //
 // Boundary discipline check: equip lib owns the contract (counter names +
 // valid label keys + valid label values). Storage and emission live
@@ -15,7 +15,7 @@ const {
   COUNTER_LABELS,
 } = require("../dist/lib/telemetry");
 
-describe("Pkg 06b — Counter port contract", () => {
+describe("Counter port contract", () => {
   it("noopCounter accepts (name) and (name, labels) without throwing", () => {
     assert.doesNotThrow(() => noopCounter("any_name"));
     assert.doesNotThrow(() => noopCounter("any_name", { result: "success" }));
@@ -28,7 +28,7 @@ describe("Pkg 06b — Counter port contract", () => {
   });
 });
 
-describe("Pkg 06b — Counter name constants", () => {
+describe("Counter name constants", () => {
   it("declares the three counters wired in this package", () => {
     assert.equal(COUNTER_NAMES.BROKER_REFRESH_TOTAL, "equip_broker_refresh_total");
     assert.equal(COUNTER_NAMES.BROKER_REQUEST_TOTAL, "equip_broker_request_total");
@@ -43,7 +43,7 @@ describe("Pkg 06b — Counter name constants", () => {
   });
 });
 
-describe("Pkg 06b — Closed-set label values", () => {
+describe("Closed-set label values", () => {
   it("BROKER_REFRESH_TOTAL has result label with closed enum", () => {
     const labels = COUNTER_LABELS[COUNTER_NAMES.BROKER_REFRESH_TOTAL];
     assert.deepEqual(labels.result, ["success", "failed", "invalid_grant"]);

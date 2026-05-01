@@ -1,4 +1,4 @@
-// Pkg 06c — equip doctor's broker-managed branch.
+// Tests for equip doctor's broker-managed branch.
 //
 // Doctor's job for broker-managed installs:
 //   1. Skip the URL-HTTPS check (entry has no url)
@@ -90,7 +90,7 @@ function captureDoctorOutput(fn) {
   return buf;
 }
 
-describe("Pkg 06c — equip doctor: broker-managed branch", () => {
+describe("equip doctor: broker-managed branch", () => {
   beforeEach(setupTempHome);
   afterEach(teardownTempHome);
 
@@ -100,7 +100,7 @@ describe("Pkg 06c — equip doctor: broker-managed branch", () => {
     // the entry there.
     process.env.CODEX_HOME = tempHome;
     const codexConfigPath = path.join(tempHome, "config.toml");
-    fs.writeFileSync(codexConfigPath, `[mcp_servers.broker-augment]\ncommand = "/opt/equip-app/bin/equip-broker-shim"\nargs = ["--augment", "broker-augment"]\n`);
+    fs.writeFileSync(codexConfigPath, `[mcp_servers.broker-augment]\ncommand = "/opt/equip/bin/equip-broker-shim"\nargs = ["--augment", "broker-augment"]\n`);
 
     trackInstallation("broker-augment", {
       source: "registry",
