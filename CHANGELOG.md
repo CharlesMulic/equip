@@ -4,6 +4,10 @@ All notable changes to Equip are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- OIDC stdio fallback env var renamed to `PRIOR_IDENTITY_ACCESS_TOKEN` to make clear the injected bearer is a delegated Prior Identity token, not a Prior Knowledge API key.
+
 ## [0.19.3] - 2026-05-01
 
 Released to npm as `@cg3/equip@0.19.3` on 2026-05-01.

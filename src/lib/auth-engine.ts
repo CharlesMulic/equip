@@ -36,14 +36,14 @@ export interface AuthConfig {
    * For type=oidc this is passed to /token; for type=oauth-dcr this is
    * the third-party MCP server URL.
    *
-   * When omitted on type=oidc, OidcProvider falls back to legacy behavior
-   * (audience = augmentName) for older registry definitions.
+   * When omitted on type=oidc, OIDC token exchange falls back to
+   * audience = augmentName for registry definitions without an explicit resource.
    */
   audience?: string;
 
   /**
    * Scopes the bearer should carry. When omitted on type=oidc, falls back
-   * to legacy ["identity:read"] for older registry definitions.
+   * to ["cg3:prior:identity:read"] for delegated identity wrappers.
    * For type=oauth-dcr these are passed through to the third-party AS.
    */
   scopes?: string[];
@@ -514,7 +514,7 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
     case "oauth_to_api_key":
       return resolveOAuthToApiKey(toolName, auth, logger, nonInteractive, dryRun);
     case "oidc":
-      return resolveOidc(toolName, logger, nonInteractive, dryRun, options.session);
+      return resolveOidc(toolName, auth, logger, nonInteractive, dryRun, options.session);
     default:
       return { credential: null, method: "unknown", error: `Unknown auth type: ${auth.type}` };
   }
@@ -549,6 +549,7 @@ function isJwtExpired(token: string): boolean {
 
 async function resolveOidc(
   toolName: string,
+  auth: AuthConfig,
   logger: EquipLogger,
   nonInteractive: boolean,
   dryRun: boolean,
@@ -639,15 +640,20 @@ async function resolveOidc(
   }
 
   const allowConsentAcceptance = !nonInteractive;
+  const audience = auth.audience ?? toolName;
+  const scopes = auth.scopes && auth.scopes.length > 0
+    ? auth.scopes
+    : ["cg3:prior:identity:read"];
+  const scope = scopes.join(" ");
   const requestDelegatedToken = async (): Promise<{ token?: string; needsConsent?: boolean; error?: string }> => {
     try {
       const form = new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
         client_id: session!.clientId || "equip-desktop",
-        audience: toolName,
+        audience,
         subject_token: session!.accessToken,
         subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
-        scope: "identity:read",
+        scope,
       });
       if (allowConsentAcceptance) {
         form.set("consent_action", "accept");
@@ -691,6 +697,8 @@ async function resolveOidc(
       authType: "oidc",
       credential: accessToken,
       toolName,
+      audience,
+      scopes,
       storedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

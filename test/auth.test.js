@@ -501,7 +501,7 @@ describe("prior delegated auth", () => {
 
   it("requests atomic consent acceptance during interactive token exchange", async () => {
     const name = testToolName();
-    originalFetch = global.fetch;
+    if (originalFetch === undefined) originalFetch = global.fetch;
 
     let tokenCalls = 0;
     let requestBody = "";
@@ -517,7 +517,7 @@ describe("prior delegated auth", () => {
           access_token: "delegated-token-123",
           token_type: "Bearer",
           expires_in: 900,
-          scope: "identity:read",
+          scope: "cg3:prior:identity:read",
         }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -543,11 +543,70 @@ describe("prior delegated auth", () => {
     assert.equal(result.method, "oidc");
     assert.equal(tokenCalls, 1);
     assert.match(requestBody, /consent_action=accept/);
+    const form = new URLSearchParams(requestBody);
+    assert.equal(form.get("audience"), name);
+    assert.equal(form.get("scope"), "cg3:prior:identity:read");
 
     const stored = readStoredCredential(name);
     assert.ok(stored);
     assert.equal(stored.authType, "oidc");
     assert.equal(stored.credential, "delegated-token-123");
+    assert.equal(stored.audience, name);
+    assert.deepEqual(stored.scopes, ["cg3:prior:identity:read"]);
+
+    deleteStoredCredential(name);
+  });
+
+  it("uses registry-provided OIDC audience and scopes during token exchange", async () => {
+    const name = testToolName();
+    if (originalFetch === undefined) originalFetch = global.fetch;
+
+    let requestBody = "";
+    global.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+
+      if (url === "https://api.cg3.io/token") {
+        requestBody = init?.body || "";
+        return new Response(JSON.stringify({
+          access_token: "knowledge-token-123",
+          token_type: "Bearer",
+          expires_in: 900,
+          scope: "cg3:prior:knowledge:read cg3:prior:knowledge:write",
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const result = await resolveAuth({
+      toolName: name,
+      auth: {
+        type: "oidc",
+        audience: "https://api.cg3.io/mcp",
+        scopes: ["cg3:prior:knowledge:read", "cg3:prior:knowledge:write"],
+      },
+      session: {
+        accessToken: "session-access-token",
+        refreshToken: "session-refresh-token",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        tokenUrl: "https://api.cg3.io/token",
+        clientId: "equip-desktop",
+      },
+    });
+
+    assert.equal(result.credential, "knowledge-token-123");
+    assert.equal(result.method, "oidc");
+    const form = new URLSearchParams(requestBody);
+    assert.equal(form.get("audience"), "https://api.cg3.io/mcp");
+    assert.equal(form.get("scope"), "cg3:prior:knowledge:read cg3:prior:knowledge:write");
+
+    const stored = readStoredCredential(name);
+    assert.ok(stored);
+    assert.equal(stored.audience, "https://api.cg3.io/mcp");
+    assert.deepEqual(stored.scopes, ["cg3:prior:knowledge:read", "cg3:prior:knowledge:write"]);
 
     deleteStoredCredential(name);
   });

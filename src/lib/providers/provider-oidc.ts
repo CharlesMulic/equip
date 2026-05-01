@@ -7,7 +7,8 @@
 //   1. Read user's CG3 session from `~/.equip/app/session.json`.
 //      Session format: { accessToken, refreshToken, expiresAt, tokenUrl, clientId }.
 //   2. POST to ${tokenUrl} with grant_type=urn:ietf:params:oauth:grant-type:token-exchange,
-//      subject_token=session.accessToken, audience=augmentName, scope="identity:read".
+//      subject_token=session.accessToken, audience=auth.audience ?? augmentName,
+//      scope=auth.scopes ?? "cg3:prior:identity:read".
 //   3. On acquire (interactive install): include consent_action=accept so the platform
 //      records consent atomically with token issuance.
 //   4. On refresh (background): NEVER include consent_action — refresh must not be a
@@ -99,8 +100,8 @@ export class OidcProvider implements Provider {
    *
    * Audience + scopes are supplied from auth-config (acquire) or stored
    * credential (refresh).
-   * Falls back to legacy values (audience=augmentName, scope=identity:read)
-   * for older registry rows that do not carry the uniform shape yet.
+   * Falls back to audience=augmentName and scope=cg3:prior:identity:read for
+   * registry rows that do not carry an explicit resource shape yet.
    */
   private async tokenExchange(
     augmentName: string,
@@ -126,12 +127,11 @@ export class OidcProvider implements Provider {
     const tokenUrl = session.tokenUrl ?? DEFAULT_TOKEN_URL;
     const clientId = session.clientId ?? DEFAULT_CLIENT_ID;
 
-    // Backward-compatible fallbacks for registry definitions that do not
-    // yet carry explicit audience/scopes.
+    // Fallbacks for registry definitions that do not carry explicit audience/scopes.
     const audience = overrides.audience ?? augmentName;
     const scopeStr = overrides.scopes && overrides.scopes.length > 0
       ? overrides.scopes.join(" ")
-      : "identity:read";
+      : "cg3:prior:identity:read";
 
     const form = new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",

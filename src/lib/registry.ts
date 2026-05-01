@@ -332,7 +332,7 @@ export function registryDefToConfig(def: RegistryDef, options?: { logger?: Equip
     // Preserve the historical default for OIDC stdio augments that omit
     // envKey. Registry authors should set envKey explicitly for new augments.
     const defaultEnvKeyForAuth = def.auth?.type === "oidc"
-      ? "PRIOR_ACCESS_TOKEN"
+      ? "PRIOR_IDENTITY_ACCESS_TOKEN"
       : "";
     config.stdio = {
       command: def.stdioCommand,
