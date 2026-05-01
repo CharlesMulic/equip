@@ -16,7 +16,7 @@ const assert = require("node:assert/strict");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 const EQUIP_ROOT = path.join(__dirname, "..");
 const DOCS_HOME = setupFullHome("equip-docs-home");
@@ -51,8 +51,8 @@ function tmpDir(prefix = "doc-test") {
   return dir;
 }
 
-function runEquip(args, options = {}) {
-  return execSync(`node ${path.join(EQUIP_ROOT, "bin", "equip.js")} ${args}`, {
+function runEquip(arg, options = {}) {
+  return execFileSync(process.execPath, [path.join(EQUIP_ROOT, "bin", "equip.js"), arg], {
     encoding: "utf-8",
     cwd: options.cwd || EQUIP_ROOT,
     timeout: 30000,
