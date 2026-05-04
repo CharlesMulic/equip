@@ -1120,7 +1120,23 @@ describe("Augment.verify()", () => {
 // ─── Reconcile State ────────────────────────────────────────
 
 describe("reconcileState", () => {
+  let originalHome;
+  let tempHome;
+
+  function setupTempHome() {
+    originalHome = os.homedir;
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-reconcile-home-"));
+    os.homedir = () => tempHome;
+  }
+
+  function teardownTempHome() {
+    os.homedir = originalHome;
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+
   it("finds installed tools across platforms", () => {
+    setupTempHome();
+    try {
     // Set up a mock config file with a tool entry
     const p = mockPlatform();
     fs.writeFileSync(p.configPath, JSON.stringify({ mcpServers: { "test-reconcile": { url: "https://example.com" } } }));
@@ -1137,9 +1153,14 @@ describe("reconcileState", () => {
     // Clean up any state artifacts
     trackUninstallation("test-reconcile");
     cleanup(p.configPath);
+    } finally {
+      teardownTempHome();
+    }
   });
 
   it("accepts custom marker and hookDir", () => {
+    setupTempHome();
+    try {
     // Verify the function accepts options without throwing
     const count = reconcileState({
       toolName: "nonexistent-tool",
@@ -1148,15 +1169,23 @@ describe("reconcileState", () => {
       hookDir: "/tmp/custom-hooks",
     });
     assert.equal(count, 0); // tool not installed anywhere
+    } finally {
+      teardownTempHome();
+    }
   });
 
   it("uses toolName as default marker", () => {
+    setupTempHome();
+    try {
     const count = reconcileState({
       toolName: "nonexistent",
       package: "@test/pkg",
       // no marker — should default to toolName
     });
     assert.equal(count, 0);
+    } finally {
+      teardownTempHome();
+    }
   });
 });
 
