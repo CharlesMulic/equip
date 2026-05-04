@@ -100,6 +100,18 @@ function buildEvidenceFileNames({
     ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.evidenceFileNames),
     ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.evidenceFileNames),
     ...prefixArtifactNameEntries("releaseVerification", releaseVerificationReport?.evidenceFileNames),
+    ...prefixArtifactNameEntries(
+      "package",
+      deriveEvidenceFileNamesFromArtifacts(releaseVerificationReport?.package?.artifacts),
+    ),
+    ...prefixArtifactNameEntries(
+      "tarballSmoke",
+      deriveEvidenceFileNamesFromArtifacts(releaseVerificationReport?.tarballSmoke?.artifacts),
+    ),
+    ...prefixArtifactNameEntries(
+      "dockerAcceptance",
+      deriveEvidenceFileNamesFromArtifacts(releaseVerificationReport?.dockerAcceptance?.artifacts),
+    ),
     ...prefixArtifactNameEntries("changesetsRelease", changesetsReleaseReport?.evidenceFileNames),
     ...prefixArtifactNameEntries("releaseWorkflow", deriveEvidenceFileNamesFromArtifacts(artifacts)),
   };
