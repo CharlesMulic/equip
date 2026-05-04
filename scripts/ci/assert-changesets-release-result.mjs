@@ -35,6 +35,10 @@ const artifactNames = {
   report: process.env.CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME || "",
   releaseVerification: process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "",
 };
+const hasReleaseVerificationReportArtifact = fs.existsSync(releaseVerificationReportPath);
+const releaseVerificationReport = hasReleaseVerificationReportArtifact
+  ? JSON.parse(fs.readFileSync(releaseVerificationReportPath, "utf8"))
+  : null;
 
 const hasResultArtifact = fs.existsSync(resultPath);
 const result = hasResultArtifact
@@ -43,6 +47,7 @@ const result = hasResultArtifact
       stepOutcome: "missing",
       published: false,
       publishedPackages: [],
+      releaseVerificationReport,
       artifacts,
       artifactNames,
       workflowContext: readGitHubWorkflowContext(process.env),
@@ -50,7 +55,8 @@ const result = hasResultArtifact
 const inputs = {
   hasResultArtifact,
   hasAssertionArtifact: false,
-  hasReleaseVerificationReport: !!result?.inputs?.hasReleaseVerificationReport,
+  hasReleaseVerificationReport:
+    hasReleaseVerificationReportArtifact || !!result?.inputs?.hasReleaseVerificationReport,
 };
 
 try {

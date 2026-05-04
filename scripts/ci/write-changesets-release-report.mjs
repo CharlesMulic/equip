@@ -47,12 +47,14 @@ function resolveArtifactPath(filePath) {
 }
 
 const resultArtifact = readOptionalJson(resultPath);
+const releaseVerificationReport = readOptionalJson(releaseVerificationReportPath);
 const result =
   resultArtifact ||
   buildChangesetsReleaseResult({
     stepOutcome: "missing",
     published: false,
     publishedPackages: [],
+    releaseVerificationReport,
     artifacts: {
       resultPath: path.resolve(resultPath),
       assertionPath: path.resolve(assertionPath),
@@ -73,7 +75,8 @@ const assertionArtifact = readOptionalJson(assertionPath);
 const inputs = {
   hasResultArtifact: !!resultArtifact,
   hasAssertionArtifact: !!assertionArtifact,
-  hasReleaseVerificationReport: !!result?.inputs?.hasReleaseVerificationReport,
+  hasReleaseVerificationReport:
+    !!releaseVerificationReport || !!result?.inputs?.hasReleaseVerificationReport,
 };
 
 const report = buildChangesetsReleaseReport({

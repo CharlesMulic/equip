@@ -31,15 +31,23 @@ const releaseVerificationReportPath =
   process.env.RELEASE_VERIFICATION_REPORT_PATH ||
   path.join(".generated", "release", "release-verification-report.json");
 
-const resultArtifact = fs.existsSync(resultPath)
-  ? JSON.parse(fs.readFileSync(resultPath, "utf8"))
-  : null;
+function readOptionalJson(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return null;
+  }
+
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+const resultArtifact = readOptionalJson(resultPath);
+const releaseVerificationReport = readOptionalJson(releaseVerificationReportPath);
 const result =
   resultArtifact ||
   buildChangesetsReleaseResult({
     stepOutcome: "missing",
     published: false,
     publishedPackages: [],
+    releaseVerificationReport,
     artifacts: {
       resultPath: path.resolve(resultPath),
       assertionPath: path.resolve(assertionPath),
@@ -56,13 +64,12 @@ const result =
     },
     workflowContext: readGitHubWorkflowContext(process.env),
   });
-const assertionArtifact = fs.existsSync(assertionPath)
-  ? JSON.parse(fs.readFileSync(assertionPath, "utf8"))
-  : null;
+const assertionArtifact = readOptionalJson(assertionPath);
 const inputs = {
   hasResultArtifact: !!resultArtifact,
   hasAssertionArtifact: !!assertionArtifact,
-  hasReleaseVerificationReport: !!result?.inputs?.hasReleaseVerificationReport,
+  hasReleaseVerificationReport:
+    !!releaseVerificationReport || !!result?.inputs?.hasReleaseVerificationReport,
 };
 const artifactNames = {
   result: resultArtifactName,

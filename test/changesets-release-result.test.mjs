@@ -848,6 +848,16 @@ test("assert-changesets-release-result writes a failure artifact when the result
   const reportPath = path.join(root, "changesets-release-report.json");
   const releaseVerificationReportPath = path.join(root, "release-verification-report.json");
 
+  fs.writeFileSync(
+    releaseVerificationReportPath,
+    `${JSON.stringify({
+      kind: "equip-release-verification-report",
+      overallStatus: "passed",
+      summary: "release verification passed",
+    }, null, 2)}\n`,
+    "utf8",
+  );
+
   const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
     CHANGESETS_RELEASE_RESULT_PATH: resultPath,
     CHANGESETS_RELEASE_ASSERTION_PATH: assertionPath,
@@ -870,7 +880,10 @@ test("assert-changesets-release-result writes a failure artifact when the result
   assert.equal(assertion.effectiveStatus, "failed");
   assert.equal(assertion.inputs.hasResultArtifact, false);
   assert.equal(assertion.inputs.hasAssertionArtifact, false);
+  assert.equal(assertion.inputs.hasReleaseVerificationReport, true);
   assert.equal(assertion.result.stepOutcome, "missing");
+  assert.equal(assertion.result.inputs.hasReleaseVerificationReport, true);
+  assert.equal(assertion.result.prerequisites.releaseVerificationStatus, "passed");
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(assertion.result.artifacts.resultPath, path.resolve(resultPath));
   assert.equal(assertion.result.artifacts.assertionPath, path.resolve(assertionPath));
@@ -903,6 +916,16 @@ test("write-changesets-release-summary and report still render when the result a
   const summaryPath = path.join(root, "changesets-release-summary.md");
   const reportPath = path.join(root, "changesets-release-report.json");
   const releaseVerificationReportPath = path.join(root, "release-verification-report.json");
+
+  fs.writeFileSync(
+    releaseVerificationReportPath,
+    `${JSON.stringify({
+      kind: "equip-release-verification-report",
+      overallStatus: "passed",
+      summary: "release verification passed",
+    }, null, 2)}\n`,
+    "utf8",
+  );
 
   fs.writeFileSync(
     assertionPath,
@@ -955,6 +978,7 @@ test("write-changesets-release-summary and report still render when the result a
   assert.match(summary, /Outcome: `missing`/i);
   assert.match(summary, /## Input presence/i);
   assert.match(summary, /Result artifact: `missing`/i);
+  assert.match(summary, /Release verification report: `present`/i);
   assert.match(summary, /Release verification: `release-verification-report`/i);
   assert.match(summary, /Report Path: `changesets-release-report\.json`/i);
   assert.match(summary, /Release Verification Report Path: `release-verification-report\.json`/i);
@@ -962,6 +986,9 @@ test("write-changesets-release-summary and report still render when the result a
   assert.equal(report.effectiveStatus, "failed");
   assert.equal(report.inputs.hasResultArtifact, false);
   assert.equal(report.inputs.hasAssertionArtifact, true);
+  assert.equal(report.inputs.hasReleaseVerificationReport, true);
+  assert.equal(report.result.inputs.hasReleaseVerificationReport, true);
+  assert.equal(report.result.prerequisites.releaseVerificationStatus, "passed");
   assert.equal(report.result.artifacts.resultPath, path.resolve(resultPath));
   assert.equal(report.result.artifacts.assertionPath, path.resolve(assertionPath));
   assert.equal(report.result.artifacts.summaryPath, path.resolve(summaryPath));
