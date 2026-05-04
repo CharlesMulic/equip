@@ -732,6 +732,70 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
   assert.match(summary, /Report: `release-workflow-report`/i);
 });
 
+test("write-release-workflow-summary preserves nested evidence when the workflow report is missing", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-workflow-"));
+  const releaseWorkflowReportPath = path.join(root, "missing-release-workflow-report.json");
+  const releaseWorkflowSummaryPath = path.join(root, "release-workflow-summary.md");
+  const releaseBootstrapResultPath = path.join(root, "release-bootstrap-result.json");
+  const releaseVerificationReportPath = path.join(root, "release-verification-report.json");
+  const changesetsReleaseReportPath = path.join(root, "changesets-release-report.json");
+
+  fs.writeFileSync(
+    releaseBootstrapResultPath,
+    `${JSON.stringify(createReleaseBootstrapResult(), null, 2)}\n`,
+    "utf8",
+  );
+  fs.writeFileSync(
+    releaseVerificationReportPath,
+    `${JSON.stringify(createReleaseVerificationReport(), null, 2)}\n`,
+    "utf8",
+  );
+  fs.writeFileSync(
+    changesetsReleaseReportPath,
+    `${JSON.stringify(createChangesetsReleaseReport(), null, 2)}\n`,
+    "utf8",
+  );
+
+  const result = runScript("scripts/ci/write-release-workflow-summary.mjs", {
+    RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
+    RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
+    RELEASE_BOOTSTRAP_RESULT_PATH: releaseBootstrapResultPath,
+    RELEASE_VERIFICATION_REPORT_PATH: releaseVerificationReportPath,
+    CHANGESETS_RELEASE_REPORT_PATH: changesetsReleaseReportPath,
+    RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
+    RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME: "release-bootstrap-result",
+    RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
+    RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
+    RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
+    CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "1234567890",
+    GITHUB_RUN_ATTEMPT: "2",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "abcdef1234567890",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const summary = fs.readFileSync(releaseWorkflowSummaryPath, "utf8");
+  assert.match(summary, /Release workflow report artifact was missing/i);
+  assert.doesNotMatch(summary, /Release bootstrap result was missing/i);
+  assert.doesNotMatch(summary, /Release verification report was missing/i);
+  assert.doesNotMatch(summary, /Changesets release report was missing/i);
+  assert.match(summary, /Overall status: `failed`/i);
+  assert.match(summary, /Release bootstrap: `passed`/i);
+  assert.match(summary, /Release preflight: `missing`/i);
+  assert.match(summary, /Release verification: `passed`/i);
+  assert.match(summary, /Changesets release: `published`/i);
+  assert.match(summary, /Release Bootstrap: `release-bootstrap-result`/i);
+  assert.match(summary, /Release Verification: `release-verification-report`/i);
+  assert.match(summary, /Changesets Release: `changesets-release-report`/i);
+});
+
 test("assert-release-workflow-report writes a failure artifact when the report is missing", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-workflow-"));
   const releaseWorkflowReportPath = path.join(root, "missing-release-workflow-report.json");
