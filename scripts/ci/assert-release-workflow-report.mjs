@@ -19,6 +19,18 @@ function readSyntheticArtifactNames() {
   };
 }
 
+function deriveEvidenceFileNamesFromArtifacts(artifacts) {
+  if (!artifacts || typeof artifacts !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(artifacts)
+      .filter(([, value]) => typeof value === "string" && value)
+      .map(([key, value]) => [key, path.basename(value)]),
+  );
+}
+
 function parseAllowedStatuses(rawValue) {
   const values = (rawValue || "published,completed")
     .split(",")
@@ -99,6 +111,9 @@ const report = fs.existsSync(reportPath)
       });
       syntheticReport.inputs.hasReleaseWorkflowReport = false;
       syntheticReport.artifactNames = readSyntheticArtifactNames();
+      syntheticReport.evidenceFileNames = deriveEvidenceFileNamesFromArtifacts(
+        syntheticReport.artifacts,
+      );
       return syntheticReport;
     })();
 const allowedStatuses = parseAllowedStatuses(process.env.RELEASE_WORKFLOW_ALLOWED_STATUSES);
