@@ -5,6 +5,29 @@ import {
   readGitHubWorkflowContext,
 } from "./workflow-context-lib.mjs";
 
+function readSyntheticArtifactNames() {
+  return {
+    releaseBootstrap: process.env.RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME || "",
+    releasePreflight: process.env.RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME || "",
+    packVerification: process.env.PACK_VERIFICATION_ARTIFACT_NAME || "",
+    packTarball: process.env.PACK_TARBALL_ARTIFACT_NAME || "",
+    packInstallSmoke: process.env.PACK_INSTALL_SMOKE_ARTIFACT_NAME || "",
+    dockerAcceptance: process.env.DOCKER_ACCEPTANCE_ARTIFACT_NAME || "",
+    report: process.env.RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME || "",
+    assertion: process.env.RELEASE_VERIFICATION_ASSERTION_ARTIFACT_NAME || "",
+    summary: process.env.RELEASE_VERIFICATION_SUMMARY_ARTIFACT_NAME || "",
+  };
+}
+
+function deriveEvidenceFileNamesFromArtifacts(artifacts) {
+  const normalizedArtifacts = normalizeArtifacts(artifacts);
+  return Object.fromEntries(
+    Object.entries(normalizedArtifacts)
+      .filter(([, value]) => value)
+      .map(([key, value]) => [key, path.basename(value)]),
+  );
+}
+
 function formatStatusMap(statusMap) {
   return Object.entries(statusMap)
     .map(([name, status]) => `${name}=${status}`)
@@ -239,9 +262,22 @@ function buildAssertionResult({
           artifacts: normalizeArtifacts(report.dockerAcceptance.artifacts),
         }
       : null,
-    artifacts: normalizeArtifacts(report?.artifacts),
-    artifactNames: normalizeArtifacts(report?.artifactNames),
-    evidenceFileNames: normalizeArtifacts(report?.evidenceFileNames),
+    artifacts: normalizeArtifacts(
+      report?.artifacts || {
+        reportPath: path.resolve(reportPath),
+        assertionPath: path.resolve(assertionPath),
+      },
+    ),
+    artifactNames: normalizeArtifacts(report?.artifactNames || readSyntheticArtifactNames()),
+    evidenceFileNames: normalizeArtifacts(
+      report?.evidenceFileNames ||
+        deriveEvidenceFileNamesFromArtifacts(
+          report?.artifacts || {
+            reportPath: path.resolve(reportPath),
+            assertionPath: path.resolve(assertionPath),
+          },
+        ),
+    ),
     failureDetails,
     error,
   };

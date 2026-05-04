@@ -187,6 +187,10 @@ test("assert-release-verification-report preserves workflow context when the rep
     assertion.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
   );
+  assert.equal(assertion.artifacts.reportPath, path.resolve(reportPath));
+  assert.equal(assertion.artifacts.assertionPath, path.resolve(assertionPath));
+  assert.equal(assertion.evidenceFileNames.reportPath, "missing-release-verification-report.json");
+  assert.equal(assertion.evidenceFileNames.assertionPath, "release-verification-assertion.json");
 });
 
 test("assert-release-verification-report can skip step summary output when requested", () => {
@@ -314,7 +318,10 @@ test("assert-release-verification-report fails unhealthy rollups with helpful de
   assert.ok(assertion.failureDetails.some((detail) => /tarball smoke artifacts:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance details:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance artifacts:/i.test(detail)));
-  assert.deepEqual(assertion.evidenceFileNames, {});
+  assert.deepEqual(assertion.evidenceFileNames, {
+    reportPath: "release-verification-report.json",
+    assertionPath: "release-verification-assertion.json",
+  });
   assert.match(summary, /Outcome: `failed`/i);
   assert.match(summary, /Failure details:/i);
   assert.match(summary, /package problems: missing bin\/equip\.js; unexpected src\/ fixture/i);
@@ -366,9 +373,47 @@ test("assert-release-verification-report reports missing component artifacts cle
   });
   assert.equal(assertion.package.missingReason, "pack verification artifact missing");
   assert.equal(assertion.dockerAcceptance.missingReason, "docker acceptance artifact missing");
-  assert.deepEqual(assertion.evidenceFileNames, {});
+  assert.deepEqual(assertion.evidenceFileNames, {
+    reportPath: "release-verification-report.json",
+    assertionPath: "release-verification-assertion.json",
+  });
   assert.ok(assertion.failureDetails.some((detail) => /package missing:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance missing:/i.test(detail)));
+});
+
+test("assert-release-verification-report preserves synthetic artifact metadata when the report is missing", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
+  const reportPath = path.join(root, "missing-release-verification-report.json");
+  const assertionPath = path.join(root, "release-verification-assertion.json");
+
+  const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
+    RELEASE_VERIFICATION_REPORT_PATH: reportPath,
+    RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+    RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME: "release-bootstrap",
+    RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: "release-preflight",
+    PACK_VERIFICATION_ARTIFACT_NAME: "pack-verification",
+    PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
+    PACK_INSTALL_SMOKE_ARTIFACT_NAME: "pack-install-smoke",
+    DOCKER_ACCEPTANCE_ARTIFACT_NAME: "docker-acceptance",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
+    RELEASE_VERIFICATION_ASSERTION_ARTIFACT_NAME: "release-verification-assertion",
+    RELEASE_VERIFICATION_SUMMARY_ARTIFACT_NAME: "release-verification-summary",
+    ...createWorkflowEnv(),
+  });
+
+  assert.notEqual(result.status, 0);
+  const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  assert.equal(assertion.artifactNames.releaseBootstrap, "release-bootstrap");
+  assert.equal(assertion.artifactNames.releasePreflight, "release-preflight");
+  assert.equal(assertion.artifactNames.packVerification, "pack-verification");
+  assert.equal(assertion.artifactNames.packTarball, "pack-tarball");
+  assert.equal(assertion.artifactNames.packInstallSmoke, "pack-install-smoke");
+  assert.equal(assertion.artifactNames.dockerAcceptance, "docker-acceptance");
+  assert.equal(assertion.artifactNames.report, "release-verification-report");
+  assert.equal(assertion.artifactNames.assertion, "release-verification-assertion");
+  assert.equal(assertion.artifactNames.summary, "release-verification-summary");
+  assert.equal(assertion.evidenceFileNames.reportPath, "missing-release-verification-report.json");
+  assert.equal(assertion.evidenceFileNames.assertionPath, "release-verification-assertion.json");
 });
 
 test("assert-release-verification-report reports skipped component artifacts clearly", () => {
@@ -419,7 +464,10 @@ test("assert-release-verification-report reports skipped component artifacts cle
   assert.match(assertion.package.skippedReason, /release preflight did not pass/i);
   assert.match(assertion.tarballSmoke.skippedReason, /release preflight did not pass/i);
   assert.match(assertion.dockerAcceptance.skippedReason, /release preflight did not pass/i);
-  assert.deepEqual(assertion.evidenceFileNames, {});
+  assert.deepEqual(assertion.evidenceFileNames, {
+    reportPath: "release-verification-report.json",
+    assertionPath: "release-verification-assertion.json",
+  });
   assert.ok(assertion.failureDetails.some((detail) => /package skipped:/i.test(detail)));
   assert.ok(assertion.failureDetails.some((detail) => /docker acceptance skipped:/i.test(detail)));
 });
@@ -456,5 +504,8 @@ test("assert-release-verification-report defaults missing input state to false",
     hasTarballSmoke: false,
     hasDockerAcceptance: false,
   });
-  assert.deepEqual(assertion.evidenceFileNames, {});
+  assert.deepEqual(assertion.evidenceFileNames, {
+    reportPath: "release-verification-report.json",
+    assertionPath: "release-verification-assertion.json",
+  });
 });
