@@ -76,10 +76,12 @@ export interface RegistryDef {
   displayName?: string;
   title: string;
   description: string;
+  primaryCategory?: string;
   homepage?: string;
   repository?: string;
   license?: string;
   categories?: string[];
+  tags?: string[];
 
   installMode: "direct" | "package";
   installCount?: number;
@@ -123,6 +125,7 @@ export interface RegistryDef {
   rarity?: "common" | "uncommon" | "rare" | "epic" | "legendary";
   subtitle?: string;
   flavorText?: string;
+  iconUrl?: string;
   baseWeight?: number;
   loadedWeight?: number;
   verifiedInstallCount?: number;
@@ -253,11 +256,23 @@ async function fetchRegistryDefFromApi(
       // and surface the divergence as a warning. `EQUIP_TEST_SKIP_HASH_VERIFY=1`
       // suppresses the warning entirely for integration tests.
       if (def.contentHash && process.env.EQUIP_TEST_SKIP_HASH_VERIFY !== "1") {
-        const { computeContentHash, extractManifest } = await import("./content-hash.js");
-        const computed = computeContentHash(extractManifest(def));
+        const {
+          computeContentHash,
+          computeContentHashV2,
+          computeContentHashV3,
+          extractManifest,
+          extractManifestV2,
+          extractManifestV3,
+        } = await import("./content-hash.js");
+        const algorithm = (def.hashAlgorithm || "sha256-v1").toLowerCase();
+        const computed = algorithm === "sha256-v3"
+          ? computeContentHashV3(extractManifestV3(def))
+          : algorithm === "sha256-v2"
+            ? computeContentHashV2(extractManifestV2(def))
+            : computeContentHash(extractManifest(def));
         if (computed !== def.contentHash) {
           logger.warn("Registry content hash mismatch (non-blocking)", {
-            name, expected: def.contentHash, computed, version: def.version,
+            name, expected: def.contentHash, computed, version: def.version, hashAlgorithm: def.hashAlgorithm,
           });
         }
       }

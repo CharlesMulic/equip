@@ -50,11 +50,20 @@ export interface ResolvedAugment {
 
   // ── Effective content (mod-composed) ──
   title: string;
+  subtitle?: string;
   description: string;
+  flavorText?: string;
+  categories?: string[];
+  primaryCategory?: string;
+  tags?: string[];
+  homepage?: string;
+  repository?: string;
+  license?: string;
   transport?: "http" | "stdio";
   serverUrl?: string;
-  stdio?: { command: string; args: string[] };
+  stdio?: { command: string; args: string[]; envKey?: string };
   requiresAuth: boolean;
+  auth?: Record<string, unknown>;
   rules?: { content: string; version: string; marker: string };
   skills: { name: string; files: { path: string; content: string }[] }[];
   hooks: { event: string; matcher?: string; script: string; name: string }[];
@@ -242,11 +251,20 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
   return {
     name: state.name,
     title: content.title,
+    subtitle: content.subtitle,
     description: content.description,
+    flavorText: content.flavorText,
+    categories: content.categories,
+    primaryCategory: content.primaryCategory,
+    tags: content.tags,
+    homepage: content.homepage,
+    repository: content.repository,
+    license: content.license,
     transport: content.transport,
     serverUrl: content.serverUrl,
     stdio: content.stdio,
     requiresAuth: content.requiresAuth ?? false,
+    auth: content.auth,
     rules,
     skills,
     hooks,

@@ -19,7 +19,7 @@ export interface ContentManifest {
  * Compute the **v1** content hash for an augment definition.
  * SHA-256 of a canonical JSON array of security-relevant fields.
  * Retained for backward compat during the v1→v2 backfill window —
- * new publish / update code paths should use [computeContentHashV2].
+ * new publish / update code paths should use computeContentHashV3.
  */
 export function computeContentHash(manifest: ContentManifest): string {
   const canonical = JSON.stringify([
@@ -97,6 +97,49 @@ export function computeContentHashV2(manifest: ContentManifestV2): string {
 }
 
 /**
+ * v3 adds the runtime auth contract to v2. Auth-only registry updates
+ * must change contentHash so /updates/check can move installed clients
+ * onto the right credential behavior.
+ */
+export interface ContentManifestV3 extends ContentManifestV2 {
+  requiresAuth: boolean;
+  authConfig: unknown | null;
+}
+
+export function computeContentHashV3(manifest: ContentManifestV3): string {
+  const sortedCategories = manifest.categories
+    ? [...manifest.categories].sort()
+    : null;
+  const sortedTags = manifest.tags
+    ? [...manifest.tags].sort()
+    : null;
+
+  const canonical = JSON.stringify([
+    manifest.rulesContent,
+    manifest.rulesMarker,
+    manifest.skills ? normalizeSkills(manifest.skills) : null,
+    manifest.hooks,
+    manifest.serverUrl,
+    manifest.stdioCommand,
+    manifest.stdioArgs,
+    manifest.transport,
+    manifest.title,
+    manifest.description,
+    manifest.subtitle,
+    manifest.flavorText,
+    manifest.primaryCategory,
+    sortedCategories,
+    sortedTags,
+    manifest.homepage,
+    manifest.repository,
+    manifest.iconUrl,
+    manifest.requiresAuth,
+    manifest.requiresAuth ? canonicalizeJson(manifest.authConfig) : null,
+  ]);
+  return crypto.createHash("sha256").update(canonical).digest("hex");
+}
+
+/**
  * Extract a ContentManifest from a RegistryDef-like object.
  * Works with both the registry API response and the local AugmentDef.
  */
@@ -127,6 +170,51 @@ export function extractManifest(def: {
   };
 }
 
+export function extractManifestV2(def: {
+  rules?: { content: string; marker: string } | null;
+  skills?: { name: string; files: { path: string; content: string }[] }[] | null;
+  hooks?: unknown[] | null;
+  serverUrl?: string | null;
+  stdioCommand?: string | null;
+  stdioArgs?: string[] | null;
+  transport?: string | null;
+  title?: string | null;
+  description?: string | null;
+  subtitle?: string | null;
+  flavorText?: string | null;
+  primaryCategory?: string | null;
+  categories?: string[] | null;
+  tags?: string[] | null;
+  homepage?: string | null;
+  repository?: string | null;
+  iconUrl?: string | null;
+}): ContentManifestV2 {
+  return {
+    ...extractManifest(def),
+    title: def.title ?? null,
+    description: def.description ?? null,
+    subtitle: def.subtitle ?? null,
+    flavorText: def.flavorText ?? null,
+    primaryCategory: def.primaryCategory ?? null,
+    categories: def.categories && def.categories.length > 0 ? def.categories : null,
+    tags: def.tags && def.tags.length > 0 ? def.tags : null,
+    homepage: def.homepage ?? null,
+    repository: def.repository ?? null,
+    iconUrl: def.iconUrl ?? null,
+  };
+}
+
+export function extractManifestV3(def: Parameters<typeof extractManifestV2>[0] & {
+  requiresAuth?: boolean | null;
+  auth?: unknown | null;
+}): ContentManifestV3 {
+  return {
+    ...extractManifestV2(def),
+    requiresAuth: def.requiresAuth ?? false,
+    authConfig: def.auth ?? null,
+  };
+}
+
 /**
  * Normalize skills JSON for deterministic hashing.
  * Sorts skills by name, files within each skill by path.
@@ -146,4 +234,20 @@ function normalizeSkills(skillsJson: string): string {
   } catch {
     return skillsJson;
   }
+}
+
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeJson);
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.keys(record)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = canonicalizeJson(record[key]);
+        return acc;
+      }, {});
+  }
+  return value ?? null;
 }

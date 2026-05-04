@@ -3,7 +3,12 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { computeContentHash, computeContentHashV2, extractManifest } = require("../dist/lib/content-hash");
+const {
+  computeContentHash,
+  computeContentHashV2,
+  computeContentHashV3,
+  extractManifest,
+} = require("../dist/lib/content-hash");
 
 // ─── Shared test vectors ────────────────────────────────────
 // These MUST match the Kotlin ContentHashServiceTest exactly.
@@ -237,6 +242,59 @@ describe("computeContentHashV2 — lockstep with Kotlin", () => {
     };
     const reordered = { ...base, tags: ["mcp", "knowledge", "reviewed"] };
     assert.equal(computeContentHashV2(base), computeContentHashV2(reordered));
+  });
+});
+
+describe("computeContentHashV3 - lockstep with Kotlin", () => {
+  it("golden vector matches Kotlin ContentHashServiceTest", () => {
+    const hash = computeContentHashV3({
+      rulesContent: "rules body",
+      rulesMarker: "marker-1",
+      skills: null,
+      hooks: null,
+      serverUrl: "https://example.test/mcp",
+      stdioCommand: null,
+      stdioArgs: null,
+      transport: "http",
+      title: "Test Augment",
+      description: "A Phase 4 test augment",
+      subtitle: null,
+      flavorText: null,
+      primaryCategory: "productivity",
+      categories: ["productivity", "dev"],
+      tags: ["knowledge", "reviewed"],
+      homepage: "https://example.test",
+      repository: "https://github.com/example/test",
+      iconUrl: null,
+      requiresAuth: true,
+      authConfig: {
+        type: "oidc",
+        audience: "https://example.test/mcp",
+        scopes: ["mcp:tools.read"],
+      },
+    });
+    assert.equal(
+      hash,
+      "e0bd887ba42eb84935a22de460cb95d2aa0b8633c6151aa2afece924df9b50c4",
+    );
+  });
+
+  it("auth config mutation changes the v3 hash", () => {
+    const base = {
+      rulesContent: "body", rulesMarker: null, skills: null, hooks: null,
+      serverUrl: "https://example.test/mcp", stdioCommand: null, stdioArgs: null, transport: "http",
+      title: "T", description: null, subtitle: null, flavorText: null,
+      primaryCategory: null, categories: null,
+      tags: null,
+      homepage: null, repository: null, iconUrl: null,
+      requiresAuth: true,
+      authConfig: { type: "oidc", audience: "https://example.test/mcp" },
+    };
+    const changed = {
+      ...base,
+      authConfig: { type: "oidc", audience: "https://other.example/mcp" },
+    };
+    assert.notEqual(computeContentHashV3(base), computeContentHashV3(changed));
   });
 });
 

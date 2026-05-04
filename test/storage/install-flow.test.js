@@ -137,6 +137,55 @@ test("multi-platform install: one intent records all target platforms", async ()
   assert.equal(resolved.installed, true);
 });
 
+test("materializer preserves auth and publisher metadata from content blobs", async () => {
+  await freshHome();
+  const { JsonStore } = datastoreMod;
+
+  const auth = {
+    type: "oidc",
+    audience: "https://secure.example/mcp",
+    scopes: ["mcp:tools.read"],
+  };
+  const contentHash = JsonStore.putContent({
+    name: "secure-remote",
+    title: "Secure Remote",
+    subtitle: "Private tools",
+    description: "Requires delegated auth",
+    flavorText: "Good locks, good doors.",
+    transport: "http",
+    serverUrl: "https://secure.example/mcp",
+    requiresAuth: true,
+    auth,
+    primaryCategory: "productivity",
+    categories: ["productivity"],
+    tags: ["remote-mcp", "auth"],
+    homepage: "https://secure.example",
+    repository: "https://github.com/example/secure-remote",
+    license: "MIT",
+  });
+  JsonStore.appendIntent({
+    type: "install-augment",
+    clock: JsonStore.newClock(),
+    name: "secure-remote",
+    contentHash,
+    contentSource: { kind: "registry", version: 1, etag: "secure", fetchedAt: "2026-05-04T00:00:00.000Z" },
+    platforms: ["codex"],
+  });
+
+  const resolved = JsonStore.resolve("secure-remote");
+  assert.ok(resolved);
+  assert.equal(resolved.requiresAuth, true);
+  assert.deepEqual(resolved.auth, auth);
+  assert.equal(resolved.subtitle, "Private tools");
+  assert.equal(resolved.flavorText, "Good locks, good doors.");
+  assert.equal(resolved.primaryCategory, "productivity");
+  assert.deepEqual(resolved.categories, ["productivity"]);
+  assert.deepEqual(resolved.tags, ["remote-mcp", "auth"]);
+  assert.equal(resolved.homepage, "https://secure.example");
+  assert.equal(resolved.repository, "https://github.com/example/secure-remote");
+  assert.equal(resolved.license, "MIT");
+});
+
 test("partial uninstall: remove from one platform leaves others installed", async () => {
   await freshHome();
   const { JsonStore } = datastoreMod;
