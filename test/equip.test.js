@@ -3,7 +3,7 @@
 
 "use strict";
 
-const { describe, it } = require("node:test");
+const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("path");
 const os = require("os");
@@ -2104,6 +2104,73 @@ describe("auth checking", () => {
 describe("config migration", () => {
   const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
   const { getPlatform } = require("../dist/lib/platforms");
+  let originalHome;
+  let tempHome;
+  let originalEnv;
+
+  function setupHermeticHome() {
+    originalHome = os.homedir;
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-migrate-home-"));
+    originalEnv = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+      APPDATA: process.env.APPDATA,
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      HOMEDRIVE: process.env.HOMEDRIVE,
+      HOMEPATH: process.env.HOMEPATH,
+      CODEX_HOME: process.env.CODEX_HOME,
+    };
+
+    const homeRoot = path.parse(tempHome).root;
+    const windowsHomePath = process.platform === "win32"
+      ? tempHome.slice(homeRoot.length - 1)
+      : undefined;
+
+    os.homedir = () => tempHome;
+    process.env.HOME = tempHome;
+    process.env.USERPROFILE = tempHome;
+    process.env.APPDATA = path.join(tempHome, "AppData", "Roaming");
+    process.env.LOCALAPPDATA = path.join(tempHome, "AppData", "Local");
+    process.env.CODEX_HOME = path.join(tempHome, ".codex");
+    if (process.platform === "win32") {
+      process.env.HOMEDRIVE = homeRoot.replace(/[\\\/]+$/, "");
+      process.env.HOMEPATH = windowsHomePath;
+    } else {
+      delete process.env.HOMEDRIVE;
+      delete process.env.HOMEPATH;
+    }
+
+    fs.mkdirSync(path.join(tempHome, ".claude"), { recursive: true });
+    fs.mkdirSync(path.join(tempHome, ".cursor"), { recursive: true });
+    fs.mkdirSync(path.join(process.env.APPDATA, "Code", "User"), { recursive: true });
+    fs.mkdirSync(path.join(tempHome, ".copilot"), { recursive: true });
+    fs.mkdirSync(process.env.CODEX_HOME, { recursive: true });
+    fs.mkdirSync(path.join(tempHome, ".equip"), { recursive: true });
+  }
+
+  function teardownHermeticHome() {
+    os.homedir = originalHome;
+
+    if (originalEnv.HOME === undefined) delete process.env.HOME;
+    else process.env.HOME = originalEnv.HOME;
+    if (originalEnv.USERPROFILE === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = originalEnv.USERPROFILE;
+    if (originalEnv.APPDATA === undefined) delete process.env.APPDATA;
+    else process.env.APPDATA = originalEnv.APPDATA;
+    if (originalEnv.LOCALAPPDATA === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = originalEnv.LOCALAPPDATA;
+    if (originalEnv.HOMEDRIVE === undefined) delete process.env.HOMEDRIVE;
+    else process.env.HOMEDRIVE = originalEnv.HOMEDRIVE;
+    if (originalEnv.HOMEPATH === undefined) delete process.env.HOMEPATH;
+    else process.env.HOMEPATH = originalEnv.HOMEPATH;
+    if (originalEnv.CODEX_HOME === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalEnv.CODEX_HOME;
+
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+
+  beforeEach(setupHermeticHome);
+  afterEach(teardownHermeticHome);
 
   // Helper: write a config file to the platform's canonical path and track it,
   // then run migration. Backs up and restores the original config.
