@@ -22,6 +22,42 @@ function tmpPath(prefix = "obs-test") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 }
 
+function setHermeticHome(prefix = "obs-home") {
+  const originalHome = os.homedir;
+  const originalEnv = {
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+    APPDATA: process.env.APPDATA,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+    CODEX_HOME: process.env.CODEX_HOME,
+    HOMEDRIVE: process.env.HOMEDRIVE,
+    HOMEPATH: process.env.HOMEPATH,
+  };
+
+  const homeDir = tmpPath(prefix);
+  const root = path.parse(homeDir).root;
+  process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir;
+  process.env.APPDATA = path.join(homeDir, "AppData", "Roaming");
+  process.env.LOCALAPPDATA = path.join(homeDir, "AppData", "Local");
+  process.env.CODEX_HOME = path.join(homeDir, ".codex");
+  process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
+  process.env.HOMEPATH = homeDir.slice(root.length - 1);
+  os.homedir = () => homeDir;
+
+  return {
+    homeDir,
+    restore() {
+      os.homedir = originalHome;
+      for (const [key, value] of Object.entries(originalEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    },
+  };
+}
+
 function mockPlatform(overrides = {}) {
   return {
     platform: "claude-code",
@@ -193,33 +229,28 @@ describe("Blind spot #2: installMcpJson error handling", () => {
 
 describe("Blind spot #3: settings.json corrupt detection", () => {
   it("returns SETTINGS_CORRUPT instead of overwriting corrupt settings", () => {
+    const hermetic = setHermeticHome("obs-hooks-home");
     const hookDir = tmpPath("hooks-corrupt-test");
-    const settingsDir = tmpPath("settings-dir");
-    fs.mkdirSync(settingsDir, { recursive: true });
-    const settingsPath = path.join(settingsDir, "settings.json");
+    const settingsPath = path.join(hermetic.homeDir, ".claude", "settings.json");
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
 
     // Write corrupt settings
     fs.writeFileSync(settingsPath, "this is not json %%%");
 
-    // Mock claude-code platform that points to our test settings
-    // We need to call installHooks directly with the hook defs
     const hookDefs = [{ event: "PostToolUse", script: "// hook", name: "test-hook" }];
     const p = mockPlatform({ platform: "claude-code" });
-
-    // installHooks uses caps.settingsPath() from the platform registry,
-    // which points to real ~/.claude/settings.json. We can't easily override that,
-    // so this test verifies the safeReadJsonSync pattern works correctly.
-    // Instead, test safeReadJsonSync directly:
-    const readResult = safeReadJsonSync(settingsPath);
-    assert.equal(readResult.status, "corrupt");
-    assert.ok(readResult.error.includes("Invalid JSON"));
+    const result = installHooks(p, hookDefs, { hookDir });
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "SETTINGS_CORRUPT");
+    assert.ok(result.error.includes("corrupt"));
+    assert.deepEqual(result.scripts, ["test-hook.js"]);
+    assert.equal(result.hookDir, hookDir);
 
     // Verify the corrupt file was NOT changed
     assert.equal(fs.readFileSync(settingsPath, "utf-8"), "this is not json %%%");
 
-    cleanup(settingsPath);
-    try { fs.rmdirSync(settingsDir); } catch {}
     try { fs.rmSync(hookDir, { recursive: true, force: true }); } catch {}
+    hermetic.restore();
   });
 });
 
@@ -258,12 +289,8 @@ describe("Blind spot #4: TOML read failure handling", () => {
 
 describe("Blind spot #5: corrupt installations.json", () => {
   it("returns empty installations on corrupt file", () => {
-    const os = require("os");
-    const statePath = path.join(os.homedir(), ".equip", "installations.json");
-
-    // Save current state
-    let originalContent = null;
-    try { originalContent = fs.readFileSync(statePath, "utf-8"); } catch {}
+    const hermetic = setHermeticHome("obs-installations-home");
+    const statePath = path.join(hermetic.homeDir, ".equip", "installations.json");
 
     // Write corrupt state
     const dir = path.dirname(statePath);
@@ -275,13 +302,8 @@ describe("Blind spot #5: corrupt installations.json", () => {
     assert.equal(inst.lastUpdated, "");
     assert.deepEqual(inst.augments, {});
 
-    // Restore original state
-    if (originalContent) {
-      fs.writeFileSync(statePath, originalContent);
-    } else {
-      try { fs.unlinkSync(statePath); } catch {}
-    }
     try { fs.unlinkSync(statePath + ".corrupt.bak"); } catch {}
+    hermetic.restore();
   });
 });
 
