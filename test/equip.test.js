@@ -1250,6 +1250,44 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
   const hookDefs = [
     { event: "PostToolUse", script: "// test hook\nconsole.log('hook ran');", name: "test-hook" },
   ];
+  let originalHome;
+  let originalEnv;
+  let tempHome;
+
+  beforeEach(() => {
+    originalHome = os.homedir;
+    originalEnv = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+      APPDATA: process.env.APPDATA,
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      CODEX_HOME: process.env.CODEX_HOME,
+      HOMEDRIVE: process.env.HOMEDRIVE,
+      HOMEPATH: process.env.HOMEPATH,
+    };
+
+    tempHome = tmpPath("hooks-home");
+    const root = path.parse(tempHome).root;
+    process.env.HOME = tempHome;
+    process.env.USERPROFILE = tempHome;
+    process.env.APPDATA = path.join(tempHome, "AppData", "Roaming");
+    process.env.LOCALAPPDATA = path.join(tempHome, "AppData", "Local");
+    process.env.CODEX_HOME = path.join(tempHome, ".codex");
+    process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
+    process.env.HOMEPATH = tempHome.slice(root.length - 1);
+    os.homedir = () => tempHome;
+
+    fs.mkdirSync(path.join(tempHome, ".claude"), { recursive: true });
+  });
+
+  afterEach(() => {
+    os.homedir = originalHome;
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  });
 
   it("installs hook scripts and registers in settings", () => {
     const hookDir = tmpPath("hooks-install");
@@ -1267,9 +1305,11 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
     assert.ok(fs.existsSync(scriptPath));
     assert.ok(fs.readFileSync(scriptPath, "utf-8").includes("hook ran"));
 
-    // IMPORTANT: uninstall hooks from real settings.json to avoid polluting
-    // the user's Claude Code config. installHooks writes to the real
-    // ~/.claude/settings.json because the platform registry returns it.
+    const settingsPath = path.join(tempHome, ".claude", "settings.json");
+    assert.ok(fs.existsSync(settingsPath), "settings.json should be written in the hermetic Claude home");
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(settings.hooks?.PostToolUse?.length, "hook registration should be present");
+
     uninstallHooks(p, hookDefs, { hookDir });
     fs.rmSync(hookDir, { recursive: true, force: true });
   });
@@ -1292,11 +1332,23 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
     const hookDir = tmpPath("hooks-uninstall");
     fs.mkdirSync(hookDir, { recursive: true });
     fs.writeFileSync(path.join(hookDir, "test-hook.js"), "// hook");
+    fs.writeFileSync(
+      path.join(tempHome, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PostToolUse: [{
+            hooks: [{ type: "command", command: `node "${path.join(hookDir, "test-hook.js")}"` }],
+          }],
+        },
+      }, null, 2),
+    );
 
     const p = mockPlatform({ platform: "claude-code" });
     const removed = uninstallHooks(p, hookDefs, { hookDir });
     assert.ok(removed);
     assert.ok(!fs.existsSync(path.join(hookDir, "test-hook.js")));
+    const settings = JSON.parse(fs.readFileSync(path.join(tempHome, ".claude", "settings.json"), "utf-8"));
+    assert.equal(settings.hooks, undefined);
   });
 
   it("uninstallHooks returns false for unsupported platform", () => {
