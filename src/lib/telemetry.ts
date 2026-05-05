@@ -44,6 +44,12 @@ export const COUNTER_NAMES = {
   BROKER_REQUEST_TOTAL: "equip_broker_request_total",
   /** Broker proxy sessions, by lifecycle result. Emitted from equip-app broker proxy. */
   BROKER_PROXY_TOTAL: "equip_broker_proxy_total",
+  /** Broker proxy failures, by closed-set reason. Emitted from equip-app broker proxy. */
+  BROKER_PROXY_FAILURE_TOTAL: "equip_broker_proxy_failure_total",
+  /** Broker proxy session duration buckets. Encoded as counters until a histogram layer exists. */
+  BROKER_PROXY_LATENCY_BUCKET_TOTAL: "equip_broker_proxy_latency_bucket_total",
+  /** Broker startup prewarm attempts. Emitted from equip-app broker daemon. */
+  BROKER_PREWARM_TOTAL: "equip_broker_prewarm_total",
   /** Equip MCP installs, by mode + platform. Emitted from install.ts via the port. */
   INSTALL_MODE_TOTAL: "equip_install_mode_total",
   /** Cache-store reads, by freshness outcome. Emitted from cache-store.ts. */
@@ -64,6 +70,31 @@ export const COUNTER_LABELS = {
   },
   [COUNTER_NAMES.BROKER_PROXY_TOTAL]: {
     result: ["accepted", "success", "rejected", "failed"] as const,
+  },
+  [COUNTER_NAMES.BROKER_PROXY_FAILURE_TOTAL]: {
+    reason: [
+      "augment_not_managed",
+      "concurrency_cap",
+      "http_upstream_url_disallowed",
+      "augment_no_credentials",
+      "refresh_failed",
+      "http_upstream_connect_failed",
+      "http_upstream_proxy_failed",
+      "manifest_not_found",
+      "manifest_invalid",
+      "manifest_unsupported_transport",
+      "bridge_protocol_error",
+      "bridge_disconnected",
+      "unknown",
+    ] as const,
+  },
+  [COUNTER_NAMES.BROKER_PROXY_LATENCY_BUCKET_TOTAL]: {
+    result: ["success", "failed"] as const,
+    bucket: ["le_100_ms", "le_500_ms", "le_1000_ms", "le_5000_ms", "gt_5000_ms"] as const,
+  },
+  [COUNTER_NAMES.BROKER_PREWARM_TOTAL]: {
+    kind: ["token_refresh", "dns"] as const,
+    result: ["success", "failed", "skipped"] as const,
   },
   [COUNTER_NAMES.INSTALL_MODE_TOTAL]: {
     mode: ["direct", "broker"] as const,

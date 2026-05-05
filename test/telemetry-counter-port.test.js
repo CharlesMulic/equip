@@ -29,9 +29,13 @@ describe("Counter port contract", () => {
 });
 
 describe("Counter name constants", () => {
-  it("declares the three counters wired in this package", () => {
+  it("declares the broker/install counters wired across equip and equip-app", () => {
     assert.equal(COUNTER_NAMES.BROKER_REFRESH_TOTAL, "equip_broker_refresh_total");
     assert.equal(COUNTER_NAMES.BROKER_REQUEST_TOTAL, "equip_broker_request_total");
+    assert.equal(COUNTER_NAMES.BROKER_PROXY_TOTAL, "equip_broker_proxy_total");
+    assert.equal(COUNTER_NAMES.BROKER_PROXY_FAILURE_TOTAL, "equip_broker_proxy_failure_total");
+    assert.equal(COUNTER_NAMES.BROKER_PROXY_LATENCY_BUCKET_TOTAL, "equip_broker_proxy_latency_bucket_total");
+    assert.equal(COUNTER_NAMES.BROKER_PREWARM_TOTAL, "equip_broker_prewarm_total");
     assert.equal(COUNTER_NAMES.INSTALL_MODE_TOTAL, "equip_install_mode_total");
   });
 
@@ -63,10 +67,28 @@ describe("Closed-set label values", () => {
     ]);
   });
 
-  it("INSTALL_MODE_TOTAL has mode label with closed enum and no platform enum (registry-driven)", () => {
+  it("INSTALL_MODE_TOTAL has mode label with closed enum and no platform enum", () => {
     const labels = COUNTER_LABELS[COUNTER_NAMES.INSTALL_MODE_TOTAL];
     assert.deepEqual(labels.mode, ["direct", "broker"]);
-    // platform is intentionally not enumerated here — see telemetry.ts.
     assert.equal(labels.platform, undefined);
+  });
+
+  it("BROKER_PROXY_FAILURE_TOTAL has reason label with closed enum", () => {
+    const labels = COUNTER_LABELS[COUNTER_NAMES.BROKER_PROXY_FAILURE_TOTAL];
+    assert.ok(labels.reason.includes("http_upstream_url_disallowed"));
+    assert.ok(labels.reason.includes("bridge_disconnected"));
+    assert.ok(labels.reason.includes("unknown"));
+  });
+
+  it("BROKER_PROXY_LATENCY_BUCKET_TOTAL has result and bucket labels", () => {
+    const labels = COUNTER_LABELS[COUNTER_NAMES.BROKER_PROXY_LATENCY_BUCKET_TOTAL];
+    assert.deepEqual(labels.result, ["success", "failed"]);
+    assert.deepEqual(labels.bucket, ["le_100_ms", "le_500_ms", "le_1000_ms", "le_5000_ms", "gt_5000_ms"]);
+  });
+
+  it("BROKER_PREWARM_TOTAL has kind and result labels", () => {
+    const labels = COUNTER_LABELS[COUNTER_NAMES.BROKER_PREWARM_TOTAL];
+    assert.deepEqual(labels.kind, ["token_refresh", "dns"]);
+    assert.deepEqual(labels.result, ["success", "failed", "skipped"]);
   });
 });
