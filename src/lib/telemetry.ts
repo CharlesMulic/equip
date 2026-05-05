@@ -42,6 +42,8 @@ export const COUNTER_NAMES = {
   BROKER_REFRESH_TOTAL: "equip_broker_refresh_total",
   /** Broker IPC server requests, by method. Emitted from ipc-server.ts. */
   BROKER_REQUEST_TOTAL: "equip_broker_request_total",
+  /** Broker proxy sessions, by lifecycle result. Emitted from equip-app broker proxy. */
+  BROKER_PROXY_TOTAL: "equip_broker_proxy_total",
   /** Equip MCP installs, by mode + platform. Emitted from install.ts via the port. */
   INSTALL_MODE_TOTAL: "equip_install_mode_total",
   /** Cache-store reads, by freshness outcome. Emitted from cache-store.ts. */
@@ -59,6 +61,9 @@ export const COUNTER_LABELS = {
   },
   [COUNTER_NAMES.BROKER_REQUEST_TOTAL]: {
     path: ["getStatus", "getCredential", "triggerRefresh", "listManagedAugments"] as const,
+  },
+  [COUNTER_NAMES.BROKER_PROXY_TOTAL]: {
+    result: ["accepted", "success", "rejected", "failed"] as const,
   },
   [COUNTER_NAMES.INSTALL_MODE_TOTAL]: {
     mode: ["direct", "broker"] as const,
