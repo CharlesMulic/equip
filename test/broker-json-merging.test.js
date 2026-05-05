@@ -37,7 +37,7 @@ function mockJsonPlatform(platformId, configPath) {
 
 function cleanup(p) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
 
-const SHIM_BIN = "/opt/equip/bin/equip-broker-shim";
+const BRIDGE_BIN = "/opt/equip/bin/equip-broker-fd-bridge";
 
 const PRE_EXISTING_JSON = JSON.stringify({
   mcpServers: {
@@ -64,7 +64,7 @@ function runPreserveTest(platformId) {
 
   const p = mockJsonPlatform(platformId, configPath);
   const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
-  const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+  const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
   assert.equal(result.success, true, `${platformId}: install must succeed`);
 
@@ -86,7 +86,7 @@ function runPreserveTest(platformId) {
   // The new broker entry must be there with the canonical shape.
   const ours = config.mcpServers["stub-broker-augment"];
   assert.ok(ours, `${platformId}: broker entry must be present`);
-  assert.equal(ours.command, SHIM_BIN);
+  assert.equal(ours.command, BRIDGE_BIN);
   assert.deepEqual(Object.keys(ours).sort(), ["args", "command"], `${platformId}: only command + args`);
 
   cleanup(configPath);
@@ -111,7 +111,7 @@ describe("installMcpBroker preserves pre-existing JSON entries", () => {
       const p = mockJsonPlatform("claude-code", configPath);
       const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
 
-      augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+      augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
       setupInstalledAugment("stub-broker-augment", {
         source: "registry",
         title: "Stub Broker Augment",
@@ -119,14 +119,14 @@ describe("installMcpBroker preserves pre-existing JSON entries", () => {
         platforms: ["claude-code"],
       });
 
-      const newShim = "/Library/equip/bin/equip-broker-shim";
-      const r2 = augment.installMcpBroker(p, { shimBinaryPath: newShim });
+      const newBridge = "/Library/equip/bin/equip-broker-fd-bridge";
+      const r2 = augment.installMcpBroker(p, { bridgeBinaryPath: newBridge });
       assert.equal(r2.success, true, `reinstall must succeed; got: ${r2.error}`);
 
       const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
       assert.ok(config.mcpServers["user-github"]);
       assert.ok(config.mcpServers["user-notes"]);
-      assert.equal(config.mcpServers["stub-broker-augment"].command, newShim);
+      assert.equal(config.mcpServers["stub-broker-augment"].command, newBridge);
 
       cleanup(configPath);
     } finally {
@@ -140,12 +140,12 @@ describe("installMcpBroker preserves pre-existing JSON entries", () => {
 
     const p = mockJsonPlatform("cursor", configPath);
     const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, true);
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     assert.equal(Object.keys(config.mcpServers).length, 1);
-    assert.equal(config.mcpServers["stub-broker-augment"].command, SHIM_BIN);
+    assert.equal(config.mcpServers["stub-broker-augment"].command, BRIDGE_BIN);
 
     cleanup(configPath);
   });
@@ -163,7 +163,7 @@ describe("installMcpBroker preserves pre-existing JSON entries", () => {
 
     const p = mockJsonPlatform("claude-code", configPath);
     const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, false);
     assert.equal(result.errorCode, "CONFIG_CONFLICT");
@@ -187,7 +187,7 @@ describe("installMcpBroker preserves pre-existing JSON entries", () => {
 
     const p = mockJsonPlatform("cursor", configPath);
     const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, false);
     assert.equal(result.errorCode, "CONFIG_CONFLICT");

@@ -3,7 +3,7 @@
 // Tests for Codex's writeBrokerConfig strategy hook.
 //
 // The hook produces a [mcp_servers.<name>] TOML entry that points at
-// equip-broker-shim. Bypass discipline:
+// equip-broker-fd-bridge. Bypass discipline:
 //   - command + args ONLY
 //   - NEVER bearer_token_env_var, scopes, oauth_resource (would trigger
 //     `codex mcp login` or OAuth discovery)
@@ -22,8 +22,8 @@ function callHook(opts) {
   assert.ok(typeof strat.writeBrokerConfig === "function", "writeBrokerConfig must be defined");
   return strat.writeBrokerConfig(opts.augmentName, {
     augmentName: opts.augmentName,
-    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip/bin/equip-broker-shim",
-    shimExtraArgs: opts.shimExtraArgs,
+    bridgeBinaryPath: opts.bridgeBinaryPath ?? "/opt/equip/bin/equip-broker-fd-bridge",
+    bridgeExtraArgs: opts.bridgeExtraArgs,
     loopbackUrl: opts.loopbackUrl,
   });
 }
@@ -37,9 +37,9 @@ describe("Codex writeBrokerConfig: shape", () => {
   it("entry.command points at the injected shim binary path", () => {
     const result = callHook({
       augmentName: "notion-mcp",
-      shimBinaryPath: "/Users/test/Library/equip/bin/equip-broker-shim",
+      bridgeBinaryPath: "/Users/test/Library/equip/bin/equip-broker-fd-bridge",
     });
-    assert.equal(result.entry.command, "/Users/test/Library/equip/bin/equip-broker-shim");
+    assert.equal(result.entry.command, "/Users/test/Library/equip/bin/equip-broker-fd-bridge");
   });
 
   it("entry.args includes --augment <name>", () => {
@@ -51,19 +51,19 @@ describe("Codex writeBrokerConfig: shape", () => {
     assert.equal(args[idx + 1], "notion-mcp");
   });
 
-  it("forwards shimExtraArgs after --shim --augment <name>", () => {
+  it("forwards bridgeExtraArgs after --augment <name>", () => {
     const result = callHook({
       augmentName: "notion-mcp",
-      shimExtraArgs: ["--log-level", "debug"],
+      bridgeExtraArgs: ["--log-level", "debug"],
     });
     const args = result.entry.args;
-    assert.deepEqual(args, ["--shim", "--augment", "notion-mcp", "--log-level", "debug"]);
+    assert.deepEqual(args, ["--augment", "notion-mcp", "--log-level", "debug"]);
   });
 
-  it("entry.args[0] is --shim (single-binary subcommand dispatch)", () => {
+  it("entry.args[0] is --augment (native bridge dispatch)", () => {
     const result = callHook({ augmentName: "notion-mcp" });
-    assert.equal(result.entry.args[0], "--shim",
-      "--shim selects shim mode in equip-sidecar dispatcher");
+    assert.equal(result.entry.args[0], "--augment",
+      "--augment selects the broker-managed augment for the native fd bridge");
   });
 
   it("returns a human-readable note for `equip doctor` output", () => {

@@ -1,12 +1,12 @@
 // Tests for Augment.installMcpBroker dispatch.
 //
 // Coverage:
-//   - happy path: Codex install via broker writes the broker-shim entry
+//   - happy path: Codex install via broker writes the broker bridge entry
 //   - Codex broker entry round-trips through readMcp with no OAuth keys
 //   - direct-mode installMcp on Codex still works unchanged (additive guarantee)
 //   - non-broker platform returns BROKER_NOT_SUPPORTED (caller falls back)
 //   - dry-run does not touch disk
-//   - shimExtraArgs are forwarded into the entry args
+//   - bridgeExtraArgs are forwarded into the entry args
 
 "use strict";
 
@@ -37,22 +37,22 @@ function mockCodexPlatform(overrides = {}) {
 
 function cleanup(p) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
 
-const SHIM_BIN = "/opt/equip/bin/equip-broker-shim";
+const BRIDGE_BIN = "/opt/equip/bin/equip-broker-fd-bridge";
 
 describe("Augment.installMcpBroker on Codex", () => {
-  it("writes a broker-shim entry to the platform config", () => {
+  it("writes a broker bridge entry to the platform config", () => {
     const p = mockCodexPlatform();
     cleanup(p.configPath);
 
     const augment = new Augment({ name: "stub-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, true);
     assert.equal(result.errorCode, undefined);
 
     const entry = augment.readMcp(p);
     assert.ok(entry, "broker entry must be readable after install");
-    assert.equal(entry.command, SHIM_BIN, "command must point at the injected shim binary");
+    assert.equal(entry.command, BRIDGE_BIN, "command must point at the injected shim binary");
     // TOML round-trips args as a string-formatted array literal; the
     // shape-of-args contract is enforced by the writer hook tests; here
     // we just verify the entry was written and has args.
@@ -66,7 +66,7 @@ describe("Augment.installMcpBroker on Codex", () => {
     cleanup(p.configPath);
 
     const augment = new Augment({ name: "stub-augment", serverUrl: "https://example.com/mcp" });
-    augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     // Read the actual TOML text to verify no oauth-shaped keys leaked into
     // disk via any hidden code path.
@@ -83,7 +83,7 @@ describe("Augment.installMcpBroker on Codex", () => {
     cleanup(p.configPath);
 
     const augment = new Augment({ name: "stub-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN, dryRun: true });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN, dryRun: true });
 
     assert.equal(result.success, true);
     assert.equal(fs.existsSync(p.configPath), false, "dry-run must not write the config file");
@@ -91,19 +91,19 @@ describe("Augment.installMcpBroker on Codex", () => {
     cleanup(p.configPath);
   });
 
-  it("forwards shimExtraArgs into the entry args", () => {
+  it("forwards bridgeExtraArgs into the entry args", () => {
     const p = mockCodexPlatform();
     cleanup(p.configPath);
 
     const augment = new Augment({ name: "stub-augment", serverUrl: "https://example.com/mcp" });
     augment.installMcpBroker(p, {
-      shimBinaryPath: SHIM_BIN,
-      shimExtraArgs: ["--log-level", "debug"],
+      bridgeBinaryPath: BRIDGE_BIN,
+      bridgeExtraArgs: ["--log-level", "debug"],
     });
 
     const tomlText = fs.readFileSync(p.configPath, "utf-8");
-    assert.ok(tomlText.includes("--log-level"), "shimExtraArgs must appear in the args list");
-    assert.ok(tomlText.includes("debug"), "shimExtraArgs values must appear");
+    assert.ok(tomlText.includes("--log-level"), "bridgeExtraArgs must appear in the args list");
+    assert.ok(tomlText.includes("debug"), "bridgeExtraArgs values must appear");
 
     cleanup(p.configPath);
   });
@@ -125,7 +125,7 @@ describe("installMcpBroker fall-through behavior", () => {
     cleanup(p.configPath);
 
     const augment = new Augment({ name: "stub-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, false);
     assert.equal(result.errorCode, "BROKER_NOT_SUPPORTED");

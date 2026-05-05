@@ -39,7 +39,7 @@ function mockCodexPlatform(configPath) {
 
 function cleanup(p) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
 
-const SHIM_BIN = "/opt/equip/bin/equip-broker-shim";
+const BRIDGE_BIN = "/opt/equip/bin/equip-broker-fd-bridge";
 
 const PRE_EXISTING_TOML = `[mcp_servers.user-github]
 command = "npx"
@@ -62,7 +62,7 @@ describe("installMcpBroker preserves pre-existing TOML entries", () => {
 
     const p = mockCodexPlatform(configPath);
     const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, true);
 
@@ -80,7 +80,7 @@ describe("installMcpBroker preserves pre-existing TOML entries", () => {
     // The new broker entry must also be there.
     const ours = parseTomlServerEntry(written, "mcp_servers", "stub-broker-augment");
     assert.ok(ours, "broker entry must be present");
-    assert.equal(ours.command, SHIM_BIN);
+    assert.equal(ours.command, BRIDGE_BIN);
 
     // No OAuth-shaped keys leaked into the file via the merge path.
     assert.ok(!/bearer_token_env_var/i.test(written));
@@ -103,7 +103,7 @@ describe("installMcpBroker preserves pre-existing TOML entries", () => {
       // First install + register as managed (this is what install.ts does in the
       // real flow — installMcpBroker is symmetric with installMcp and doesn't
       // do its own tracking).
-      const r1 = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+      const r1 = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
       assert.equal(r1.success, true);
       setupInstalledAugment("stub-broker-augment", {
         source: "registry",
@@ -115,8 +115,8 @@ describe("installMcpBroker preserves pre-existing TOML entries", () => {
       // Second install with different shim path (simulating an Equip upgrade
       // that moved the binary). Now Equip recognizes its own managed entry and
       // overwrites without conflict.
-      const newShim = "/Library/equip/bin/equip-broker-shim";
-      const r2 = augment.installMcpBroker(p, { shimBinaryPath: newShim });
+      const newBridge = "/Library/equip/bin/equip-broker-fd-bridge";
+      const r2 = augment.installMcpBroker(p, { bridgeBinaryPath: newBridge });
       assert.equal(r2.success, true, `reinstall must succeed, got: ${r2.error}`);
 
       const written = fs.readFileSync(configPath, "utf-8");
@@ -127,7 +127,7 @@ describe("installMcpBroker preserves pre-existing TOML entries", () => {
 
       // Our entry was replaced, not duplicated.
       const ours = parseTomlServerEntry(written, "mcp_servers", "stub-broker-augment");
-      assert.equal(ours.command, newShim, "second install must update command to new shim path");
+      assert.equal(ours.command, newBridge, "second install must update command to new shim path");
 
       // Count occurrences of the augment's table header — must be exactly one.
       const headerMatches = written.match(/\[mcp_servers\.stub-broker-augment\]/g) ?? [];
@@ -145,13 +145,13 @@ describe("installMcpBroker preserves pre-existing TOML entries", () => {
 
     const p = mockCodexPlatform(configPath);
     const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, true);
     const written = fs.readFileSync(configPath, "utf-8");
     const ours = parseTomlServerEntry(written, "mcp_servers", "stub-broker-augment");
     assert.ok(ours);
-    assert.equal(ours.command, SHIM_BIN);
+    assert.equal(ours.command, BRIDGE_BIN);
 
     cleanup(configPath);
   });
@@ -167,7 +167,7 @@ args = ["--port", "9999"]
 
     const p = mockCodexPlatform(configPath);
     const augment = new Augment({ name: "stub-broker-augment", serverUrl: "https://example.com/mcp" });
-    const result = augment.installMcpBroker(p, { shimBinaryPath: SHIM_BIN });
+    const result = augment.installMcpBroker(p, { bridgeBinaryPath: BRIDGE_BIN });
 
     assert.equal(result.success, false);
     assert.equal(result.errorCode, "CONFIG_CONFLICT");

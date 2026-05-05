@@ -3,7 +3,7 @@
 // Tests for Claude Code's writeBrokerConfig strategy hook.
 //
 // The hook produces a `mcpServers["<name>"]` JSON entry pointing at
-// equip-broker-shim. Bypass discipline:
+// equip-broker-fd-bridge. Bypass discipline:
 //   - command + args ONLY
 //   - NEVER include `auth` (would trigger /mcp authenticate)
 //   - NEVER include `url` or `headers` (broker is stdio-only)
@@ -19,8 +19,8 @@ function callHook(opts) {
   assert.ok(typeof strat.writeBrokerConfig === "function");
   return strat.writeBrokerConfig(opts.augmentName, {
     augmentName: opts.augmentName,
-    shimBinaryPath: opts.shimBinaryPath ?? "/opt/equip/bin/equip-broker-shim",
-    shimExtraArgs: opts.shimExtraArgs,
+    bridgeBinaryPath: opts.bridgeBinaryPath ?? "/opt/equip/bin/equip-broker-fd-bridge",
+    bridgeExtraArgs: opts.bridgeExtraArgs,
     loopbackUrl: opts.loopbackUrl,
   });
 }
@@ -34,9 +34,9 @@ describe("Claude Code writeBrokerConfig: shape", () => {
   it("entry.command points at the injected shim binary path", () => {
     const result = callHook({
       augmentName: "notion-mcp",
-      shimBinaryPath: "/Users/test/Library/equip/bin/equip-broker-shim",
+      bridgeBinaryPath: "/Users/test/Library/equip/bin/equip-broker-fd-bridge",
     });
-    assert.equal(result.entry.command, "/Users/test/Library/equip/bin/equip-broker-shim");
+    assert.equal(result.entry.command, "/Users/test/Library/equip/bin/equip-broker-fd-bridge");
   });
 
   it("entry.args includes --augment <name>", () => {
@@ -47,18 +47,18 @@ describe("Claude Code writeBrokerConfig: shape", () => {
     assert.equal(result.entry.args[idx + 1], "notion-mcp");
   });
 
-  it("forwards shimExtraArgs after --shim --augment <name>", () => {
+  it("forwards bridgeExtraArgs after --augment <name>", () => {
     const result = callHook({
       augmentName: "notion-mcp",
-      shimExtraArgs: ["--log-level", "debug"],
+      bridgeExtraArgs: ["--log-level", "debug"],
     });
-    assert.deepEqual(result.entry.args, ["--shim", "--augment", "notion-mcp", "--log-level", "debug"]);
+    assert.deepEqual(result.entry.args, ["--augment", "notion-mcp", "--log-level", "debug"]);
   });
 
-  it("entry.args[0] is --shim (single-binary subcommand dispatch)", () => {
+  it("entry.args[0] is --augment (native bridge dispatch)", () => {
     const result = callHook({ augmentName: "notion-mcp" });
-    assert.equal(result.entry.args[0], "--shim",
-      "--shim selects shim mode in equip-sidecar dispatcher");
+    assert.equal(result.entry.args[0], "--augment",
+      "--augment selects the broker-managed augment for the native fd bridge");
   });
 
   it("returns a human-readable note", () => {
@@ -104,7 +104,7 @@ describe("Claude Code writeBrokerConfig: OAuth-bypass contract", () => {
 
 describe("Claude Code writeBrokerConfig: augment-name allowlist", () => {
   // Argv-injection defense. The writer hook must refuse to embed an
-  // unsafe name in shim argv. Mirrored at the shim's argv parser too.
+  // unsafe name in bridge argv. Mirrored at the bridge's argv parser too.
 
   const REJECT_CASES = [
     ["leading-dash",       "--evil"],
@@ -122,7 +122,7 @@ describe("Claude Code writeBrokerConfig: augment-name allowlist", () => {
 
   for (const [label, name] of REJECT_CASES) {
     it(`rejects ${label} (${JSON.stringify(name)})`, () => {
-      assert.throws(() => callHook({ augmentName: name }), /not safe for broker-shim argv/);
+      assert.throws(() => callHook({ augmentName: name }), /not safe for broker bridge argv/);
     });
   }
 

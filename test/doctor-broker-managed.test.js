@@ -100,7 +100,7 @@ describe("equip doctor: broker-managed branch", () => {
     // the entry there.
     process.env.CODEX_HOME = tempHome;
     const codexConfigPath = path.join(tempHome, "config.toml");
-    fs.writeFileSync(codexConfigPath, `[mcp_servers.broker-augment]\ncommand = "/opt/equip/bin/equip-broker-shim"\nargs = ["--augment", "broker-augment"]\n`);
+    fs.writeFileSync(codexConfigPath, `[mcp_servers.broker-augment]\ncommand = "/opt/equip/bin/equip-broker-fd-bridge"\nargs = ["--augment", "broker-augment"]\n`);
 
     trackInstallation("broker-augment", {
       source: "registry",

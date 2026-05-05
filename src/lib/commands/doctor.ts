@@ -99,7 +99,7 @@ export function runDoctor(options: DoctorOptions = {}): void {
           // url, no auth headers). The URL-HTTPS and auth-header checks
           // below would fire false-positive warnings on these — skip and
           // surface the broker-health hint instead. Live status lives
-          // behind whatever runtime owns the shim; not equip's concern.
+          // behind whatever runtime owns the bridge; not equip's concern.
         } else {
           // Check URL is HTTPS
           const url = (entry as Record<string, unknown>).url || (entry as Record<string, unknown>).serverUrl || (entry as Record<string, unknown>).httpUrl;
@@ -201,7 +201,7 @@ export function runDoctor(options: DoctorOptions = {}): void {
   //
   // `listStoredCredentials()` reads auth-engine's direct-mode store.
   // Broker-managed credentials are not equip's concern — whatever
-  // runtime owns the shim owns its own credentials.
+  // runtime owns the bridge owns its own credentials.
   const credTools = listStoredCredentials();
   if (credTools.length > 0) {
     cli.log(`\n${cli.BOLD}Credential health${cli.RESET} ${cli.DIM}(direct-mode)${cli.RESET}`);

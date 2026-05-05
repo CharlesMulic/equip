@@ -55,7 +55,7 @@ export interface PlatformHookCapabilities {
 export interface PlatformBrokerCapabilities {
   /**
    * Master switch: does this platform's MCP config surface support broker
-   * mode at all? Implies at least one of supportsStdioShim or
+   * mode at all? Implies at least one of supportsStdioBridge or
    * supportsLoopbackHttp is also true. When false, broker code should not
    * attempt to write broker config for this platform.
    */
@@ -63,10 +63,10 @@ export interface PlatformBrokerCapabilities {
 
   /**
    * Can the platform's MCP config accept a `command` + `args` entry that
-   * we can point at the equip-broker-shim binary? This is the preferred
-   * broker transport when supported.
+   * we can point at the native equip-broker-fd-bridge binary. This is
+   * the preferred broker transport when supported.
    */
-  supportsStdioShim?: boolean;
+  supportsStdioBridge?: boolean;
 
   /**
    * Can the platform's MCP config accept a `url` entry pointing at a
@@ -127,23 +127,23 @@ export interface BrokerConfigWriteResult {
 
 /**
  * Endpoint to the broker daemon, passed into `writeBrokerConfig`. The
- * shape supports both stdio shim invocations and loopback HTTP.
+ * shape supports both stdio bridge invocations and loopback HTTP.
  */
 export interface BrokerEndpoint {
   /** Augment identity the broker entry is for. Hooks may include this in args/env. */
   augmentName: string;
-  /** Path to the equip-broker-shim binary (resolved at install time). */
-  shimBinaryPath: string;
+  /** Path to the native equip-broker-fd-bridge binary (resolved at install time). */
+  bridgeBinaryPath: string;
   /**
    * Loopback HTTP URL for the broker daemon, if loopback transport is
    * being used. Undefined when only stdio is being written.
    */
   loopbackUrl?: string;
   /**
-   * Extra args the shim caller wants forwarded (e.g. log level, broker
+   * Extra args the bridge caller wants forwarded (e.g. log level, broker
    * socket path override). The hook decides whether and how to pass these.
    */
-  shimExtraArgs?: string[];
+  bridgeExtraArgs?: string[];
 }
 
 /**
@@ -280,13 +280,13 @@ function getClaudeCodeVersion(): string | null {
   } catch { return null; }
 }
 
-// ─── Augment-name validation for broker-shim args ───────────
+// ─── Augment-name validation for broker bridge args ───────────
 //
 // Defense against argv injection via a malicious registry augment name. The
-// shim is spawned by MCP-supporting platforms via `command` + `args`; an
+// bridge is spawned by MCP-supporting platforms via `command` + `args`; an
 // augment name containing a newline, quote, or leading `--` could escape its
 // argv slot on platforms that shell-quote inconsistently. The allowlist is
-// also enforced at registry submit time and by the shim parser.
+// also enforced at registry submit time and by the bridge parser.
 //
 // Regex: starts with [a-z0-9], 2-64 chars total, [a-z0-9_-] only.
 //   - Lowercase only (no case-collision attacks via Unicode normalization)
@@ -296,14 +296,14 @@ function getClaudeCodeVersion(): string | null {
 const AUGMENT_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 
 /**
- * Throws if the augment name is unsafe to embed in shim argv. Called
+ * Throws if the augment name is unsafe to embed in bridge argv. Called
  * from each writeBrokerConfig strategy hook before constructing the
  * platform's MCP-config entry.
  */
-export function assertValidAugmentNameForShim(name: string): void {
+export function assertValidAugmentNameForBridge(name: string): void {
   if (!AUGMENT_NAME_RE.test(name)) {
     throw new Error(
-      `Augment name "${name}" is not safe for broker-shim argv. ` +
+      `Augment name "${name}" is not safe for broker bridge argv. ` +
       `Names must match ${AUGMENT_NAME_RE.source} (lowercase, 2-64 chars, ` +
       `[a-z0-9_-] only, no leading dash).`
     );
@@ -340,7 +340,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
       format: "claude-code",
     },
     skillsPath: () => path.join(home(), ".claude", "skills"),
-    // Broker capabilities — stdio shim is the cleanest path. Loopback HTTP
+    // Broker capabilities — stdio bridge is the cleanest path. Loopback HTTP
     // works when `auth` is omitted from the .mcp.json entry.
     // mcpNeedsAuthRecovery=true: 15-min mcp-needs-auth-cache.json TTL is a
     // real recovery hazard that broker code must invalidate on refresh.
@@ -348,7 +348,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // discovery against loopback URLs.
     brokerCapabilities: {
       supportsBroker: true,
-      supportsStdioShim: true,
+      supportsStdioBridge: true,
       supportsLoopbackHttp: true,
       oauthDiscoveryProbing: false,
       mcpNeedsAuthRecovery: true,
@@ -361,21 +361,21 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     //     entry triggers Claude Code's `/mcp authenticate` flow which
     //     defeats the broker.
     //   - NEVER include `url` or `headers` — broker entries are stdio
-    //     command + args only; the shim mediates the upstream traffic.
+    //     command + args only; the bridge mediates the upstream traffic.
     //
     // The mcp-needs-auth-cache.json hazard (15-min TTL) is recovery-
     // path-only and applies to entries that the platform thinks need
-    // OAuth. Stdio-shim entries are not OAuth-shaped, so the cache
+    // OAuth. Stdio-bridge entries are not OAuth-shaped, so the cache
     // doesn't fire on them; broker-side cache invalidation is therefore
     // not part of this hook (it would only matter for legacy direct-
     // mode auth entries, out of scope for broker writers).
     brokerStrategy: {
       writeBrokerConfig: (augmentName, endpoint) => {
-        assertValidAugmentNameForShim(augmentName);
+        assertValidAugmentNameForBridge(augmentName);
         return {
           entry: {
-            command: endpoint.shimBinaryPath,
-            args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+            command: endpoint.bridgeBinaryPath,
+            args: ["--augment", augmentName, ...(endpoint.bridgeExtraArgs ?? [])],
           },
           transport: "stdio",
           note: "broker-managed; runtime owns first-time OAuth",
@@ -399,14 +399,14 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     },
     hooks: null,
     skillsPath: () => path.join(home(), ".cursor", "skills"),
-    // Broker capabilities — stdio shim is the strongest path. Loopback HTTP is viable only with
+    // Broker capabilities — stdio bridge is the strongest path. Loopback HTTP is viable only with
     // strict discovery suppression: broker MUST 404 on /.well-known/oauth-*
     // AND never emit WWW-Authenticate. oauthDiscoveryProbing=true is the
     // load-bearing flag that triggers the suppressOAuthDiscovery hook in
     // broker daemon code. mcpNeedsAuthRecovery=false: no documented cache.
     brokerCapabilities: {
       supportsBroker: true,
-      supportsStdioShim: true,
+      supportsStdioBridge: true,
       supportsLoopbackHttp: true,
       oauthDiscoveryProbing: true,
       mcpNeedsAuthRecovery: false,
@@ -417,7 +417,7 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // OAuth-bypass discipline:
     //   - NEVER include `url` — Cursor probes /.well-known/oauth-* on
     //     URL entries (see oauthDiscoveryProbing=true on capabilities).
-    //     Stdio shim entries are not URL-shaped and are therefore
+    //     Stdio bridge entries are not URL-shaped and are therefore
     //     discovery-probe-free.
     //   - NEVER include `headers.Authorization` — would trigger Cursor's
     //     OAuth flow on the discovery probe.
@@ -428,11 +428,11 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // (stdio is the strongest path for Cursor-compatible MCP proxies).
     brokerStrategy: {
       writeBrokerConfig: (augmentName, endpoint) => {
-        assertValidAugmentNameForShim(augmentName);
+        assertValidAugmentNameForBridge(augmentName);
         return {
           entry: {
-            command: endpoint.shimBinaryPath,
-            args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+            command: endpoint.bridgeBinaryPath,
+            args: ["--augment", augmentName, ...(endpoint.bridgeExtraArgs ?? [])],
           },
           transport: "stdio",
           note: "broker-managed; runtime owns first-time OAuth",
@@ -535,13 +535,13 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     // cache. Broker-managed entries avoid platform-managed token refresh.
     brokerCapabilities: {
       supportsBroker: true,
-      supportsStdioShim: true,
+      supportsStdioBridge: true,
       supportsLoopbackHttp: true,
       oauthDiscoveryProbing: false,
       mcpNeedsAuthRecovery: false,
     },
     // Codex broker writer. The hook produces a stdio-only
-    // [mcp_servers.<name>] entry that points at equip-broker-shim.
+    // [mcp_servers.<name>] entry that points at equip-broker-fd-bridge.
     //
     // OAuth-bypass discipline:
     //   - NEVER set bearer_token_env_var → Codex would otherwise spawn
@@ -552,15 +552,15 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     //     fetch against the upstream.
     //
     // Codex sees only `command` + `args` for a stdio MCP server. From
-    // Codex's perspective there is no OAuth at all — the shim mediates
+    // Codex's perspective there is no OAuth at all — the bridge mediates
     // and the broker holds credentials.
     brokerStrategy: {
       writeBrokerConfig: (augmentName, endpoint) => {
-        assertValidAugmentNameForShim(augmentName);
+        assertValidAugmentNameForBridge(augmentName);
         return {
           entry: {
-            command: endpoint.shimBinaryPath,
-            args: ["--shim", "--augment", augmentName, ...(endpoint.shimExtraArgs ?? [])],
+            command: endpoint.bridgeBinaryPath,
+            args: ["--augment", augmentName, ...(endpoint.bridgeExtraArgs ?? [])],
           },
           transport: "stdio",
           note: "broker-managed; runtime owns first-time OAuth",
@@ -722,7 +722,7 @@ export function getBrokerCapabilities(id: string): Required<PlatformBrokerCapabi
   const caps = PLATFORM_REGISTRY.get(id)?.brokerCapabilities ?? {};
   return {
     supportsBroker: caps.supportsBroker ?? false,
-    supportsStdioShim: caps.supportsStdioShim ?? false,
+    supportsStdioBridge: caps.supportsStdioBridge ?? false,
     supportsLoopbackHttp: caps.supportsLoopbackHttp ?? false,
     oauthDiscoveryProbing: caps.oauthDiscoveryProbing ?? false,
     mcpNeedsAuthRecovery: caps.mcpNeedsAuthRecovery ?? false,

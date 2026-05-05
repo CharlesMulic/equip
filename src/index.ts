@@ -116,14 +116,14 @@ class Augment {
   /**
    * Broker-mode install.
    *
-   * Writes a platform config entry that points at `equip-broker-shim` so the
-   * platform spawns the shim as its MCP server. The shim talks IPC to the
-   * broker daemon for credentials and proxies upstream MCP traffic with fresh
-   * tokens injected per request. The platform never sees an OAuth-shaped config.
+   * Writes a platform config entry that points at `equip-broker-fd-bridge` so
+   * the platform spawns the native bridge as its MCP server. The bridge talks
+   * to the broker daemon for upstream MCP traffic; the broker injects fresh
+   * tokens server-side. The platform never sees an OAuth-shaped config.
    *
    * The platform-specific output is provided by
    * `PlatformDefinition.brokerStrategy.writeBrokerConfig`. The caller injects
-   * `shimBinaryPath` at call time; equip lib does not know the path.
+   * `bridgeBinaryPath` at call time; equip lib does not know the path.
    *
    * Returns a `mcp` ArtifactResult with `errorCode: "BROKER_NOT_SUPPORTED"`
    * when the platform doesn't declare broker support; the caller should fall
@@ -131,9 +131,9 @@ class Augment {
    */
   installMcpBroker(
     platform: DetectedPlatform,
-    options: { shimBinaryPath: string; dryRun?: boolean; shimExtraArgs?: string[] },
+    options: { bridgeBinaryPath: string; dryRun?: boolean; bridgeExtraArgs?: string[] },
   ): ArtifactResult {
-    const { shimBinaryPath, dryRun = false, shimExtraArgs } = options;
+    const { bridgeBinaryPath, dryRun = false, bridgeExtraArgs } = options;
     if (!platformSupportsBroker(platform.platform)) {
       return makeResult("mcp", {
         errorCode: "BROKER_NOT_SUPPORTED",
@@ -149,8 +149,8 @@ class Augment {
     }
     const written = strategy.writeBrokerConfig(this.name, {
       augmentName: this.name,
-      shimBinaryPath,
-      shimExtraArgs,
+      bridgeBinaryPath,
+      bridgeExtraArgs,
     });
     if (!written) {
       return makeResult("mcp", {

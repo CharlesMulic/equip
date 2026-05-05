@@ -27,7 +27,7 @@ describe("broker capability accessors", () => {
   it("returns all-false baseline for unknown platforms (no throw)", () => {
     const caps = getBrokerCapabilities("does-not-exist");
     assert.equal(caps.supportsBroker, false);
-    assert.equal(caps.supportsStdioShim, false);
+    assert.equal(caps.supportsStdioBridge, false);
     assert.equal(caps.supportsLoopbackHttp, false);
     assert.equal(caps.oauthDiscoveryProbing, false);
     assert.equal(caps.mcpNeedsAuthRecovery, false);
@@ -63,7 +63,7 @@ describe("broker-target platforms", () => {
   it("Codex declares broker-target capabilities", () => {
     const caps = getBrokerCapabilities("codex");
     assert.equal(caps.supportsBroker, true);
-    assert.equal(caps.supportsStdioShim, true, "stdio shim is the strongest path on Codex");
+    assert.equal(caps.supportsStdioBridge, true, "stdio bridge is the strongest path on Codex");
     assert.equal(caps.supportsLoopbackHttp, true);
     assert.equal(caps.oauthDiscoveryProbing, false, "Codex's OAuth login is opt-in, not auto-probed");
     assert.equal(caps.mcpNeedsAuthRecovery, false);
@@ -72,7 +72,7 @@ describe("broker-target platforms", () => {
   it("Claude Code declares broker-target capabilities including needs-auth recovery", () => {
     const caps = getBrokerCapabilities("claude-code");
     assert.equal(caps.supportsBroker, true);
-    assert.equal(caps.supportsStdioShim, true);
+    assert.equal(caps.supportsStdioBridge, true);
     assert.equal(caps.supportsLoopbackHttp, true);
     assert.equal(caps.oauthDiscoveryProbing, false);
     assert.equal(
@@ -84,7 +84,7 @@ describe("broker-target platforms", () => {
   it("Cursor declares broker-target capabilities including OAuth discovery probing", () => {
     const caps = getBrokerCapabilities("cursor");
     assert.equal(caps.supportsBroker, true);
-    assert.equal(caps.supportsStdioShim, true, "mcp-remote is exact prior art on Cursor today");
+    assert.equal(caps.supportsStdioBridge, true, "mcp-remote is exact prior art on Cursor today");
     assert.equal(caps.supportsLoopbackHttp, true);
     assert.equal(
       caps.oauthDiscoveryProbing, true,
@@ -109,7 +109,7 @@ describe("broker capability additive contract", () => {
     for (const id of PLATFORM_REGISTRY.keys()) {
       const caps = getBrokerCapabilities(id);
       assert.equal(typeof caps.supportsBroker, "boolean", `${id}: supportsBroker must be boolean`);
-      assert.equal(typeof caps.supportsStdioShim, "boolean", `${id}: supportsStdioShim must be boolean`);
+      assert.equal(typeof caps.supportsStdioBridge, "boolean", `${id}: supportsStdioBridge must be boolean`);
       assert.equal(typeof caps.supportsLoopbackHttp, "boolean", `${id}: supportsLoopbackHttp must be boolean`);
       assert.equal(typeof caps.oauthDiscoveryProbing, "boolean", `${id}: oauthDiscoveryProbing must be boolean`);
       assert.equal(typeof caps.mcpNeedsAuthRecovery, "boolean", `${id}: mcpNeedsAuthRecovery must be boolean`);
