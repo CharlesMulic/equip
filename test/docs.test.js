@@ -20,6 +20,44 @@ const { execSync } = require("child_process");
 const EQUIP_ROOT = path.join(__dirname, "..");
 const { trackUninstallation } = require("../dist/lib/installations");
 
+const ORIGINAL_HOME = os.homedir;
+const ORIGINAL_ENV = {
+  HOME: process.env.HOME,
+  USERPROFILE: process.env.USERPROFILE,
+  APPDATA: process.env.APPDATA,
+  LOCALAPPDATA: process.env.LOCALAPPDATA,
+  CODEX_HOME: process.env.CODEX_HOME,
+  HOMEDRIVE: process.env.HOMEDRIVE,
+  HOMEPATH: process.env.HOMEPATH,
+};
+const DOCS_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "equip-docs-home-"));
+const DOCS_APPDATA = path.join(DOCS_HOME, "AppData", "Roaming");
+const DOCS_LOCALAPPDATA = path.join(DOCS_HOME, "AppData", "Local");
+const DOCS_CODEX_HOME = path.join(DOCS_HOME, ".codex");
+const DOCS_ROOT = path.parse(DOCS_HOME).root;
+const DOCS_HOME_ENV = {
+  HOME: DOCS_HOME,
+  USERPROFILE: DOCS_HOME,
+  APPDATA: DOCS_APPDATA,
+  LOCALAPPDATA: DOCS_LOCALAPPDATA,
+  CODEX_HOME: DOCS_CODEX_HOME,
+  HOMEDRIVE: DOCS_ROOT.replace(/[\\\/]+$/, ""),
+  HOMEPATH: DOCS_HOME.slice(DOCS_ROOT.length - 1),
+};
+
+Object.assign(process.env, DOCS_HOME_ENV);
+os.homedir = () => DOCS_HOME;
+for (const dir of [
+  path.join(DOCS_HOME, ".claude"),
+  path.join(DOCS_HOME, ".claude", "skills"),
+  path.join(DOCS_HOME, ".agents", "skills"),
+  DOCS_APPDATA,
+  DOCS_LOCALAPPDATA,
+  DOCS_CODEX_HOME,
+]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
 // ─── Helpers ─────────────────────────────────────────────────
 
 function tmpDir(prefix = "doc-test") {
@@ -36,10 +74,19 @@ function runEquip(args, options = {}) {
     encoding: "utf-8",
     cwd: options.cwd || EQUIP_ROOT,
     timeout: 30000,
-    env: { ...process.env, ...(options.env || {}) },
+    env: { ...process.env, ...DOCS_HOME_ENV, ...(options.env || {}) },
     ...options,
   });
 }
+
+after(() => {
+  os.homedir = ORIGINAL_HOME;
+  for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  fs.rmSync(DOCS_HOME, { recursive: true, force: true });
+});
 
 // ─── Pirate Hat: Layer 1 (Just a Rule) ──────────────────────
 //
@@ -47,7 +94,7 @@ function runEquip(args, options = {}) {
 // This is the EXACT code from the docs, saved to a temp file
 // and run via `equip ./piratehat.js`.
 
-describe("docs/tool-author.md — Pirate Hat Layer 1", { skip: !!process.env.CI && "requires detected platforms" }, () => {
+describe("docs/tool-author.md — Pirate Hat Layer 1", () => {
   const workDir = tmpDir("piratehat");
   const scriptPath = path.join(workDir, "piratehat.js");
 
@@ -81,14 +128,11 @@ for (const p of platforms) {
     // Run via equip CLI (local path dispatch)
     runEquip(`${scriptPath}`, { stdio: "pipe" });
 
-    // Verify rules were actually written to at least one platform file.
-    // Check Claude Code's CLAUDE.md if it exists (most likely on dev machine).
     const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
-    if (fs.existsSync(claudeMd)) {
-      const content = fs.readFileSync(claudeMd, "utf-8");
-      assert.ok(content.includes("piratehat:v1.0.0"), "pirate rules should be in CLAUDE.md");
-      assert.ok(content.includes("Pirate Mode"), "pirate rules content should be present");
-    }
+    assert.ok(fs.existsSync(claudeMd), "CLAUDE.md should be created in the hermetic Claude home");
+    const content = fs.readFileSync(claudeMd, "utf-8");
+    assert.ok(content.includes("piratehat:v1.0.0"), "pirate rules should be in CLAUDE.md");
+    assert.ok(content.includes("Pirate Mode"), "pirate rules content should be present");
   });
 
   it("running again is idempotent (skipped)", () => {
@@ -115,10 +159,7 @@ for (const p of platforms) {
 
     // Verify removal from CLAUDE.md
     const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
-    if (fs.existsSync(claudeMd)) {
-      const content = fs.readFileSync(claudeMd, "utf-8");
-      assert.ok(!content.includes("piratehat:v"), "pirate rules should be removed");
-    }
+    assert.ok(!fs.existsSync(claudeMd) || !fs.readFileSync(claudeMd, "utf-8").includes("piratehat:v"), "pirate rules should be removed");
   });
 
   after(() => {
@@ -132,7 +173,7 @@ for (const p of platforms) {
 // FROM: docs/tool-author.md → "Layer 2: Add a Skill"
 // Tests both rules and skills installation together.
 
-describe("docs/tool-author.md — Pirate Hat Layer 2 (Rules + Skills)", { skip: !!process.env.CI && "requires detected platforms" }, () => {
+describe("docs/tool-author.md — Pirate Hat Layer 2 (Rules + Skills)", () => {
   const workDir = tmpDir("piratehat-skill");
   const scriptPath = path.join(workDir, "piratehat.js");
 
@@ -184,14 +225,11 @@ for (const p of platforms) {
   it("installs both rules and skills to platform directories", () => {
     runEquip(`${scriptPath}`, { stdio: "pipe" });
 
-    // Check Claude Code skills directory
     const skillMd = path.join(os.homedir(), ".claude", "skills", "piratehat", "pirate-speak", "SKILL.md");
-    if (fs.existsSync(path.join(os.homedir(), ".claude", "skills"))) {
-      assert.ok(fs.existsSync(skillMd), "SKILL.md should be installed in Claude Code skills dir");
-      const content = fs.readFileSync(skillMd, "utf-8");
-      assert.ok(content.includes("pirate-speak"), "skill content should be present");
-      assert.ok(content.includes("Barnacle"), "skill vocabulary should be present");
-    }
+    assert.ok(fs.existsSync(skillMd), "SKILL.md should be installed in Claude Code skills dir");
+    const content = fs.readFileSync(skillMd, "utf-8");
+    assert.ok(content.includes("pirate-speak"), "skill content should be present");
+    assert.ok(content.includes("Barnacle"), "skill vocabulary should be present");
   });
 
   it("verify confirms installation", () => {
@@ -250,7 +288,7 @@ for (const p of platforms) {
 // FROM: docs/tool-author.md → "From Local Script to equip <name>" → Step 1
 // Tests `equip .` reading package.json bin field.
 
-describe("docs/tool-author.md — equip . (local package)", { skip: !!process.env.CI && "requires detected platforms" }, () => {
+describe("docs/tool-author.md — equip . (local package)", () => {
   const workDir = tmpDir("local-pkg");
 
   // Create a minimal package with a setup script
@@ -283,10 +321,9 @@ console.log("Local package setup complete");
 
   it("rules were installed to platform files", () => {
     const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
-    if (fs.existsSync(claudeMd)) {
-      const content = fs.readFileSync(claudeMd, "utf-8");
-      assert.ok(content.includes("test-local-pkg:v1.0.0"), "rules should be in CLAUDE.md");
-    }
+    assert.ok(fs.existsSync(claudeMd), "CLAUDE.md should exist in the hermetic Claude home");
+    const content = fs.readFileSync(claudeMd, "utf-8");
+    assert.ok(content.includes("test-local-pkg:v1.0.0"), "rules should be in CLAUDE.md");
   });
 
   // Cleanup
@@ -300,9 +337,7 @@ console.log("Local package setup complete");
     for (const p of equip.detect()) equip.uninstallRules(p);
 
     const claudeMd = path.join(os.homedir(), ".claude", "CLAUDE.md");
-    if (fs.existsSync(claudeMd)) {
-      assert.ok(!fs.readFileSync(claudeMd, "utf-8").includes("test-local-pkg"), "rules should be cleaned up");
-    }
+    assert.ok(!fs.existsSync(claudeMd) || !fs.readFileSync(claudeMd, "utf-8").includes("test-local-pkg"), "rules should be cleaned up");
   });
 
   after(() => {
