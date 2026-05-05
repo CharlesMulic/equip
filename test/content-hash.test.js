@@ -97,6 +97,25 @@ const VECTORS = [
 // ─── Tests ──────────────────────────────────────────────────
 
 describe("computeContentHash", () => {
+  it("v1 golden vector matches Kotlin ContentHashServiceTest", () => {
+    const hash = computeContentHash({
+      rulesContent: "<!-- prior:v -->\n## Prior\nBody\n<!-- /prior -->",
+      rulesMarker: "prior",
+      skills: JSON.stringify([
+        { name: "search", files: [{ path: "SKILL.md", content: "# Search" }] },
+      ]),
+      hooks: null,
+      serverUrl: "https://api.cg3.io/mcp",
+      stdioCommand: null,
+      stdioArgs: null,
+      transport: "http",
+    });
+    assert.equal(
+      hash,
+      "d0d5d01dd1f98969cd903b406dac64a68a7fc45c65915fcf6a0bf998234e8e9e",
+    );
+  });
+
   it("produces 64-char hex string", () => {
     const hash = computeContentHash(VECTORS[0].manifest);
     assert.equal(hash.length, 64);

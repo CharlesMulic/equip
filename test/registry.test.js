@@ -12,11 +12,17 @@ const { spawn } = require("child_process");
 
 const { registryDefToConfig } = require("../dist/lib/registry");
 const { Augment } = require("../dist/index");
+const {
+  computeContentHashV2,
+  extractManifestV2,
+} = require("../dist/lib/content-hash");
 
 const FIXTURE_PATH = path.join(__dirname, "docker", "fixtures", "demo-direct-install.json");
 const FIXTURE_TEMPLATE = JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf-8"));
 const HERMETIC_FIXTURE_NAME = "demo-direct-install";
 const AUTH_FIXTURE_NAME = "demo-direct-install-auth";
+const HASH_MATCH_FIXTURE_NAME = "demo-direct-install-hash-match";
+const HASH_ALGORITHM_MISMATCH_FIXTURE_NAME = "demo-direct-install-hash-algorithm-mismatch";
 
 function tmpPath(prefix = "reg-test") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -56,6 +62,15 @@ function buildFixture(origin, name, overrides = {}) {
   });
 }
 
+function withV2ContentHash(def, hashAlgorithm = "sha256-v2") {
+  return {
+    ...def,
+    version: def.version || 1,
+    contentHash: computeContentHashV2(extractManifestV2(def)),
+    hashAlgorithm,
+  };
+}
+
 function startFixtureRegistry() {
   const requests = [];
   let origin = "";
@@ -80,6 +95,17 @@ function startFixtureRegistry() {
               fileName: `${AUTH_FIXTURE_NAME}.md`,
             },
           }),
+          [HASH_MATCH_FIXTURE_NAME]: withV2ContentHash(
+            buildFixture(origin, HASH_MATCH_FIXTURE_NAME, {
+              title: "Demo Direct Install Hash Match",
+            }),
+          ),
+          [HASH_ALGORITHM_MISMATCH_FIXTURE_NAME]: withV2ContentHash(
+            buildFixture(origin, HASH_ALGORITHM_MISMATCH_FIXTURE_NAME, {
+              title: "Demo Direct Install Hash Algorithm Mismatch",
+            }),
+            "sha256-v1",
+          ),
         };
 
         if (!fixtures[name]) {
@@ -383,6 +409,31 @@ describe("fetchRegistryDef", () => {
 
     const infos = logger.calls.filter(c => c.level === "info");
     assert.ok(infos.some(c => c.msg.includes("fetched from API")));
+  });
+
+  it("accepts a registry definition whose advertised hash algorithm matches its digest", async () => {
+    const def = await fetchRegistryDef(HASH_MATCH_FIXTURE_NAME);
+
+    assert.ok(def, "Should fetch the hash-verified fixture");
+    assert.equal(def.hashAlgorithm, "sha256-v2");
+  });
+
+  it("rejects a registry definition whose advertised algorithm cannot reproduce its digest", async () => {
+    const logger = recordingLogger();
+
+    await assert.rejects(
+      () => fetchRegistryDef(HASH_ALGORITHM_MISMATCH_FIXTURE_NAME, { logger }),
+      /Registry content hash mismatch/,
+    );
+    assert.ok(
+      logger.calls.some(c => c.level === "error" && c.msg.includes("Registry content hash mismatch")),
+      "integrity mismatch should be logged as an error",
+    );
+    assert.equal(
+      logger.calls.some(c => c.msg.includes("loaded from cache")),
+      false,
+      "integrity mismatch must not fall back to cache",
+    );
   });
 
   it("returns null for nonexistent tool", async () => {

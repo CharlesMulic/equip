@@ -145,6 +145,22 @@ export type RegistryValidationResult =
   | { status: "not-modified"; etag?: string }
   | { status: "missing" };
 
+class RegistryContentHashMismatchError extends Error {
+  constructor(
+    name: string,
+    expected: string,
+    computed: string,
+    hashAlgorithm: string | undefined,
+    version: number | undefined,
+  ) {
+    super(
+      `Registry content hash mismatch for ${name}: expected ${expected}, computed ${computed}` +
+        ` (${hashAlgorithm || "sha256-v1"}, version ${version ?? "unknown"})`,
+    );
+    this.name = "RegistryContentHashMismatchError";
+  }
+}
+
 // ─── Fetch ─────────────────────────────────────────────────
 
 /**
@@ -172,6 +188,10 @@ export async function fetchRegistryDef(
       return null;
     }
   } catch (err: unknown) {
+    if (err instanceof RegistryContentHashMismatchError) {
+      logger.error(err.message, { name });
+      throw err;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     logger.debug("API fetch failed, falling back to cache", { name, error: msg });
   }
@@ -249,12 +269,9 @@ async function fetchRegistryDefFromApi(
       const def: RegistryDef = { ...raw, title: raw.title || raw.displayName || raw.name };
       logger.info("Augment definition fetched from API", { name, installMode: def.installMode });
 
-      // Compute content hash for parity diagnostics. The check is logged
-      // but does not reject because older registry and client hash versions
-      // can disagree; rejecting would leave users on stale cache even when
-      // the fetched definition is usable. Trust HTTPS/CDN transport integrity
-      // and surface the divergence as a warning. `EQUIP_TEST_SKIP_HASH_VERIFY=1`
-      // suppresses the warning entirely for integration tests.
+      // Verify transport integrity before caching or installing. Hash mismatches
+      // must not fall back to stale cache because that can pin older auth/runtime
+      // behavior after the registry has changed.
       if (def.contentHash && process.env.EQUIP_TEST_SKIP_HASH_VERIFY !== "1") {
         const {
           computeContentHash,
@@ -271,9 +288,13 @@ async function fetchRegistryDefFromApi(
             ? computeContentHashV2(extractManifestV2(def))
             : computeContentHash(extractManifest(def));
         if (computed !== def.contentHash) {
-          logger.warn("Registry content hash mismatch (non-blocking)", {
-            name, expected: def.contentHash, computed, version: def.version, hashAlgorithm: def.hashAlgorithm,
-          });
+          throw new RegistryContentHashMismatchError(
+            name,
+            def.contentHash,
+            computed,
+            def.hashAlgorithm,
+            def.version,
+          );
         }
       }
 
