@@ -13,11 +13,10 @@ import { atomicWriteFileSync, safeReadJsonSync } from "./fs";
 import { getEquipHome } from "./equip-home";
 import type { DetectedPlatform } from "./platforms";
 import { PLATFORM_REGISTRY, platformName } from "./platforms";
-import { readMcpEntry } from "./mcp";
 import { JsonStore } from "./storage/datastore";
-import type { AugmentContent } from "./storage/content-store";
 import type { SkillConfig } from "./skills";
 import { normalizeSkillFilePath, type SkillFile } from "./skills";
+import { readManifest } from "./skill-manifest";
 import { validatePathWithinDir } from "./validation";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -52,11 +51,24 @@ export interface PlatformAugmentEntry {
   };
 }
 
+export type PlatformSkillBundleLayout = "flat" | "grouped";
+
+export interface PlatformSkillBundleEntry {
+  managed: boolean;
+  skills: string[];
+  description?: string;
+  layout: PlatformSkillBundleLayout;
+  ownerAugments?: string[];
+}
+
 export interface PlatformScan {
   lastScanned: string;
   augments: Record<string, PlatformAugmentEntry>;
+  skillBundles?: Record<string, PlatformSkillBundleEntry>;
   augmentCount: number;
   managedCount: number;
+  skillBundleCount?: number;
+  managedSkillBundleCount?: number;
 }
 
 // ─── Paths ──────────────────────────────────────────────────
@@ -131,6 +143,192 @@ function readSkillDirectoryFiles(skillDir: string): SkillFile[] {
 }
 
 // ─── Platforms Metadata (platforms.json) ─────────────────────
+
+export interface DetectedSkillBundleContent {
+  name: string;
+  title: string;
+  description: string;
+  layout: PlatformSkillBundleLayout;
+  skills: SkillConfig[];
+}
+
+function extractSkillDescription(skillMarkdown: string | undefined): string {
+  if (!skillMarkdown) return "";
+
+  let inFrontmatter = false;
+  for (const line of skillMarkdown.split("\n")) {
+    if (line.trim() === "---") {
+      inFrontmatter = !inFrontmatter;
+      continue;
+    }
+    if (inFrontmatter) continue;
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    return trimmed.replace(/^#\s*/, "");
+  }
+
+  return "";
+}
+
+function readSkillBundleFromDir(bundleName: string, bundleDir: string): DetectedSkillBundleContent | null {
+  const directSkillPath = path.join(bundleDir, "SKILL.md");
+
+  try {
+    if (fs.statSync(directSkillPath).isFile()) {
+      const files = readSkillDirectoryFiles(bundleDir);
+      const skillMd = files.find((file) => file.path === "SKILL.md")?.content;
+      return {
+        name: bundleName,
+        title: bundleName,
+        description: extractSkillDescription(skillMd),
+        layout: "flat",
+        skills: [{ name: bundleName, files }],
+      };
+    }
+  } catch {
+    // Fall through to grouped layout detection.
+  }
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(bundleDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const skills: SkillConfig[] = [];
+  let description = "";
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isDirectory() || shouldSkipSkillEntry(entry.name) || entry.isSymbolicLink()) continue;
+
+    const skillDir = path.join(bundleDir, entry.name);
+    try {
+      if (!fs.statSync(path.join(skillDir, "SKILL.md")).isFile()) continue;
+    } catch {
+      continue;
+    }
+
+    const files = readSkillDirectoryFiles(skillDir);
+    const skillMd = files.find((file) => file.path === "SKILL.md")?.content;
+    if (!skillMd) continue;
+
+    skills.push({ name: entry.name, files });
+    if (!description) description = extractSkillDescription(skillMd);
+  }
+
+  if (skills.length === 0) return null;
+  return {
+    name: bundleName,
+    title: bundleName,
+    description,
+    layout: "grouped",
+    skills,
+  };
+}
+
+function ownerAugmentsForSkillDir(skillDir: string, platformId: string): string[] {
+  try {
+    const manifest = readManifest(skillDir);
+    if (!manifest) return [];
+    return manifest.owners
+      .filter((owner) => owner.platform === platformId)
+      .map((owner) => owner.augment);
+  } catch {
+    // A corrupt manifest should not break scan; ownership is advisory here and
+    // write paths still enforce their own collision checks.
+    return [];
+  }
+}
+
+function skillDirsForBundle(skillsBase: string, bundle: DetectedSkillBundleContent): string[] {
+  if (bundle.layout === "flat") return [path.join(skillsBase, bundle.name)];
+  return bundle.skills.map((skill) => path.join(skillsBase, bundle.name, skill.name));
+}
+
+function scanSkillBundlesForPlatform(
+  platformId: string,
+  managedNames: Set<string>,
+): Record<string, PlatformSkillBundleEntry> {
+  const platformDef = PLATFORM_REGISTRY.get(platformId);
+  if (!platformDef?.skillsPath) return {};
+
+  let skillsBase: string;
+  try {
+    skillsBase = platformDef.skillsPath();
+  } catch {
+    return {};
+  }
+  if (!fs.existsSync(skillsBase)) return {};
+
+  let topDirs: fs.Dirent[];
+  try {
+    topDirs = fs.readdirSync(skillsBase, { withFileTypes: true });
+  } catch {
+    return {};
+  }
+
+  const bundles: Record<string, PlatformSkillBundleEntry> = {};
+  for (const entry of topDirs.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isDirectory() || shouldSkipSkillEntry(entry.name) || entry.isSymbolicLink()) continue;
+
+    const bundleDir = path.join(skillsBase, entry.name);
+    let bundle: DetectedSkillBundleContent | null;
+    try {
+      validatePathWithinDir(bundleDir, skillsBase, "skill bundle path");
+      bundle = readSkillBundleFromDir(entry.name, bundleDir);
+    } catch {
+      bundle = null;
+    }
+    if (!bundle) continue;
+
+    const ownerAugments = [...new Set(
+      skillDirsForBundle(skillsBase, bundle)
+        .flatMap((skillDir) => ownerAugmentsForSkillDir(skillDir, platformId)),
+    )].sort();
+    const managed = managedNames.has(bundle.name)
+      || ownerAugments.some((owner) => managedNames.has(owner));
+
+    bundles[bundle.name] = {
+      managed,
+      skills: bundle.skills.map((skill) => skill.name),
+      ...(bundle.description ? { description: bundle.description } : {}),
+      layout: bundle.layout,
+      ...(ownerAugments.length > 0 ? { ownerAugments } : {}),
+    };
+  }
+
+  return bundles;
+}
+
+export function readDetectedSkillBundle(platformId: string, bundleName: string): DetectedSkillBundleContent | null {
+  if (
+    !bundleName
+    || bundleName.includes("/")
+    || bundleName.includes("\\")
+    || bundleName === "."
+    || bundleName === ".."
+  ) {
+    return null;
+  }
+
+  const platformDef = PLATFORM_REGISTRY.get(platformId);
+  if (!platformDef?.skillsPath) return null;
+
+  let skillsBase: string;
+  try {
+    skillsBase = platformDef.skillsPath();
+  } catch {
+    return null;
+  }
+  const bundleDir = path.join(skillsBase, bundleName);
+  try {
+    validatePathWithinDir(bundleDir, skillsBase, "skill bundle path");
+  } catch {
+    return null;
+  }
+
+  return readSkillBundleFromDir(bundleName, bundleDir);
+}
 
 function shortenPath(fullPath: string): string {
   const home = os.homedir();
@@ -345,53 +543,18 @@ export function scanPlatform(
 
   const augmentCount = Object.keys(augments).length;
   const managedCount = Object.values(augments).filter(a => a.managed).length;
+  const skillBundles = scanSkillBundlesForPlatform(platform.platform, managedNames);
+  const skillBundleCount = Object.keys(skillBundles).length;
+  const managedSkillBundleCount = Object.values(skillBundles).filter((bundle) => bundle.managed).length;
 
-  return { lastScanned: now, augments, augmentCount, managedCount };
-}
-
-/**
- * Auto-wrap an unmanaged MCP server / orphan skill directory into the
- * journal as a wrapped augment. Puts the content blob and appends an
- * install intent with `contentSource.kind === "wrapped"` so subsequent
- * reconciles treat it as managed and the provenance is recoverable.
- */
-function autoWrapToJournal(opts: {
-  name: string;
-  title?: string;
-  description?: string;
-  transport?: "http" | "stdio";
-  url?: string;
-  command?: string;
-  args?: string[];
-  skills?: SkillConfig[];
-  fromPlatform: string;
-}): void {
-  const content: AugmentContent = {
-    name: opts.name,
-    title: opts.title || opts.name,
-    description: opts.description || "",
-    transport: opts.transport,
-    serverUrl: opts.transport === "http" ? opts.url : undefined,
-    stdio: opts.command
-      ? { command: opts.command, args: opts.args || [] }
-      : undefined,
-    requiresAuth: false,
-    skills: opts.skills,
-    hooks: undefined,
+  return {
+    lastScanned: now,
+    augments,
+    ...(skillBundleCount > 0 ? { skillBundles } : {}),
+    augmentCount,
+    managedCount,
+    ...(skillBundleCount > 0 ? { skillBundleCount, managedSkillBundleCount } : {}),
   };
-  const contentHash = JsonStore.putContent(content);
-  JsonStore.appendIntent({
-    type: "install-augment",
-    clock: JsonStore.newClock(),
-    name: opts.name,
-    contentHash,
-    contentSource: {
-      kind: "wrapped",
-      fromPlatform: opts.fromPlatform,
-      createdAt: new Date().toISOString(),
-    },
-    platforms: [opts.fromPlatform],
-  });
 }
 
 /**
@@ -405,110 +568,13 @@ export function scanAllPlatforms(
   // Update metadata
   const meta = updatePlatformsMeta(detected);
 
-  // Scan each platform. Auto-wrap of unmanaged MCP entries / orphan
-  // skill dirs lands on the journal directly via autoWrapToJournal —
-  // each appendIntent is a single-line atomic append, so no batching is
-  // needed.
+  // Scan each platform and persist read-only inventory. Ownership changes
+  // happen only through explicit wrap/adopt/install commands.
   const scans: Record<string, PlatformScan> = {};
   for (const p of detected) {
     const scan = scanPlatform(p, managedNames);
     writePlatformScan(p.platform, scan);
     scans[p.platform] = scan;
-
-    // Auto-wrap unmanaged MCP servers as wrapped augments in the journal.
-    for (const [name, entry] of Object.entries(scan.augments)) {
-      if (entry.managed) continue;
-      if (JsonStore.resolve(name)) continue; // already in the journal
-
-      try {
-        const transport = entry.transport === "http" || entry.transport === "stdio" ? entry.transport : "stdio";
-        autoWrapToJournal({
-          name,
-          title: name,
-          transport,
-          url: entry.url,
-          command: entry.command,
-          args: entry.args,
-          fromPlatform: p.platform,
-        });
-
-        // Mark as managed in current scan results.
-        entry.managed = true;
-        scan.managedCount = (scan.managedCount || 0) + 1;
-      } catch { /* best effort — don't break scan for wrapping failures */ }
-    }
-
-    // Auto-wrap orphan skill files.
-    const platformDef = PLATFORM_REGISTRY.get(p.platform);
-    if (platformDef?.skillsPath) {
-      try {
-        const skillsBase = platformDef.skillsPath();
-        if (fs.existsSync(skillsBase)) {
-          const topDirs = fs.readdirSync(skillsBase).filter((d: string) => {
-            try { return fs.statSync(path.join(skillsBase, d)).isDirectory(); }
-            catch { return false; }
-          });
-
-          for (const toolDir of topDirs) {
-            // Skip if this tool dir is owned by a managed augment.
-            if (managedNames.has(toolDir)) continue;
-            if (JsonStore.resolve(toolDir)) continue;
-
-            // Check for SKILL.md files inside subdirectories.
-            const toolSkillPath = path.join(skillsBase, toolDir);
-            const skillSubDirs = fs.readdirSync(toolSkillPath).filter((s: string) => {
-              try { return fs.statSync(path.join(toolSkillPath, s, "SKILL.md")).isFile(); }
-              catch { return false; }
-            });
-
-            if (skillSubDirs.length === 0) continue;
-
-            // Read all skill files into SkillConfig entries.
-            const skills: SkillConfig[] = [];
-            let description = "";
-
-            for (const skillName of skillSubDirs) {
-              const skillDir = path.join(toolSkillPath, skillName);
-              try {
-                const files = readSkillDirectoryFiles(skillDir);
-                const skillMd = files.find((file) => file.path === "SKILL.md")?.content;
-                if (!skillMd) continue;
-
-                skills.push({ name: skillName, files });
-
-                // Extract description from first skill's SKILL.md (skip frontmatter).
-                if (!description) {
-                  const lines = skillMd.split("\n");
-                  let inFrontmatter = false;
-                  for (const line of lines) {
-                    if (line.trim() === "---") {
-                      inFrontmatter = !inFrontmatter;
-                      continue;
-                    }
-                    if (inFrontmatter) continue;
-                    const trimmed = line.trim();
-                    if (!trimmed) continue;
-                    description = trimmed.replace(/^#\s*/, "");
-                    break;
-                  }
-                }
-              } catch {}
-            }
-
-            try {
-              autoWrapToJournal({
-                name: toolDir,
-                title: toolDir,
-                description,
-                // No transport — skill-only augments don't have an MCP server.
-                skills,
-                fromPlatform: p.platform,
-              });
-            } catch { /* best effort */ }
-          }
-        }
-      } catch { /* skills directory may not exist */ }
-    }
   }
 
   return { meta, scans };

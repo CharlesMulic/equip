@@ -9,7 +9,7 @@ const os = require("os");
 const {
   readPlatformsMeta, writePlatformsMeta, updatePlatformsMeta, setPlatformEnabled,
   getEnabledPlatformIds, isPlatformEnabled,
-  readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms,
+  readPlatformScan, writePlatformScan, scanPlatform, scanAllPlatforms, readDetectedSkillBundle,
 } = require("../dist/lib/platform-state");
 
 const {
@@ -295,8 +295,7 @@ describe("equip.json", () => {
 const { JsonStore } = require("../dist/lib/storage/datastore");
 
 // Helpers that adapt the legacy readAugmentDef/writeAugmentDef shape used in
-// the auto-wrap tests below to the journal-canonical store. Lets the original
-// test intent survive the storage redesign without rewriting all assertions.
+// inventory tests to the journal-canonical store.
 function seedExistingAugment(name, content) {
   const contentHash = JsonStore.putContent({
     name,
@@ -316,16 +315,11 @@ function seedExistingAugment(name, content) {
     platforms: [],
   });
 }
-function resolvedExists(name) {
-  const r = JsonStore.resolve(name);
-  return !!r && r.installed;
-}
-
-describe("Auto-wrapping MCP servers during scan", () => {
+describe("Detected inventory during scan", () => {
   beforeEach(setupTempHome);
   afterEach(teardownTempHome);
 
-  it("wraps unmanaged MCP server into an augment during scanAllPlatforms", () => {
+  it("keeps unmanaged MCP server as detected inventory during scanAllPlatforms", () => {
     // Create a platform config with an unmanaged MCP server
     const configDir = path.join(tempHome, ".test-platform");
     fs.mkdirSync(configDir, { recursive: true });
@@ -348,19 +342,11 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     const { scans } = scanAllPlatforms(detected, new Set());
 
-    // Verify the augment was auto-wrapped into the journal.
-    const resolved = JsonStore.resolve("my-server");
-    assert.ok(resolved, "Augment should be wrapped into the journal");
-    assert.equal(resolved.transport, "stdio");
-    assert.equal(resolved.stdio.command, "npx");
-    assert.deepEqual(resolved.stdio.args, ["-y", "my-mcp-server"]);
-    assert.equal(resolved.installed, true);
-    assert.deepEqual(resolved.installedPlatforms, ["test-platform"]);
-    assert.equal(resolved.contentSource.kind, "wrapped");
-    assert.equal(resolved.contentSource.fromPlatform, "test-platform");
-
-    // Verify scan marks it as managed
-    assert.equal(scans["test-platform"].augments["my-server"].managed, true);
+    assert.equal(JsonStore.resolve("my-server"), null, "scan must not wrap into the journal");
+    assert.equal(scans["test-platform"].augments["my-server"].transport, "stdio");
+    assert.equal(scans["test-platform"].augments["my-server"].command, "npx");
+    assert.deepEqual(scans["test-platform"].augments["my-server"].args, ["-y", "my-mcp-server"]);
+    assert.equal(scans["test-platform"].augments["my-server"].managed, false);
   });
 
   it("does not re-wrap an already existing augment", () => {
@@ -413,11 +399,10 @@ describe("Auto-wrapping MCP servers during scan", () => {
       configFormat: "json",
     }], new Set(["managed-server"]));
 
-    // Should NOT be wrapped
-    assert.ok(!resolvedExists("managed-server"));
+    assert.equal(JsonStore.resolve("managed-server"), null);
   });
 
-  it("wraps orphan skill files during scanAllPlatforms", () => {
+  it("detects orphan grouped skill files without wrapping during scanAllPlatforms", () => {
     // Create Claude Code config with no MCP servers
     const claudeDir = path.join(tempHome, ".claude");
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -444,32 +429,31 @@ describe("Auto-wrapping MCP servers during scan", () => {
       configFormat: "json",
     }];
 
-    scanAllPlatforms(detected, new Set());
+    const { scans } = scanAllPlatforms(detected, new Set());
 
-    // Verify the skill was auto-wrapped into the journal.
-    const resolved = JsonStore.resolve("my-custom-skill");
-    assert.ok(resolved, "Skill augment should be wrapped into the journal");
-    assert.equal(resolved.contentSource.kind, "wrapped");
-    assert.equal(resolved.contentSource.fromPlatform, "claude-code");
-    assert.equal(resolved.installed, true);
-    assert.deepEqual(resolved.installedPlatforms, ["claude-code"]);
+    assert.equal(JsonStore.resolve("my-custom-skill"), null, "scan must not wrap skill inventory into the journal");
+    assert.deepEqual(scans["claude-code"].skillBundles["my-custom-skill"], {
+      managed: false,
+      skills: ["do-thing"],
+      description: "Do Thing",
+      layout: "grouped",
+    });
 
-    // Verify skill content is captured.
-    assert.equal(resolved.skills.length, 1, "Should have 1 skill");
-    assert.equal(resolved.skills[0].name, "do-thing");
-    assert.deepEqual(resolved.skills[0].files.map((file) => file.path), [
+    const bundle = readDetectedSkillBundle("claude-code", "my-custom-skill");
+    assert.ok(bundle, "Skill bundle content should be readable for explicit wrap");
+    assert.equal(bundle.skills.length, 1, "Should have 1 skill");
+    assert.equal(bundle.skills[0].name, "do-thing");
+    assert.deepEqual(bundle.skills[0].files.map((file) => file.path), [
       "SKILL.md",
       "assets/example.json",
       "references/usage.md",
       "scripts/check.ps1",
     ]);
-    assert.equal(resolved.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
-    assert.equal(resolved.skills[0].files.find((file) => file.path === "references/usage.md").content, "# Usage\n");
-    assert.equal(resolved.skills[0].files.find((file) => file.path === "scripts/check.ps1").content, "Write-Output 'ok'\n");
-    assert.equal(resolved.skills[0].files.find((file) => file.path === "assets/example.json").content, "{\"ok\":true}\n");
-
-    // Verify description extracted from SKILL.md heading.
-    assert.equal(resolved.description, "Do Thing");
+    assert.equal(bundle.skills[0].files[0].content, "# Do Thing\nDoes a thing.");
+    assert.equal(bundle.skills[0].files.find((file) => file.path === "references/usage.md").content, "# Usage\n");
+    assert.equal(bundle.skills[0].files.find((file) => file.path === "scripts/check.ps1").content, "Write-Output 'ok'\n");
+    assert.equal(bundle.skills[0].files.find((file) => file.path === "assets/example.json").content, "{\"ok\":true}\n");
+    assert.equal(bundle.description, "Do Thing");
   });
 
   it("extracts description from SKILL.md skipping YAML frontmatter", () => {
@@ -490,13 +474,15 @@ describe("Auto-wrapping MCP servers during scan", () => {
       configFormat: "json",
     }];
 
-    scanAllPlatforms(detected, new Set());
+    const { scans } = scanAllPlatforms(detected, new Set());
 
-    const resolved = JsonStore.resolve("fancy-skill");
-    assert.ok(resolved, "Skill augment should be wrapped into the journal");
-    assert.equal(resolved.description, "Friendly Greeter", "Should skip frontmatter and extract heading");
-    assert.equal(resolved.skills.length, 1);
-    assert.equal(resolved.skills[0].name, "greet");
+    assert.equal(scans["claude-code"].skillBundles["fancy-skill"].description, "Friendly Greeter");
+    const bundle = readDetectedSkillBundle("claude-code", "fancy-skill");
+    assert.ok(bundle, "Skill bundle content should be readable for explicit wrap");
+    assert.equal(bundle.description, "Friendly Greeter", "Should skip frontmatter and extract heading");
+    assert.equal(bundle.skills.length, 1);
+    assert.equal(bundle.skills[0].name, "greet");
+    assert.equal(JsonStore.resolve("fancy-skill"), null);
   });
 
   it("does not wrap skills owned by managed augments", () => {
@@ -518,14 +504,14 @@ describe("Auto-wrapping MCP servers during scan", () => {
     }];
 
     // "prior" is managed
-    scanAllPlatforms(detected, new Set(["prior"]));
+    const { scans } = scanAllPlatforms(detected, new Set(["prior"]));
 
-    // Should NOT be wrapped (managed names skip auto-wrap)
+    assert.equal(scans["claude-code"].skillBundles["prior"].managed, true);
     const resolved = JsonStore.resolve("prior");
     assert.ok(!resolved || resolved.contentSource.kind !== "wrapped");
   });
 
-  it("auto-wrap is idempotent — second scan does not duplicate", () => {
+  it("detected inventory scan is idempotent and does not append intents", () => {
     const configDir = path.join(tempHome, ".test-platform");
     fs.mkdirSync(configDir, { recursive: true });
     const configPath = path.join(configDir, "mcp.json");
@@ -544,18 +530,17 @@ describe("Auto-wrapping MCP servers during scan", () => {
 
     // First scan
     scanAllPlatforms(detected, new Set());
-    assert.ok(JsonStore.resolve("idempotent-server"), "wrapped after first scan");
+    assert.equal(JsonStore.resolve("idempotent-server"), null, "scan must not wrap after first scan");
     const intentsAfterFirst = JsonStore.readIntents().filter(
       (i) => i.name === "idempotent-server",
     ).length;
 
-    // Second scan — should not duplicate the install intent.
+    // Second scan should not append an install intent either.
     scanAllPlatforms(detected, new Set());
-    const resolved = JsonStore.resolve("idempotent-server");
-    assert.equal(resolved.contentSource.kind, "wrapped");
     const intentsAfterSecond = JsonStore.readIntents().filter(
       (i) => i.name === "idempotent-server",
     ).length;
-    assert.equal(intentsAfterSecond, intentsAfterFirst, "second scan must not append a duplicate intent");
+    assert.equal(intentsAfterFirst, 0);
+    assert.equal(intentsAfterSecond, 0);
   });
 });
