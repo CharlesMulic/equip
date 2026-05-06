@@ -19,41 +19,27 @@ const { execSync } = require("child_process");
 
 const EQUIP_ROOT = path.join(__dirname, "..");
 const { trackUninstallation } = require("../dist/lib/installations");
+const { setupHermeticHome } = require("./helpers/hermetic-home");
 
-const ORIGINAL_HOME = os.homedir;
-const ORIGINAL_ENV = {
-  HOME: process.env.HOME,
-  USERPROFILE: process.env.USERPROFILE,
+const docsHome = setupHermeticHome("equip-docs-home-");
+const DOCS_HOME = docsHome.homeDir;
+const DOCS_HOME_ENV = {
+  HOME: DOCS_HOME,
+  USERPROFILE: DOCS_HOME,
   APPDATA: process.env.APPDATA,
   LOCALAPPDATA: process.env.LOCALAPPDATA,
   CODEX_HOME: process.env.CODEX_HOME,
   HOMEDRIVE: process.env.HOMEDRIVE,
   HOMEPATH: process.env.HOMEPATH,
 };
-const DOCS_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "equip-docs-home-"));
-const DOCS_APPDATA = path.join(DOCS_HOME, "AppData", "Roaming");
-const DOCS_LOCALAPPDATA = path.join(DOCS_HOME, "AppData", "Local");
-const DOCS_CODEX_HOME = path.join(DOCS_HOME, ".codex");
-const DOCS_ROOT = path.parse(DOCS_HOME).root;
-const DOCS_HOME_ENV = {
-  HOME: DOCS_HOME,
-  USERPROFILE: DOCS_HOME,
-  APPDATA: DOCS_APPDATA,
-  LOCALAPPDATA: DOCS_LOCALAPPDATA,
-  CODEX_HOME: DOCS_CODEX_HOME,
-  HOMEDRIVE: DOCS_ROOT.replace(/[\\\/]+$/, ""),
-  HOMEPATH: DOCS_HOME.slice(DOCS_ROOT.length - 1),
-};
 
-Object.assign(process.env, DOCS_HOME_ENV);
-os.homedir = () => DOCS_HOME;
 for (const dir of [
   path.join(DOCS_HOME, ".claude"),
   path.join(DOCS_HOME, ".claude", "skills"),
   path.join(DOCS_HOME, ".agents", "skills"),
-  DOCS_APPDATA,
-  DOCS_LOCALAPPDATA,
-  DOCS_CODEX_HOME,
+  DOCS_HOME_ENV.APPDATA,
+  DOCS_HOME_ENV.LOCALAPPDATA,
+  DOCS_HOME_ENV.CODEX_HOME,
 ]) {
   fs.mkdirSync(dir, { recursive: true });
 }
@@ -80,12 +66,7 @@ function runEquip(args, options = {}) {
 }
 
 after(() => {
-  os.homedir = ORIGINAL_HOME;
-  for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-  fs.rmSync(DOCS_HOME, { recursive: true, force: true });
+  docsHome.restore();
 });
 
 // ─── Pirate Hat: Layer 1 (Just a Rule) ──────────────────────
