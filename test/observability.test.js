@@ -7,6 +7,7 @@ const assert = require("assert/strict");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { setupHermeticHome } = require("./helpers/hermetic-home");
 
 const { Augment, makeResult, NOOP_LOGGER, InstallReportBuilder } = require("../dist/index");
 const { installMcpJson, installMcpToml, readMcpEntryDetailed } = require("../dist/lib/mcp");
@@ -23,37 +24,13 @@ function tmpPath(prefix = "obs-test") {
 }
 
 function setHermeticHome(prefix = "obs-home") {
-  const originalHome = os.homedir;
-  const originalEnv = {
-    HOME: process.env.HOME,
-    USERPROFILE: process.env.USERPROFILE,
-    APPDATA: process.env.APPDATA,
-    LOCALAPPDATA: process.env.LOCALAPPDATA,
-    CODEX_HOME: process.env.CODEX_HOME,
-    HOMEDRIVE: process.env.HOMEDRIVE,
-    HOMEPATH: process.env.HOMEPATH,
-  };
-
-  const homeDir = tmpPath(prefix);
-  const root = path.parse(homeDir).root;
-  process.env.HOME = homeDir;
-  process.env.USERPROFILE = homeDir;
-  process.env.APPDATA = path.join(homeDir, "AppData", "Roaming");
-  process.env.LOCALAPPDATA = path.join(homeDir, "AppData", "Local");
-  process.env.CODEX_HOME = path.join(homeDir, ".codex");
-  process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
-  process.env.HOMEPATH = homeDir.slice(root.length - 1);
-  os.homedir = () => homeDir;
+  const hermeticHome = setupHermeticHome(`${prefix}-`);
+  const homeDir = hermeticHome.homeDir;
 
   return {
     homeDir,
     restore() {
-      os.homedir = originalHome;
-      for (const [key, value] of Object.entries(originalEnv)) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
-      fs.rmSync(homeDir, { recursive: true, force: true });
+      hermeticHome.restore();
     },
   };
 }
