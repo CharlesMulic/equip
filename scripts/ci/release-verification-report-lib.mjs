@@ -454,6 +454,18 @@ function buildEvidenceFileNames({
   };
 }
 
+function buildEvidenceArtifactNames({
+  releaseBootstrapResult = null,
+  releasePreflightResult = null,
+  artifactNames = {},
+}) {
+  return {
+    ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.artifactNames),
+    ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.artifactNames),
+    ...prefixArtifactNameEntries("releaseVerification", artifactNames),
+  };
+}
+
 export function buildReleaseVerificationReport({
   releaseBootstrapResult = null,
   releasePreflightResult = null,
@@ -502,6 +514,11 @@ export function buildReleaseVerificationReport({
       tarballSmokeSection,
       dockerAcceptanceSection,
       artifacts,
+    }),
+    evidenceArtifactNames: buildEvidenceArtifactNames({
+      releaseBootstrapResult,
+      releasePreflightResult,
+      artifactNames,
     }),
     workflowContext: normalizeWorkflowContext(workflowContext),
     inputs: {
@@ -629,6 +646,20 @@ export function buildReleaseVerificationSummaryMarkdown({
 
   appendGitHubWorkflowContextSection(lines, report.workflowContext);
   appendArtifactNamesSection(lines, report.artifactNames || {});
+
+  const evidenceArtifactEntries = Object.entries(report.evidenceArtifactNames || {}).filter(([, value]) => value);
+  if (evidenceArtifactEntries.length > 0) {
+    lines.push("");
+    lines.push("## Nested evidence artifacts");
+    lines.push("");
+
+    for (const [key, value] of evidenceArtifactEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
 
   const evidenceFileNameEntries = Object.entries(report.evidenceFileNames || {}).filter(([, value]) => value);
   if (evidenceFileNameEntries.length > 0) {

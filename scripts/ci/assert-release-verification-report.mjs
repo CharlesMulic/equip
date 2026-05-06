@@ -28,6 +28,15 @@ function deriveEvidenceFileNamesFromArtifacts(artifacts) {
   );
 }
 
+function deriveEvidenceArtifactNames(artifactNames) {
+  const normalizedArtifactNames = normalizeArtifacts(artifactNames);
+  return Object.fromEntries(
+    Object.entries(normalizedArtifactNames)
+      .filter(([, value]) => value)
+      .map(([key, value]) => [`releaseVerification${key[0].toUpperCase()}${key.slice(1)}`, value]),
+  );
+}
+
 function formatStatusMap(statusMap) {
   return Object.entries(statusMap)
     .map(([name, status]) => `${name}=${status}`)
@@ -269,6 +278,10 @@ function buildAssertionResult({
       },
     ),
     artifactNames: normalizeArtifacts(report?.artifactNames || readSyntheticArtifactNames()),
+    evidenceArtifactNames: normalizeArtifacts(
+      report?.evidenceArtifactNames ||
+        deriveEvidenceArtifactNames(report?.artifactNames || readSyntheticArtifactNames()),
+    ),
     evidenceFileNames: normalizeArtifacts(
       report?.evidenceFileNames ||
         deriveEvidenceFileNamesFromArtifacts(

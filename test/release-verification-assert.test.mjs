@@ -160,6 +160,8 @@ test("assert-release-verification-report passes healthy rollups", () => {
   assert.equal(assertion.evidenceFileNames.packageLogPath, "pack-verification");
   assert.equal(assertion.evidenceFileNames.tarballSmokeLogPath, "pack-install-smoke");
   assert.equal(assertion.evidenceFileNames.releaseVerificationReportPath, "release-verification-report");
+  assert.equal(assertion.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
+  assert.equal(assertion.evidenceArtifactNames.releaseVerificationSummary, "release-verification-summary");
   assert.deepEqual(assertion.failureDetails, []);
   assert.match(summary, /## Release verification assertion/i);
   assert.match(summary, /Outcome: `passed`/i);
@@ -412,6 +414,17 @@ test("assert-release-verification-report preserves synthetic artifact metadata w
   assert.equal(assertion.artifactNames.report, "release-verification-report");
   assert.equal(assertion.artifactNames.assertion, "release-verification-assertion");
   assert.equal(assertion.artifactNames.summary, "release-verification-summary");
+  assert.deepEqual(assertion.evidenceArtifactNames, {
+    releaseVerificationReleaseBootstrap: "release-bootstrap",
+    releaseVerificationReleasePreflight: "release-preflight",
+    releaseVerificationPackVerification: "pack-verification",
+    releaseVerificationPackTarball: "pack-tarball",
+    releaseVerificationPackInstallSmoke: "pack-install-smoke",
+    releaseVerificationDockerAcceptance: "docker-acceptance",
+    releaseVerificationReport: "release-verification-report",
+    releaseVerificationAssertion: "release-verification-assertion",
+    releaseVerificationSummary: "release-verification-summary",
+  });
   assert.equal(assertion.evidenceFileNames.reportPath, "missing-release-verification-report.json");
   assert.equal(assertion.evidenceFileNames.assertionPath, "release-verification-assertion.json");
 });

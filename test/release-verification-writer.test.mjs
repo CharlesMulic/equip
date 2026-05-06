@@ -204,6 +204,8 @@ test("write-release-verification-report can rewrite a final report without dupli
   assert.equal(report.artifactNames.report, "release-verification-report");
   assert.equal(report.artifactNames.assertion, "release-verification-assertion");
   assert.equal(report.artifactNames.summary, "release-verification-summary");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationSummary, "release-verification-summary");
   assert.equal(report.evidenceFileNames.packageReportPath, "pack-verification.json");
   assert.equal(report.evidenceFileNames.tarballSmokeResultPath, "pack-install-smoke.json");
   assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report.json");
