@@ -2,7 +2,7 @@
 
 import { detectPlatforms } from "../detect";
 import { platformName, resolvePlatformId } from "../platforms";
-import { createSnapshot, listSnapshots, restoreSnapshot, type SnapshotSummary } from "../snapshots";
+import { createSnapshot, diffSnapshot, listSnapshots, restoreSnapshot, type SnapshotRestoreMissingPathPolicy, type SnapshotSummary } from "../snapshots";
 import { createConsoleLogger, type ParsedArgs } from "../cli";
 import * as cli from "../cli";
 
@@ -90,6 +90,38 @@ export function runSnapshots(parsedArgs: ParsedArgs): void {
   }
 }
 
+function restoreMissingPathPolicy(parsedArgs: ParsedArgs): SnapshotRestoreMissingPathPolicy {
+  if (parsedArgs.deleteAdded && parsedArgs.preserveAdded) {
+    cli.fail("Choose only one of --delete-added or --preserve-added");
+    process.exit(1);
+  }
+  return parsedArgs.deleteAdded ? "delete" : "preserve";
+}
+
+/**
+ * equip snapshot-diff <platform> [snapshot-id] - print a JSON restore preview.
+ */
+export function runSnapshotDiff(parsedArgs: ParsedArgs): void {
+  const platformArg = parsedArgs._[0];
+  if (!platformArg) {
+    process.stderr.write("Usage: equip snapshot-diff <platform> [snapshot-id] [--delete-added|--preserve-added]\n");
+    process.exit(1);
+  }
+
+  const platformId = resolvePlatformId(platformArg);
+  const snapshotId = parsedArgs._[1] || undefined;
+
+  try {
+    const diff = diffSnapshot(platformId, snapshotId, {
+      missingPathPolicy: restoreMissingPathPolicy(parsedArgs),
+    });
+    process.stdout.write(JSON.stringify(diff, null, 2) + "\n");
+  } catch (e: unknown) {
+    cli.fail((e as Error).message);
+    process.exit(1);
+  }
+}
+
 /**
  * equip restore <platform> [snapshot-id] — restore platform config from a snapshot.
  */
@@ -102,6 +134,7 @@ export async function runRestore(parsedArgs: ParsedArgs): Promise<void> {
 
   const platformId = resolvePlatformId(platformArg);
   const snapshotId = parsedArgs._[1] || undefined;
+  const missingPathPolicy = restoreMissingPathPolicy(parsedArgs);
 
   cli.log(`\n${cli.BOLD}equip restore${cli.RESET} ${platformName(platformId)}\n`);
 
@@ -125,6 +158,25 @@ export async function runRestore(parsedArgs: ParsedArgs): Promise<void> {
   cli.log(`  Snapshot  ${target.id} (${target.label})`);
   cli.log(`  Created   ${date}`);
   cli.log(`  Contains  ${[target.configExists ? "config" : null, target.rulesExists ? "rules" : null].filter(Boolean).join(", ") || "empty"}`);
+  cli.log(`  Added files ${missingPathPolicy === "delete" ? "delete" : "preserve"}`);
+
+  const preview = diffSnapshot(platformId, target.id, { missingPathPolicy });
+  if (preview.summary.creates || preview.summary.modifies || preview.summary.deletes || preview.summary.preserves || preview.summary.skipped) {
+    cli.log("");
+    cli.log("  Restore plan");
+    for (const entry of preview.entries) {
+      const detail = entry.reason ? ` - ${entry.reason}` : "";
+      cli.log(`    ${entry.kind}: ${entry.action} ${entry.path}${detail}`);
+    }
+  }
+
+  if (parsedArgs.dryRun) {
+    if (parsedArgs.json) {
+      process.stdout.write(JSON.stringify(preview, null, 2) + "\n");
+    }
+    cli.log("");
+    return;
+  }
 
   if (!parsedArgs.nonInteractive) {
     cli.log("");
@@ -136,11 +188,13 @@ export async function runRestore(parsedArgs: ParsedArgs): Promise<void> {
   }
 
   try {
-    const result = restoreSnapshot(platformId, target.id);
+    const result = restoreSnapshot(platformId, target.id, { missingPathPolicy });
 
     if (result.restored) {
       if (result.configRestored) cli.ok("Config file restored");
       if (result.rulesRestored) cli.ok("Rules file restored");
+      if (result.configDeleted) cli.ok("Config file deleted");
+      if (result.rulesDeleted) cli.ok("Rules file deleted");
       if (result.preRestoreId) {
         cli.log(`  ${cli.DIM}Pre-restore snapshot saved: ${result.preRestoreId}${cli.RESET}`);
       }

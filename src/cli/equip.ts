@@ -21,7 +21,7 @@ import { runUpdate } from "../lib/commands/update.js";
 import { runInstall } from "../lib/commands/install.js";
 import { runReauth } from "../lib/commands/reauth.js";
 import { runRefresh, autoRefreshExpired } from "../lib/commands/refresh.js";
-import { runSnapshot, runSnapshots, runRestore } from "../lib/commands/snapshot.js";
+import { runSnapshot, runSnapshots, runSnapshotDiff, runRestore } from "../lib/commands/snapshot.js";
 import { detectPlatforms } from "../lib/detect.js";
 import { ensureInitialSnapshots } from "../lib/snapshots.js";
 import { reconcileState } from "../lib/reconcile.js";
@@ -69,6 +69,7 @@ function cmdHelp(): void {
   console.log("  update           Update equip and migrate configs");
   console.log("  snapshot [plat]  Capture current platform config state");
   console.log("  snapshots [plat] List available config snapshots");
+  console.log("  snapshot-diff    Print JSON restore preview for a snapshot");
   console.log("  restore <plat>   Restore platform config from a snapshot");
   console.log("  demo             Run the built-in demo");
   console.log("");
@@ -78,6 +79,9 @@ function cmdHelp(): void {
   console.log("  --api-key <key>        Provide API key directly (may expose it in shell history/process lists)");
   console.log("  --platform <p>   Target specific platform(s), comma-separated");
   console.log("  --dry-run        Preview without writing");
+  console.log("  --delete-added   Restore files that were absent in the snapshot by deleting them");
+  console.log("  --preserve-added Restore files that were absent in the snapshot by preserving them");
+  console.log("  --json           Emit machine-readable JSON where supported");
   console.log("  --fix-orphan-hooks     (doctor) prune settings hook entries pointing at missing scripts");
   console.log("  --help, -h       Show this help");
   console.log("  --version, -v    Show version");
@@ -323,6 +327,7 @@ async function main(): Promise<void> {
     case "demo":      cmdDemo(parsedArgs._); break;
     case "snapshot":  runSnapshot(parsedArgs); break;
     case "snapshots": runSnapshots(parsedArgs); break;
+    case "snapshot-diff": runSnapshotDiff(parsedArgs); break;
     case "restore":   await runRestore(parsedArgs); break;
     case "uninstall": cmdUninstall(parsedArgs._); break;
     case "reauth":    await runReauth(parsedArgs); break;

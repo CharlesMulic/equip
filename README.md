@@ -39,6 +39,7 @@ equip doctor                   # Validate config integrity + credential health
 equip update prior             # Re-fetch and re-install latest version
 equip refresh                  # Refresh expired OAuth tokens
 equip reauth prior             # Re-authenticate and rotate credentials
+equip snapshot-diff claude-code # Preview exactly what restore would change
 equip restore claude-code      # Restore a platform to its pre-equip state
 unequip prior                  # Remove an augment
 ```
@@ -123,10 +124,11 @@ See [Platforms](./docs/platforms.md) for config paths, detection, and per-platfo
 | `equip uninstall <augment>` | Remove an augment (alias: `unequip`) |
 | `equip snapshot [platform]` | Capture current platform config state |
 | `equip snapshots [platform]` | List available config snapshots |
+| `equip snapshot-diff <platform>` | Print a JSON preview of a snapshot restore |
 | `equip restore <platform>` | Restore platform config to a previous snapshot |
 | `equip ./script.js` | Run a local setup script (for development) |
 
-Options: `--verbose`, `--dry-run`, `--api-key-file <path>`, `--api-key <key>`, `--platform <name>`, `--non-interactive`
+Options: `--verbose`, `--dry-run`, `--api-key-file <path>`, `--api-key <key>`, `--platform <name>`, `--non-interactive`, `--delete-added`, `--preserve-added`, `--json`
 
 See [CLI Reference](./docs/cli.md) for details.
 
@@ -160,6 +162,7 @@ Credentials stored securely at `~/.equip/credentials/`. Expired tokens are auto-
 |---|---|
 | [Augment Author Guide](./docs/augment-author.md) | Build and publish augments |
 | [Platforms](./docs/platforms.md) | Supported platforms, capabilities, config paths |
+| [Snapshots](./docs/snapshots.md) | Config restore points, JSON restore diffs, and restore safety policies |
 | [MCP Servers](./docs/mcp-servers.md) | Config format translation, API reference |
 | [Behavioral Rules](./docs/rules.md) | Marker-based versioned instructions |
 | [Agent Skills](./docs/skills.md) | SKILL.md format, cross-platform distribution |

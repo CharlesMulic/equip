@@ -138,11 +138,17 @@ export interface ParsedArgs {
   fixOrphanHooks: boolean;
   /** Generic --force flag for any command that opts in. */
   force: boolean;
+  /** Restore snapshots by deleting files that did not exist at snapshot time. */
+  deleteAdded: boolean;
+  /** Restore snapshots by preserving files that did not exist at snapshot time. */
+  preserveAdded: boolean;
+  /** Emit machine-readable JSON for commands that support it. */
+  json: boolean;
 }
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, deleteAdded: false, preserveAdded: false, json: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
@@ -152,6 +158,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === "--adopt") { args.adopt = true; }
     else if (a === "--fix-orphan-hooks") { args.fixOrphanHooks = true; }
     else if (a === "--force") { args.force = true; }
+    else if (a === "--delete-added") { args.deleteAdded = true; }
+    else if (a === "--preserve-added") { args.preserveAdded = true; }
+    else if (a === "--json") { args.json = true; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
     else if (a === "--api-key-file" && i + 1 < argv.length) {
       try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }

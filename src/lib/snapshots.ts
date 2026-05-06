@@ -4,7 +4,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
+import * as crypto from "crypto";
 import { atomicWriteFileSync } from "./fs";
 import { acquireLock } from "./fs";
 import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
@@ -41,8 +41,65 @@ export interface RestoreResult {
   snapshot: SnapshotSummary;
   configRestored: boolean;
   rulesRestored: boolean;
+  configDeleted: boolean;
+  rulesDeleted: boolean;
   preRestoreId: string | null;
+  deletedPaths: string[];
+  preservedPaths: string[];
+  diff: SnapshotRestoreDiff;
   warnings: string[];
+}
+
+export type SnapshotRestoreMissingPathPolicy = "preserve" | "delete";
+
+export type SnapshotRestoreAction =
+  | "unchanged"
+  | "create"
+  | "modify"
+  | "delete"
+  | "preserve-added"
+  | "skip";
+
+export type SnapshotPathKind = "config" | "rules";
+
+export interface SnapshotFileDiff {
+  kind: SnapshotPathKind;
+  path: string;
+  action: SnapshotRestoreAction;
+  currentExists: boolean;
+  snapshotExists: boolean;
+  currentKind: "file" | "directory" | "missing" | "other";
+  currentBytes: number | null;
+  snapshotBytes: number | null;
+  currentHash: string | null;
+  snapshotHash: string | null;
+  reason?: string;
+}
+
+export interface SnapshotRestoreDiff {
+  platform: string;
+  snapshotId: string;
+  generatedAt: string;
+  missingPathPolicy: SnapshotRestoreMissingPathPolicy;
+  entries: SnapshotFileDiff[];
+  summary: {
+    creates: number;
+    modifies: number;
+    deletes: number;
+    preserves: number;
+    unchanged: number;
+    skipped: number;
+  };
+  warnings: string[];
+}
+
+export interface SnapshotRestoreOptions {
+  /**
+   * What to do when the target snapshot recorded that a config/rules file did
+   * not exist, but that file exists now. Defaults to preserve so restore never
+   * deletes user-created files unless explicitly requested.
+   */
+  missingPathPolicy?: SnapshotRestoreMissingPathPolicy;
 }
 
 // ─── Paths ──────────────────────────────────────────────────
@@ -210,24 +267,173 @@ export function readSnapshot(platformId: string, snapshotId: string): Snapshot |
   }
 }
 
-// ─── Restore ────────────────────────────────────────────────
+function normalizeRestoreOptions(options: SnapshotRestoreOptions = {}): Required<SnapshotRestoreOptions> {
+  return {
+    missingPathPolicy: options.missingPathPolicy === "delete" ? "delete" : "preserve",
+  };
+}
 
-/**
- * Restore a platform's config to a snapshot.
- * If no snapshotId, restores to the initial (first-detection) snapshot.
- * Auto-creates a pre-restore snapshot of current state before restoring.
- */
-export function restoreSnapshot(platformId: string, snapshotId?: string): RestoreResult {
-  const releaseLock = acquireLock();
+function contentHash(content: string | null): string | null {
+  if (content === null) return null;
+  return crypto.createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+function readCurrentPathState(filePath: string): {
+  exists: boolean;
+  kind: SnapshotFileDiff["currentKind"];
+  content: string | null;
+  bytes: number | null;
+  hash: string | null;
+} {
   try {
-    return restoreSnapshotInner(platformId, snapshotId);
-  } finally {
-    releaseLock();
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      return { exists: true, kind: "directory", content: null, bytes: null, hash: null };
+    }
+    if (!stat.isFile()) {
+      return { exists: true, kind: "other", content: null, bytes: null, hash: null };
+    }
+    const content = fs.readFileSync(filePath, "utf-8");
+    return {
+      exists: true,
+      kind: "file",
+      content,
+      bytes: Buffer.byteLength(content, "utf8"),
+      hash: contentHash(content),
+    };
+  } catch {
+    return { exists: false, kind: "missing", content: null, bytes: null, hash: null };
   }
 }
 
-function restoreSnapshotInner(platformId: string, snapshotId?: string): RestoreResult {
-  // Find target snapshot
+function buildFileDiff(
+  kind: SnapshotPathKind,
+  filePath: string,
+  snapshotContent: string | null,
+  missingPathPolicy: SnapshotRestoreMissingPathPolicy,
+): SnapshotFileDiff {
+  const current = readCurrentPathState(filePath);
+  const snapshotExists = snapshotContent !== null;
+  const snapshotBytes = snapshotContent === null ? null : Buffer.byteLength(snapshotContent, "utf8");
+  const snapshotHash = contentHash(snapshotContent);
+
+  if (current.kind === "directory") {
+    return {
+      kind,
+      path: filePath,
+      action: "skip",
+      currentExists: true,
+      snapshotExists,
+      currentKind: current.kind,
+      currentBytes: current.bytes,
+      snapshotBytes,
+      currentHash: current.hash,
+      snapshotHash,
+      reason: "Current path is a directory; platform snapshots only restore files.",
+    };
+  }
+
+  if (current.kind === "other") {
+    return {
+      kind,
+      path: filePath,
+      action: "skip",
+      currentExists: true,
+      snapshotExists,
+      currentKind: current.kind,
+      currentBytes: current.bytes,
+      snapshotBytes,
+      currentHash: current.hash,
+      snapshotHash,
+      reason: "Current path is not a regular file; platform snapshots only restore files.",
+    };
+  }
+
+  if (snapshotExists) {
+    const action: SnapshotRestoreAction = !current.exists
+      ? "create"
+      : current.hash === snapshotHash
+        ? "unchanged"
+        : "modify";
+    return {
+      kind,
+      path: filePath,
+      action,
+      currentExists: current.exists,
+      snapshotExists: true,
+      currentKind: current.kind,
+      currentBytes: current.bytes,
+      snapshotBytes,
+      currentHash: current.hash,
+      snapshotHash,
+    };
+  }
+
+  if (!current.exists) {
+    return {
+      kind,
+      path: filePath,
+      action: "unchanged",
+      currentExists: false,
+      snapshotExists: false,
+      currentKind: current.kind,
+      currentBytes: null,
+      snapshotBytes: null,
+      currentHash: null,
+      snapshotHash: null,
+      reason: "Path did not exist in the snapshot and does not exist now.",
+    };
+  }
+
+  if (missingPathPolicy === "delete") {
+    return {
+      kind,
+      path: filePath,
+      action: "delete",
+      currentExists: true,
+      snapshotExists: false,
+      currentKind: current.kind,
+      currentBytes: current.bytes,
+      snapshotBytes: null,
+      currentHash: current.hash,
+      snapshotHash: null,
+      reason: "Path did not exist in the snapshot; delete policy will remove the current file.",
+    };
+  }
+
+  return {
+    kind,
+    path: filePath,
+    action: "preserve-added",
+    currentExists: true,
+    snapshotExists: false,
+    currentKind: current.kind,
+    currentBytes: current.bytes,
+    snapshotBytes: null,
+    currentHash: current.hash,
+    snapshotHash: null,
+    reason: "Path did not exist in the snapshot; preserve policy will leave the current file in place.",
+  };
+}
+
+function summarizeDiff(entries: SnapshotFileDiff[]): SnapshotRestoreDiff["summary"] {
+  return {
+    creates: entries.filter(e => e.action === "create").length,
+    modifies: entries.filter(e => e.action === "modify").length,
+    deletes: entries.filter(e => e.action === "delete").length,
+    preserves: entries.filter(e => e.action === "preserve-added").length,
+    unchanged: entries.filter(e => e.action === "unchanged").length,
+    skipped: entries.filter(e => e.action === "skip").length,
+  };
+}
+
+function diffWarnings(entries: SnapshotFileDiff[]): string[] {
+  return entries
+    .filter(e => e.reason && (e.action === "preserve-added" || e.action === "skip"))
+    .map(e => `${e.kind}: ${e.reason}`);
+}
+
+function resolveSnapshotForRestore(platformId: string, snapshotId?: string): Snapshot {
   let targetId = snapshotId;
   if (!targetId) {
     const initial = getInitialSnapshot(platformId);
@@ -242,9 +448,78 @@ function restoreSnapshotInner(platformId: string, snapshotId?: string): RestoreR
     throw new Error(`Snapshot "${targetId}" not found for ${platformId}`);
   }
 
-  const warnings: string[] = [];
+  return snapshot;
+}
+
+/**
+ * Preview the exact file operations a restore would perform.
+ * The result is JSON-safe so CLI, sidecar, and UI callers can render the same
+ * restore plan before any writes happen.
+ */
+export function diffSnapshot(
+  platformId: string,
+  snapshotId?: string,
+  options: SnapshotRestoreOptions = {},
+): SnapshotRestoreDiff {
+  const { missingPathPolicy } = normalizeRestoreOptions(options);
+  const snapshot = resolveSnapshotForRestore(platformId, snapshotId);
+  const entries: SnapshotFileDiff[] = [
+    buildFileDiff("config", snapshot.configPath, snapshot.configContent, missingPathPolicy),
+  ];
+
+  if (snapshot.rulesPath) {
+    entries.push(buildFileDiff("rules", snapshot.rulesPath, snapshot.rulesContent, missingPathPolicy));
+  }
+
+  const warnings = diffWarnings(entries);
+  return {
+    platform: platformId,
+    snapshotId: snapshot.id,
+    generatedAt: new Date().toISOString(),
+    missingPathPolicy,
+    entries,
+    summary: summarizeDiff(entries),
+    warnings,
+  };
+}
+
+// ─── Restore ────────────────────────────────────────────────
+
+/**
+ * Restore a platform's config to a snapshot.
+ * If no snapshotId, restores to the initial (first-detection) snapshot.
+ * Auto-creates a pre-restore snapshot of current state before restoring.
+ */
+export function restoreSnapshot(
+  platformId: string,
+  snapshotId?: string,
+  options: SnapshotRestoreOptions = {},
+): RestoreResult {
+  const releaseLock = acquireLock();
+  try {
+    return restoreSnapshotInner(platformId, snapshotId, options);
+  } finally {
+    releaseLock();
+  }
+}
+
+function restoreSnapshotInner(
+  platformId: string,
+  snapshotId?: string,
+  options: SnapshotRestoreOptions = {},
+): RestoreResult {
+  const normalizedOptions = normalizeRestoreOptions(options);
+  const snapshot = resolveSnapshotForRestore(platformId, snapshotId);
+  const diff = diffSnapshot(platformId, snapshot.id, normalizedOptions);
+  const warnings: string[] = [...diff.warnings];
   let configRestored = false;
   let rulesRestored = false;
+  let configDeleted = false;
+  let rulesDeleted = false;
+  const deletedPaths: string[] = [];
+  const preservedPaths = diff.entries
+    .filter(e => e.action === "preserve-added")
+    .map(e => e.path);
 
   // Build a DetectedPlatform for the pre-restore snapshot.
   // Use the snapshot's recorded paths — these are the actual paths that were snapshotted.
@@ -271,46 +546,48 @@ function restoreSnapshotInner(platformId: string, snapshotId?: string): RestoreR
     warnings.push("Failed to create pre-restore snapshot");
   }
 
-  // Restore config file
-  if (snapshot.configContent !== null) {
+  const applyEntry = (entry: SnapshotFileDiff, snapshotContent: string | null): void => {
     try {
-      const dir = path.dirname(snapshot.configPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      atomicWriteFileSync(snapshot.configPath, snapshot.configContent);
-      configRestored = true;
-    } catch (e: unknown) {
-      warnings.push(`Failed to restore config: ${(e as Error).message}`);
-    }
-  } else {
-    warnings.push("Config file did not exist at snapshot time — skipping config restore");
-  }
-
-  // Restore rules file (only if rulesPath is a file, not a directory)
-  if (snapshot.rulesPath && snapshot.rulesContent !== null) {
-    try {
-      // Don't restore if rulesPath is now a directory (e.g., Roo Code migration)
-      let isDir = false;
-      try { isDir = fs.statSync(snapshot.rulesPath).isDirectory(); } catch {}
-
-      if (!isDir) {
-        const dir = path.dirname(snapshot.rulesPath);
+      if (entry.action === "create" || entry.action === "modify") {
+        if (snapshotContent === null) {
+          warnings.push(`No snapshot content available for ${entry.kind}`);
+          return;
+        }
+        const dir = path.dirname(entry.path);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        atomicWriteFileSync(snapshot.rulesPath, snapshot.rulesContent);
-        rulesRestored = true;
-      } else {
-        warnings.push("Rules path is now a directory — skipping rules restore");
+        atomicWriteFileSync(entry.path, snapshotContent);
+        if (entry.kind === "config") configRestored = true;
+        else rulesRestored = true;
+        return;
+      }
+
+      if (entry.action === "delete") {
+        fs.unlinkSync(entry.path);
+        deletedPaths.push(entry.path);
+        if (entry.kind === "config") configDeleted = true;
+        else rulesDeleted = true;
       }
     } catch (e: unknown) {
-      warnings.push(`Failed to restore rules: ${(e as Error).message}`);
+      warnings.push(`Failed to apply ${entry.kind} restore action "${entry.action}": ${(e as Error).message}`);
     }
+  };
+
+  for (const entry of diff.entries) {
+    const snapshotContent = entry.kind === "config" ? snapshot.configContent : snapshot.rulesContent;
+    applyEntry(entry, snapshotContent);
   }
 
   return {
-    restored: configRestored || rulesRestored,
+    restored: configRestored || rulesRestored || configDeleted || rulesDeleted,
     snapshot: snapshotToSummary(snapshot),
     configRestored,
     rulesRestored,
+    configDeleted,
+    rulesDeleted,
     preRestoreId,
+    deletedPaths,
+    preservedPaths,
+    diff,
     warnings,
   };
 }
@@ -348,7 +625,14 @@ export function getInitialSnapshot(platformId: string): SnapshotSummary | null {
  */
 export function hasInitialSnapshot(platformId: string): boolean {
   try {
-    return fs.existsSync(path.join(platformSnapshotsDir(platformId), ".initial-taken"));
+    const markerPath = path.join(platformSnapshotsDir(platformId), ".initial-taken");
+    if (fs.existsSync(markerPath)) {
+      const markerId = fs.readFileSync(markerPath, "utf-8").trim();
+      if (markerId && fs.existsSync(snapshotFilePath(platformId, markerId))) {
+        return true;
+      }
+    }
+    return getInitialSnapshot(platformId) !== null;
   } catch {
     return false;
   }

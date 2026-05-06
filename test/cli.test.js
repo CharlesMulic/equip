@@ -46,6 +46,14 @@ describe("parseArgs", () => {
     assert.strictEqual(result.nonInteractive, true);
   });
 
+  it("parses snapshot restore preview flags", () => {
+    const result = parseArgs(["claude-code", "--delete-added", "--json"]);
+    assert.strictEqual(result.deleteAdded, true);
+    assert.strictEqual(result.preserveAdded, false);
+    assert.strictEqual(result.json, true);
+    assert.deepStrictEqual(result._, ["claude-code"]);
+  });
+
   it("parses --api-key with value", () => {
     const result = parseArgs(["--api-key", "sk-test-123"]);
     assert.strictEqual(result.apiKey, "sk-test-123");

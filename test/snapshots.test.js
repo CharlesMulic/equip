@@ -12,6 +12,7 @@ const {
   createSnapshot,
   listSnapshots,
   readSnapshot,
+  diffSnapshot,
   restoreSnapshot,
   deleteSnapshot,
   hasInitialSnapshot,
@@ -179,6 +180,70 @@ describe("readSnapshot", () => {
   });
 });
 
+describe("diffSnapshot", () => {
+  beforeEach(setupTempHome);
+  afterEach(teardownTempHome);
+
+  it("reports modify operations without exposing file contents", () => {
+    const p = makePlatform("claude-code", '{"original":true}');
+    const snap = createSnapshot(p, { label: "initial", trigger: "first-detection" });
+
+    fs.writeFileSync(p.configPath, '{"modified":true}');
+
+    const diff = diffSnapshot("claude-code", snap.id);
+    const config = diff.entries.find(e => e.kind === "config");
+
+    assert.equal(diff.snapshotId, snap.id);
+    assert.equal(diff.missingPathPolicy, "preserve");
+    assert.equal(config.action, "modify");
+    assert.equal(config.snapshotExists, true);
+    assert.equal(config.currentExists, true);
+    assert.ok(config.currentHash);
+    assert.ok(config.snapshotHash);
+    assert.notEqual(config.currentHash, config.snapshotHash);
+    assert.equal(config.currentContent, undefined);
+    assert.equal(config.snapshotContent, undefined);
+  });
+
+  it("reports create when snapshot has content and current file is missing", () => {
+    const p = makePlatform("claude-code", '{"original":true}');
+    const snap = createSnapshot(p, { label: "initial", trigger: "first-detection" });
+
+    fs.unlinkSync(p.configPath);
+
+    const diff = diffSnapshot("claude-code", snap.id);
+    assert.equal(diff.entries.find(e => e.kind === "config").action, "create");
+    assert.equal(diff.summary.creates, 1);
+  });
+
+  it("reports preserve-added by default when snapshot had no file", () => {
+    const p = makePlatform("test-plat", null);
+    try { fs.unlinkSync(p.configPath); } catch {}
+    const snap = createSnapshot(p, { label: "empty", trigger: "first-detection" });
+
+    fs.writeFileSync(p.configPath, '{"new":true}');
+
+    const diff = diffSnapshot("test-plat", snap.id);
+    const config = diff.entries.find(e => e.kind === "config");
+    assert.equal(config.action, "preserve-added");
+    assert.equal(diff.summary.preserves, 1);
+    assert.ok(diff.warnings.some(w => w.includes("preserve policy")));
+  });
+
+  it("reports delete when delete policy is requested for a file absent in the snapshot", () => {
+    const p = makePlatform("test-plat", null);
+    try { fs.unlinkSync(p.configPath); } catch {}
+    const snap = createSnapshot(p, { label: "empty", trigger: "first-detection" });
+
+    fs.writeFileSync(p.configPath, '{"new":true}');
+
+    const diff = diffSnapshot("test-plat", snap.id, { missingPathPolicy: "delete" });
+    const config = diff.entries.find(e => e.kind === "config");
+    assert.equal(config.action, "delete");
+    assert.equal(diff.summary.deletes, 1);
+  });
+});
+
 describe("restoreSnapshot", () => {
   beforeEach(setupTempHome);
   afterEach(teardownTempHome);
@@ -239,7 +304,7 @@ describe("restoreSnapshot", () => {
     assert.equal(preRestore.trigger, "pre-restore");
   });
 
-  it("warns when config content is null", () => {
+  it("preserves added config by default when snapshot content is null", () => {
     const p = makePlatform("test-plat", null);
     try { fs.unlinkSync(p.configPath); } catch {}
     const snap = createSnapshot(p, { label: "empty", trigger: "first-detection" });
@@ -249,10 +314,26 @@ describe("restoreSnapshot", () => {
 
     const result = restoreSnapshot("test-plat", snap.id);
     assert.ok(result.warnings.length > 0, "should have warnings");
-    assert.ok(result.warnings.some(w => w.includes("did not exist")));
+    assert.ok(result.warnings.some(w => w.includes("preserve policy")));
     assert.equal(result.configRestored, false);
+    assert.equal(result.configDeleted, false);
+    assert.deepEqual(result.preservedPaths, [p.configPath]);
     // File should NOT be deleted
     assert.ok(fs.existsSync(p.configPath), "should not delete existing file");
+  });
+
+  it("deletes added config when delete policy is requested", () => {
+    const p = makePlatform("test-plat", null);
+    try { fs.unlinkSync(p.configPath); } catch {}
+    const snap = createSnapshot(p, { label: "empty", trigger: "first-detection" });
+
+    fs.writeFileSync(p.configPath, '{"new":true}');
+
+    const result = restoreSnapshot("test-plat", snap.id, { missingPathPolicy: "delete" });
+    assert.ok(result.restored);
+    assert.equal(result.configDeleted, true);
+    assert.deepEqual(result.deletedPaths, [p.configPath]);
+    assert.ok(!fs.existsSync(p.configPath), "delete policy should remove added file");
   });
 
   it("throws when no initial snapshot exists and no ID given", () => {
@@ -380,6 +461,22 @@ describe("ensureInitialSnapshots", () => {
 
     const all = listSnapshots("claude-code").filter(s => s.trigger === "first-detection");
     assert.equal(all.length, 1, "should only have one first-detection snapshot");
+  });
+
+  it("recreates initial snapshot when marker points at a deleted snapshot", () => {
+    const p = makePlatform("claude-code", '{"pristine":true}');
+    ensureInitialSnapshots([p]);
+
+    const first = listSnapshots("claude-code").find(s => s.trigger === "first-detection");
+    deleteSnapshot("claude-code", first.id);
+
+    assert.equal(hasInitialSnapshot("claude-code"), false);
+
+    ensureInitialSnapshots([p]);
+
+    const all = listSnapshots("claude-code").filter(s => s.trigger === "first-detection");
+    assert.equal(all.length, 1);
+    assert.equal(readSnapshot("claude-code", all[0].id).configContent, '{"pristine":true}');
   });
 });
 
@@ -510,19 +607,16 @@ describe("sentinel marker file", () => {
     assert.ok(!fs.existsSync(markerPath), ".initial-taken should not exist for manual snapshots");
   });
 
-  it("hasInitialSnapshot uses marker for O(1) lookup", () => {
+  it("hasInitialSnapshot ignores stale markers whose snapshot file is missing", () => {
     const p = makePlatform("claude-code");
 
-    // No marker → false
     assert.equal(hasInitialSnapshot("claude-code"), false);
 
-    // Create first-detection snapshot → marker written → true
     createSnapshot(p, { trigger: "first-detection" });
     assert.equal(hasInitialSnapshot("claude-code"), true);
 
-    // Delete the snapshot file but leave the marker — still true (fast path)
     const snaps = listSnapshots("claude-code");
     for (const s of snaps) deleteSnapshot("claude-code", s.id);
-    assert.equal(hasInitialSnapshot("claude-code"), true, "marker survives snapshot deletion");
+    assert.equal(hasInitialSnapshot("claude-code"), false, "stale marker should not block new baseline capture");
   });
 });

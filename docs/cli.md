@@ -148,6 +148,20 @@ equip snapshots cursor             # Show snapshots for Cursor only
 
 Shows snapshot ID, label, timestamp, and what was captured (config, rules).
 
+### `equip snapshot-diff <platform> [snapshot-id]`
+
+Print a machine-readable JSON preview of what a restore would do.
+
+```bash
+equip snapshot-diff claude-code
+equip snapshot-diff cursor 20260401T143022Z
+equip snapshot-diff claude-code --delete-added
+```
+
+The diff reports config/rules entries with an action of `unchanged`, `create`, `modify`, `delete`, `preserve-added`, or `skip`. It includes existence, file kind, byte count, and SHA-256 hash metadata for both current state and snapshot state. It does not include file contents.
+
+By default, files that did not exist in the snapshot but exist now are reported as `preserve-added`. Use `--delete-added` to preview true deletion of those added files.
+
 ### `equip restore <platform> [snapshot-id]`
 
 Restore a platform's config to a previous snapshot.
@@ -155,11 +169,15 @@ Restore a platform's config to a previous snapshot.
 ```bash
 equip restore claude-code          # Restore to initial (pre-equip) state
 equip restore cursor 20260401T143022Z  # Restore to a specific snapshot
+equip restore claude-code --dry-run     # Show the restore plan without writing
+equip restore claude-code --delete-added # Delete files that were absent in the snapshot
 ```
 
 If no snapshot ID is given, restores to the initial (first-detection) snapshot — the pristine state before equip ever modified anything.
 
 Before restoring, equip automatically saves a pre-restore snapshot of the current state. If you change your mind, you can restore to that snapshot to undo the restore.
+
+When the snapshot says a file did not exist but that file exists now, restore preserves it by default. Pass `--delete-added` only when you want the restore to remove those added regular files. Directories are never deleted by snapshot restore; they appear as `skip` in the restore diff.
 
 ### `equip demo`
 
@@ -174,6 +192,9 @@ Run the built-in interactive demo that walks through building an augment.
 | `--api-key-file <path>` | Read API key from a file. Recommended for CI and safer than putting secrets in shell history. |
 | `--api-key <key>` | Provide API key directly. Convenient, but may expose the key in shell history or process lists. |
 | `--platform <name>` | Target specific platform(s), comma-separated (e.g., `claude,cursor`) |
+| `--delete-added` | Snapshot restore policy: remove regular files that did not exist in the target snapshot |
+| `--preserve-added` | Snapshot restore policy: preserve files that did not exist in the target snapshot (default) |
+| `--json` | Emit machine-readable JSON for commands that support it |
 | `--non-interactive` | No prompts — fail if information is missing |
 | `--help`, `-h` | Show help |
 | `--version`, `-v` | Show version |
