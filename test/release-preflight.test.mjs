@@ -57,6 +57,7 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
   assert.equal(result.evidenceFileNames.resultPath, "release-preflight-result.json");
   assert.equal(result.evidenceFileNames.summaryPath, "release-preflight-summary.md");
   assert.equal(result.artifactNames.bundle, "release-preflight");
+  assert.equal(result.evidenceArtifactNames.bundle, "release-preflight");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(result.workflowContext.commitUrl, "https://github.com/CharlesMulic/equip/commit/fedcba654321");
 });
@@ -102,6 +103,7 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
   assert.match(markdown, /## Evidence file names/i);
   assert.match(markdown, /buildLogPath: `release-preflight-build\.log`/i);
   assert.match(markdown, /## Evidence artifacts/i);
+  assert.match(markdown, /## Evidence artifact names/i);
   assert.match(markdown, /bundle: `release-preflight`/i);
   assert.match(markdown, /## GitHub workflow context/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
@@ -150,6 +152,7 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.equal(artifact.evidenceFileNames.buildLogPath, "release-preflight-build.log");
   assert.equal(artifact.evidenceFileNames.testLogPath, "release-preflight-test.log");
   assert.equal(artifact.artifactNames.bundle, "release-preflight");
+  assert.equal(artifact.evidenceArtifactNames.bundle, "release-preflight");
   assert.equal(artifact.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/456");
   assert.match(summary, /Overall status: `passed`/i);
   assert.match(summary, /## Evidence file names/i);

@@ -36,6 +36,10 @@ function deriveEvidenceFileNames(artifacts) {
   );
 }
 
+function deriveEvidenceArtifactNames(artifactNames) {
+  return normalizeArtifactNames(artifactNames);
+}
+
 function summarizeInstallStep(step) {
   if (!step) {
     return "dependency install result missing";
@@ -73,6 +77,7 @@ export function buildReleaseBootstrapResult({
     artifacts: normalizeArtifacts(artifacts),
     evidenceFileNames: deriveEvidenceFileNames(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceArtifactNames: deriveEvidenceArtifactNames(artifactNames),
     workflowContext: normalizeWorkflowContext(workflowContext),
   };
 }
@@ -127,6 +132,14 @@ export function buildReleaseBootstrapSummaryMarkdown({ result }) {
   if (artifactNameEntries.length > 0) {
     lines.push("", "## Evidence artifacts", "");
     for (const [name, artifactName] of artifactNameEntries) {
+      lines.push(`- ${name}: \`${artifactName}\``);
+    }
+  }
+
+  const evidenceArtifactNameEntries = Object.entries(result.evidenceArtifactNames || {}).filter(([, value]) => value);
+  if (evidenceArtifactNameEntries.length > 0) {
+    lines.push("", "## Evidence artifact names", "");
+    for (const [name, artifactName] of evidenceArtifactNameEntries) {
       lines.push(`- ${name}: \`${artifactName}\``);
     }
   }

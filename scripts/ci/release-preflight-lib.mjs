@@ -36,6 +36,10 @@ function deriveEvidenceFileNames(artifacts) {
   );
 }
 
+function deriveEvidenceArtifactNames(artifactNames) {
+  return normalizeArtifactNames(artifactNames);
+}
+
 function summarizePhase(label, phase) {
   if (!phase) {
     return `${label} phase result missing`;
@@ -87,6 +91,7 @@ export function buildReleasePreflightResult({
     artifacts: normalizeArtifacts(artifacts),
     evidenceFileNames: deriveEvidenceFileNames(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceArtifactNames: deriveEvidenceArtifactNames(artifactNames),
     workflowContext: normalizeWorkflowContext(workflowContext),
   };
 }
@@ -141,6 +146,14 @@ export function buildReleasePreflightSummaryMarkdown({ result }) {
   if (artifactNameEntries.length > 0) {
     lines.push("", "## Evidence artifacts", "");
     for (const [name, artifactName] of artifactNameEntries) {
+      lines.push(`- ${name}: \`${artifactName}\``);
+    }
+  }
+
+  const evidenceArtifactNameEntries = Object.entries(result.evidenceArtifactNames || {}).filter(([, value]) => value);
+  if (evidenceArtifactNameEntries.length > 0) {
+    lines.push("", "## Evidence artifact names", "");
+    for (const [name, artifactName] of evidenceArtifactNameEntries) {
       lines.push(`- ${name}: \`${artifactName}\``);
     }
   }
