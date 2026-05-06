@@ -150,9 +150,19 @@ export function createSnapshot(
   platform: DetectedPlatform,
   options: { label?: string; trigger?: Snapshot["trigger"] } = {},
 ): Snapshot {
-  const id = generateSnapshotId(platform.platform);
   const trigger = options.trigger || "manual";
   const label = options.label || trigger;
+
+  if (trigger === "first-detection") {
+    const existingInitial = getInitialSnapshot(platform.platform);
+    if (existingInitial) {
+      try { pruneSnapshots(platform.platform); } catch {}
+      const existingSnapshot = readSnapshot(platform.platform, existingInitial.id);
+      if (existingSnapshot) return existingSnapshot;
+    }
+  }
+
+  const id = generateSnapshotId(platform.platform);
 
   // Read raw config content
   let configContent: string | null = null;
@@ -650,6 +660,8 @@ export function ensureInitialSnapshots(platforms: DetectedPlatform[]): void {
     try {
       if (!hasInitialSnapshot(p.platform)) {
         createSnapshot(p, { label: "initial", trigger: "first-detection" });
+      } else {
+        pruneSnapshots(p.platform);
       }
     } catch { /* best effort */ }
   }
@@ -663,19 +675,33 @@ export function ensureInitialSnapshots(platforms: DetectedPlatform[]): void {
  */
 export function pruneSnapshots(platformId: string, keepCount: number = 20): number {
   const all = listSnapshots(platformId);
-  if (all.length <= keepCount) return 0;
 
-  // Separate first-detection (always keep) from the rest
+  // Keep exactly one first-detection snapshot: the oldest one is the real
+  // pre-Equip baseline. Duplicate baselines can be created by older builds or
+  // stale marker loops and should not be kept forever.
   const initial = all.filter(s => s.trigger === "first-detection");
+  const initialToKeep = initial.length > 0 ? initial[initial.length - 1] : null;
+  const duplicateInitial = initialToKeep
+    ? initial.filter(s => s.id !== initialToKeep.id)
+    : [];
   const others = all.filter(s => s.trigger !== "first-detection");
 
-  // others is already sorted newest-first — keep the first `keepCount` minus initial count
-  const keepOthers = Math.max(0, keepCount - initial.length);
-  const toDelete = others.slice(keepOthers);
+  // Others are already sorted newest-first; reserve one slot for the baseline.
+  const keepOthers = Math.max(0, keepCount - (initialToKeep ? 1 : 0));
+  const toDelete = [...duplicateInitial, ...others.slice(keepOthers)];
 
   let pruned = 0;
   for (const snap of toDelete) {
     if (deleteSnapshot(snap.platform, snap.id)) pruned++;
   }
+
+  if (initialToKeep) {
+    try {
+      const dir = platformSnapshotsDir(platformId);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, ".initial-taken"), initialToKeep.id);
+    } catch {}
+  }
+
   return pruned;
 }

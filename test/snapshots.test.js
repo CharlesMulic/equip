@@ -112,6 +112,19 @@ describe("createSnapshot", () => {
     const snap2 = createSnapshot(p, { label: "second" });
     assert.notEqual(snap1.id, snap2.id, "IDs should be unique");
   });
+
+  it("returns existing first-detection snapshot instead of creating a duplicate baseline", () => {
+    const p = makePlatform("claude-code", '{"pristine":true}');
+    const first = createSnapshot(p, { label: "initial", trigger: "first-detection" });
+
+    fs.writeFileSync(p.configPath, '{"modified":true}');
+    const second = createSnapshot(p, { label: "initial", trigger: "first-detection" });
+
+    assert.equal(second.id, first.id, "first-detection capture should be idempotent");
+    const all = listSnapshots("claude-code").filter(s => s.trigger === "first-detection");
+    assert.equal(all.length, 1, "should keep only one first-detection snapshot");
+    assert.equal(readSnapshot("claude-code", first.id).configContent, '{"pristine":true}');
+  });
 });
 
 describe("listSnapshots", () => {
@@ -405,6 +418,38 @@ describe("pruneSnapshots", () => {
 
     // Initial should still be there
     assert.ok(after.some(s => s.trigger === "first-detection"), "initial should survive pruning");
+  });
+
+  it("prunes duplicate first-detection snapshots and keeps the oldest baseline", () => {
+    const p = makePlatform("claude-code", '{"pristine":true}');
+    const initial = createSnapshot(p, { label: "initial", trigger: "first-detection" });
+    for (let i = 0; i < 3; i++) {
+      createSnapshot(p, { label: `manual-${i}`, trigger: "manual" });
+    }
+
+    const dir = path.join(tempHome, ".equip", "snapshots", "claude-code");
+    const original = readSnapshot("claude-code", initial.id);
+    assert.ok(original);
+    const duplicate = {
+      ...original,
+      id: "20990101T000000Z",
+      createdAt: "2099-01-01T00:00:00.000Z",
+      configContent: '{"modified":true}',
+    };
+    fs.writeFileSync(path.join(dir, `${duplicate.id}.json`), JSON.stringify(duplicate, null, 2) + "\n");
+    fs.writeFileSync(path.join(dir, ".initial-taken"), duplicate.id);
+
+    const pruned = pruneSnapshots("claude-code", 3);
+    assert.equal(pruned, 2, "should prune the duplicate baseline and the oldest manual snapshot");
+
+    const after = listSnapshots("claude-code");
+    assert.equal(after.length, 3, "should keep one baseline plus two recent snapshots");
+    const baselines = after.filter(s => s.trigger === "first-detection");
+    assert.equal(baselines.length, 1, "should keep exactly one first-detection snapshot");
+    assert.equal(baselines[0].id, initial.id, "oldest baseline should survive");
+    assert.equal(readSnapshot("claude-code", initial.id).configContent, '{"pristine":true}');
+    assert.equal(readSnapshot("claude-code", duplicate.id), null, "duplicate baseline should be removed");
+    assert.equal(fs.readFileSync(path.join(dir, ".initial-taken"), "utf-8"), initial.id);
   });
 
   it("does nothing when under limit", () => {
