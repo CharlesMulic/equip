@@ -123,11 +123,15 @@ function startFixtureRegistry() {
 }
 
 function setHermeticHome(prefix = "equip-registry-home") {
+  const originalHome = os.homedir;
   const homeDir = tmpPath(prefix);
   const codexHome = path.join(homeDir, ".codex");
+  const root = path.parse(homeDir).root;
   const previous = {
     HOME: process.env.HOME,
     USERPROFILE: process.env.USERPROFILE,
+    APPDATA: process.env.APPDATA,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
     HOMEDRIVE: process.env.HOMEDRIVE,
     HOMEPATH: process.env.HOMEPATH,
     CODEX_HOME: process.env.CODEX_HOME,
@@ -136,21 +140,31 @@ function setHermeticHome(prefix = "equip-registry-home") {
   fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
   fs.mkdirSync(codexHome, { recursive: true });
   fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+  fs.mkdirSync(path.join(homeDir, "AppData", "Roaming"), { recursive: true });
+  fs.mkdirSync(path.join(homeDir, "AppData", "Local"), { recursive: true });
 
   process.env.HOME = homeDir;
   process.env.USERPROFILE = homeDir;
+  process.env.APPDATA = path.join(homeDir, "AppData", "Roaming");
+  process.env.LOCALAPPDATA = path.join(homeDir, "AppData", "Local");
   process.env.CODEX_HOME = codexHome;
-  delete process.env.HOMEDRIVE;
-  delete process.env.HOMEPATH;
+  process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
+  process.env.HOMEPATH = homeDir.slice(root.length - 1);
+  os.homedir = () => homeDir;
 
   return {
     homeDir,
     codexHome,
     restore() {
+      os.homedir = originalHome;
       if (previous.HOME === undefined) delete process.env.HOME;
       else process.env.HOME = previous.HOME;
       if (previous.USERPROFILE === undefined) delete process.env.USERPROFILE;
       else process.env.USERPROFILE = previous.USERPROFILE;
+      if (previous.APPDATA === undefined) delete process.env.APPDATA;
+      else process.env.APPDATA = previous.APPDATA;
+      if (previous.LOCALAPPDATA === undefined) delete process.env.LOCALAPPDATA;
+      else process.env.LOCALAPPDATA = previous.LOCALAPPDATA;
       if (previous.HOMEDRIVE === undefined) delete process.env.HOMEDRIVE;
       else process.env.HOMEDRIVE = previous.HOMEDRIVE;
       if (previous.HOMEPATH === undefined) delete process.env.HOMEPATH;
@@ -395,14 +409,21 @@ describe("direct-mode CLI", () => {
     registry = await startFixtureRegistry();
     homeDir = tmpPath("equip-direct-cli-home");
     codexHome = path.join(homeDir, ".codex");
+    const root = path.parse(homeDir).root;
 
     fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
     fs.mkdirSync(codexHome, { recursive: true });
     fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
+    fs.mkdirSync(path.join(homeDir, "AppData", "Roaming"), { recursive: true });
+    fs.mkdirSync(path.join(homeDir, "AppData", "Local"), { recursive: true });
 
     cliEnv = {
       HOME: homeDir,
       USERPROFILE: homeDir,
+      APPDATA: path.join(homeDir, "AppData", "Roaming"),
+      LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
+      HOMEDRIVE: root.replace(/[\\\/]+$/, ""),
+      HOMEPATH: homeDir.slice(root.length - 1),
       CODEX_HOME: codexHome,
       EQUIP_REGISTRY_URL: registry.origin,
     };
