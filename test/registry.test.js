@@ -12,6 +12,7 @@ const { spawn } = require("child_process");
 
 const { registryDefToConfig } = require("../dist/lib/registry");
 const { Augment } = require("../dist/index");
+const { setupHermeticHome } = require("./helpers/hermetic-home");
 
 const FIXTURE_PATH = path.join(__dirname, "docker", "fixtures", "demo-direct-install.json");
 const FIXTURE_TEMPLATE = JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf-8"));
@@ -123,54 +124,21 @@ function startFixtureRegistry() {
 }
 
 function setHermeticHome(prefix = "equip-registry-home") {
-  const originalHome = os.homedir;
-  const homeDir = tmpPath(prefix);
-  const codexHome = path.join(homeDir, ".codex");
-  const root = path.parse(homeDir).root;
-  const previous = {
-    HOME: process.env.HOME,
-    USERPROFILE: process.env.USERPROFILE,
-    APPDATA: process.env.APPDATA,
-    LOCALAPPDATA: process.env.LOCALAPPDATA,
-    HOMEDRIVE: process.env.HOMEDRIVE,
-    HOMEPATH: process.env.HOMEPATH,
-    CODEX_HOME: process.env.CODEX_HOME,
-  };
+  const hermeticHome = setupHermeticHome(`${prefix}-`);
+  const homeDir = hermeticHome.homeDir;
+  const codexHome = process.env.CODEX_HOME;
 
   fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
   fs.mkdirSync(codexHome, { recursive: true });
   fs.mkdirSync(path.join(homeDir, ".agents"), { recursive: true });
-  fs.mkdirSync(path.join(homeDir, "AppData", "Roaming"), { recursive: true });
-  fs.mkdirSync(path.join(homeDir, "AppData", "Local"), { recursive: true });
-
-  process.env.HOME = homeDir;
-  process.env.USERPROFILE = homeDir;
-  process.env.APPDATA = path.join(homeDir, "AppData", "Roaming");
-  process.env.LOCALAPPDATA = path.join(homeDir, "AppData", "Local");
-  process.env.CODEX_HOME = codexHome;
-  process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
-  process.env.HOMEPATH = homeDir.slice(root.length - 1);
-  os.homedir = () => homeDir;
+  fs.mkdirSync(process.env.APPDATA, { recursive: true });
+  fs.mkdirSync(process.env.LOCALAPPDATA, { recursive: true });
 
   return {
     homeDir,
     codexHome,
     restore() {
-      os.homedir = originalHome;
-      if (previous.HOME === undefined) delete process.env.HOME;
-      else process.env.HOME = previous.HOME;
-      if (previous.USERPROFILE === undefined) delete process.env.USERPROFILE;
-      else process.env.USERPROFILE = previous.USERPROFILE;
-      if (previous.APPDATA === undefined) delete process.env.APPDATA;
-      else process.env.APPDATA = previous.APPDATA;
-      if (previous.LOCALAPPDATA === undefined) delete process.env.LOCALAPPDATA;
-      else process.env.LOCALAPPDATA = previous.LOCALAPPDATA;
-      if (previous.HOMEDRIVE === undefined) delete process.env.HOMEDRIVE;
-      else process.env.HOMEDRIVE = previous.HOMEDRIVE;
-      if (previous.HOMEPATH === undefined) delete process.env.HOMEPATH;
-      else process.env.HOMEPATH = previous.HOMEPATH;
-      if (previous.CODEX_HOME === undefined) delete process.env.CODEX_HOME;
-      else process.env.CODEX_HOME = previous.CODEX_HOME;
+      hermeticHome.restore();
     },
   };
 }
