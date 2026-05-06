@@ -143,6 +143,7 @@ export function buildChangesetsReleaseResult({
     artifacts: normalizeArtifactPaths(artifacts),
     evidenceFileNames: deriveEvidenceFileNames(artifacts),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceArtifactNames: buildResultEvidenceArtifactNames({ artifactNames }),
     inputs: {
       hasReleaseVerificationReport: !!releaseVerificationReport,
     },
@@ -207,10 +208,36 @@ function deriveEvidenceFileNames(artifacts) {
   );
 }
 
+function prefixArtifactNameEntries(prefix, artifactNames) {
+  const normalizedArtifactNames = normalizeArtifactNames(artifactNames);
+  const artifactEntries = Object.entries(normalizedArtifactNames).filter(([, value]) => value);
+  if (artifactEntries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    artifactEntries.map(([key, value]) => [
+      `${prefix}${key[0].toUpperCase()}${key.slice(1)}`,
+      value,
+    ]),
+  );
+}
+
 function buildEvidenceFileNames({ result = null, artifacts = {} }) {
   return {
     ...deriveEvidenceFileNames(result?.artifacts),
     ...deriveEvidenceFileNames(artifacts),
+  };
+}
+
+function buildResultEvidenceArtifactNames({ artifactNames = {} }) {
+  return normalizeArtifactNames(artifactNames);
+}
+
+function buildEvidenceArtifactNames({ result = null, artifactNames = {} }) {
+  return {
+    ...prefixArtifactNameEntries("changesetsRelease", result?.evidenceArtifactNames),
+    ...prefixArtifactNameEntries("changesetsRelease", artifactNames),
   };
 }
 
@@ -271,6 +298,20 @@ export function buildChangesetsReleaseSummaryMarkdown({
     lines.push("", "## Evidence artifacts", "");
 
     for (const [key, value] of artifactEntries) {
+      const label = key
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (char) => char.toUpperCase());
+      lines.push(`- ${label}: \`${value}\``);
+    }
+  }
+
+  const evidenceArtifactEntries = Object.entries(normalizedResult.evidenceArtifactNames || {}).filter(
+    ([, value]) => value,
+  );
+  if (evidenceArtifactEntries.length > 0) {
+    lines.push("", "## Evidence artifact names", "");
+
+    for (const [key, value] of evidenceArtifactEntries) {
       const label = key
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/^./, (char) => char.toUpperCase());
@@ -352,6 +393,7 @@ export function buildChangesetsReleaseReport({
       artifacts: normalizeArtifactPaths(normalizedResult?.artifacts),
       evidenceFileNames: normalizeArtifactNames(normalizedResult?.evidenceFileNames),
       artifactNames: normalizeArtifactNames(normalizedResult?.artifactNames),
+      evidenceArtifactNames: normalizeArtifactNames(normalizedResult?.evidenceArtifactNames),
     },
     assertion: assertionArtifact?.assertion
       ? {
@@ -374,6 +416,7 @@ export function buildChangesetsReleaseReport({
     artifacts: normalizeArtifactPaths(artifacts),
     evidenceFileNames: buildEvidenceFileNames({ result: normalizedResult, artifacts }),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceArtifactNames: buildEvidenceArtifactNames({ result: normalizedResult, artifactNames }),
   };
 }
 
@@ -452,12 +495,14 @@ export function writeChangesetsReleaseAssertionArtifact({
       artifacts: normalizeArtifactPaths(normalizedResult?.artifacts),
       evidenceFileNames: normalizeArtifactNames(normalizedResult?.evidenceFileNames),
       artifactNames: normalizeArtifactNames(normalizedResult?.artifactNames),
+      evidenceArtifactNames: normalizeArtifactNames(normalizedResult?.evidenceArtifactNames),
     },
     workflowContext: normalizeWorkflowContext(workflowContext || normalizedResult?.workflowContext),
     inputs: normalizedInputs,
     artifacts: normalizeArtifactPaths(artifacts),
     evidenceFileNames: buildEvidenceFileNames({ result: normalizedResult, artifacts }),
     artifactNames: normalizeArtifactNames(artifactNames),
+    evidenceArtifactNames: buildEvidenceArtifactNames({ result: normalizedResult, artifactNames }),
     assertion,
   };
   fs.writeFileSync(outPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");

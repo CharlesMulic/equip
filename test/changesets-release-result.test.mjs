@@ -86,6 +86,8 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
     result.evidenceFileNames.releaseVerificationReportPath,
     "release-verification-report.json",
   );
+  assert.equal(result.evidenceArtifactNames.result, "changesets-release-result");
+  assert.equal(result.evidenceArtifactNames.releaseVerification, "release-verification-report");
   assert.equal(result.artifactNames.result, "changesets-release-result");
   assert.equal(result.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
@@ -154,6 +156,7 @@ test("write-changesets-release-result writes an artifact and appends summary out
   assert.equal(artifact.artifacts.resultPath, path.resolve(resultPath));
   assert.equal(artifact.artifacts.releaseVerificationReportPath, "");
   assert.equal(artifact.evidenceFileNames.resultPath, "changesets-release-result.json");
+  assert.equal(artifact.evidenceArtifactNames.result, "changesets-release-result");
   assert.equal(artifact.artifactNames.result, "changesets-release-result");
   assert.equal(artifact.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
@@ -199,6 +202,8 @@ test("write-changesets-release-result records verification-blocked skips", () =>
     artifact.evidenceFileNames.releaseVerificationReportPath,
     "release-verification-report.json",
   );
+  assert.equal(artifact.evidenceArtifactNames.result, "changesets-release-result");
+  assert.equal(artifact.evidenceArtifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.artifactNames.result, "changesets-release-result");
   assert.equal(artifact.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.prerequisites.releaseVerificationStatus, "failed");
@@ -216,10 +221,15 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
       artifacts: {
         resultPath: "/tmp/changesets-release-result.json",
       },
+      artifactNames: {
+        result: "changesets-release-result",
+        releaseVerification: "release-verification-report",
+      },
       workflowContext: createWorkflowContext(),
     }),
     artifactNames: {
       result: "changesets-release-result",
+      releaseVerification: "release-verification-report",
       summary: "changesets-release-summary",
     },
   });
@@ -231,8 +241,10 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
   assert.match(markdown, /## GitHub workflow context/i);
   assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
   assert.match(markdown, /## Evidence artifacts/i);
+  assert.match(markdown, /## Evidence artifact names/i);
   assert.match(markdown, /Result: `changesets-release-result`/i);
   assert.match(markdown, /Summary: `changesets-release-summary`/i);
+  assert.match(markdown, /Release Verification: `release-verification-report`/i);
   assert.match(markdown, /## Evidence file names/i);
   assert.match(markdown, /Result Path: `changesets-release-result\.json`/i);
 });
@@ -287,6 +299,12 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
     publishedPackages: JSON.stringify([
       { name: "@cg3/equip", version: "0.17.8" },
     ]),
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
   });
 
   const report = buildChangesetsReleaseReport({
@@ -335,6 +353,9 @@ test("buildChangesetsReleaseReport combines result, assertion, and artifact path
   assert.equal(report.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
   assert.equal(report.evidenceFileNames.summaryPath, "changesets-release-summary.md");
   assert.equal(report.evidenceFileNames.reportPath, "changesets-release-report.json");
+  assert.equal(report.result.evidenceArtifactNames.result, "changesets-release-result");
+  assert.equal(report.evidenceArtifactNames.changesetsReleaseResult, "changesets-release-result");
+  assert.equal(report.evidenceArtifactNames.changesetsReleaseReport, "changesets-release-report");
   assert.equal(report.artifactNames.result, "changesets-release-result");
   assert.equal(report.artifactNames.report, "changesets-release-report");
 });
@@ -507,6 +528,12 @@ test("write-changesets-release-report writes a machine-readable rollup artifact"
     publishedPackages: JSON.stringify([
       { name: "@cg3/equip", version: "0.17.8" },
     ]),
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
   }), null, 2)}\n`, "utf8");
   fs.writeFileSync(assertionPath, `${JSON.stringify({
     kind: "equip-changesets-release-assertion",
@@ -580,6 +607,18 @@ test("assert-changesets-release-result fails when the changesets action failed",
     published: false,
     publishedPackages: [],
     summary: "changesets release step failed; inspect workflow logs for the underlying error",
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
+    evidenceArtifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
   }, null, 2)}\n`, "utf8");
 
   const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
@@ -638,6 +677,12 @@ test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict"
       stepOutcome: "success",
       published: "false",
       publishedPackages: "[]",
+      artifactNames: {
+        result: "changesets-release-result",
+        assertion: "changesets-release-assertion",
+        summary: "changesets-release-summary",
+        report: "changesets-release-report",
+      },
     }),
     artifacts: {
       resultPath: "/tmp/changesets-release-result.json",
@@ -673,6 +718,8 @@ test("writeChangesetsReleaseAssertionArtifact writes a machine-readable verdict"
   assert.equal(artifact.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
   assert.equal(artifact.evidenceFileNames.summaryPath, "changesets-release-summary.md");
   assert.equal(artifact.evidenceFileNames.reportPath, "changesets-release-report.json");
+  assert.equal(artifact.result.evidenceArtifactNames.result, "changesets-release-result");
+  assert.equal(artifact.evidenceArtifactNames.changesetsReleaseSummary, "changesets-release-summary");
   assert.equal(artifact.artifactNames.report, "changesets-release-report");
   const persisted = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
   assert.equal(persisted.assertion.outcome, "passed");
@@ -696,6 +743,12 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
     publishedPackages: JSON.stringify([
       { name: "@cg3/equip", version: "0.17.8" },
     ]),
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
   }), null, 2)}\n`, "utf8");
 
   const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
@@ -730,6 +783,8 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
   assert.equal(assertion.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
   assert.equal(assertion.evidenceFileNames.summaryPath, "changesets-release-summary.md");
   assert.equal(assertion.evidenceFileNames.reportPath, "changesets-release-report.json");
+  assert.equal(assertion.result.evidenceArtifactNames.result, "changesets-release-result");
+  assert.equal(assertion.evidenceArtifactNames.changesetsReleaseReport, "changesets-release-report");
   assert.equal(assertion.artifactNames.report, "changesets-release-report");
 });
 
@@ -748,6 +803,18 @@ test("assert-changesets-release-result preserves self-contained evidence pointer
     published: false,
     publishedPackages: [],
     summary: "changesets release step failed; inspect workflow logs for the underlying error",
+    artifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
+    evidenceArtifactNames: {
+      result: "changesets-release-result",
+      assertion: "changesets-release-assertion",
+      summary: "changesets-release-summary",
+      report: "changesets-release-report",
+    },
   }, null, 2)}\n`, "utf8");
 
   const result = runScript("scripts/ci/assert-changesets-release-result.mjs", {
@@ -776,6 +843,8 @@ test("assert-changesets-release-result preserves self-contained evidence pointer
   assert.equal(assertion.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
   assert.equal(assertion.evidenceFileNames.summaryPath, "changesets-release-summary.md");
   assert.equal(assertion.evidenceFileNames.reportPath, "changesets-release-report.json");
+  assert.equal(assertion.result.evidenceArtifactNames.result, "changesets-release-result");
+  assert.equal(assertion.evidenceArtifactNames.changesetsReleaseSummary, "changesets-release-summary");
   assert.equal(assertion.artifactNames.summary, "changesets-release-summary");
 });
 
@@ -901,6 +970,8 @@ test("assert-changesets-release-result writes a failure artifact when the result
     assertion.evidenceFileNames.releaseVerificationReportPath,
     "release-verification-report.json",
   );
+  assert.equal(assertion.result.evidenceArtifactNames.releaseVerification, "release-verification-report");
+  assert.equal(assertion.evidenceArtifactNames.changesetsReleaseReleaseVerification, "release-verification-report");
   assert.equal(assertion.artifactNames.result, "changesets-release-result");
   assert.equal(assertion.artifactNames.assertion, "changesets-release-assertion");
   assert.equal(assertion.artifactNames.summary, "changesets-release-summary");
@@ -1008,4 +1079,6 @@ test("write-changesets-release-summary and report still render when the result a
     report.evidenceFileNames.releaseVerificationReportPath,
     "release-verification-report.json",
   );
+  assert.equal(report.result.evidenceArtifactNames.releaseVerification, "release-verification-report");
+  assert.equal(report.evidenceArtifactNames.changesetsReleaseReleaseVerification, "release-verification-report");
 });
