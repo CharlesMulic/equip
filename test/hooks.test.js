@@ -8,6 +8,7 @@ const assert = require("node:assert/strict");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
+const { setupHermeticHome } = require("./helpers/hermetic-home");
 
 const {
   getHookCapabilities,
@@ -42,27 +43,8 @@ function makeTempDir() {
 }
 
 function withHermeticHome() {
-  const originalHome = os.homedir;
-  const originalEnv = {
-    HOME: process.env.HOME,
-    USERPROFILE: process.env.USERPROFILE,
-    APPDATA: process.env.APPDATA,
-    LOCALAPPDATA: process.env.LOCALAPPDATA,
-    CODEX_HOME: process.env.CODEX_HOME,
-    HOMEDRIVE: process.env.HOMEDRIVE,
-    HOMEPATH: process.env.HOMEPATH,
-  };
-
-  const home = makeTempDir();
-  const root = path.parse(home).root;
-  process.env.HOME = home;
-  process.env.USERPROFILE = home;
-  process.env.APPDATA = path.join(home, "AppData", "Roaming");
-  process.env.LOCALAPPDATA = path.join(home, "AppData", "Local");
-  process.env.CODEX_HOME = path.join(home, ".codex");
-  process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
-  process.env.HOMEPATH = home.slice(root.length - 1);
-  os.homedir = () => home;
+  const hermeticHome = setupHermeticHome("equip-hooks-test-");
+  const home = hermeticHome.homeDir;
 
   for (const dir of [
     path.join(home, ".claude"),
@@ -76,12 +58,7 @@ function withHermeticHome() {
   return {
     home,
     restore() {
-      os.homedir = originalHome;
-      for (const [key, value] of Object.entries(originalEnv)) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
-      fs.rmSync(home, { recursive: true, force: true });
+      hermeticHome.restore();
     },
   };
 }
