@@ -92,6 +92,7 @@ function writeAssertionArtifact({ report, assertion, outPath }) {
 const report = fs.existsSync(reportPath)
   ? JSON.parse(fs.readFileSync(reportPath, "utf8"))
   : (() => {
+      const syntheticArtifactNames = readSyntheticArtifactNames();
       const syntheticReport = buildReleaseWorkflowReport({
         workflowContext: {
           repository: process.env.GITHUB_REPOSITORY || "",
@@ -108,9 +109,10 @@ const report = fs.existsSync(reportPath)
           reportPath: path.resolve(reportPath),
           assertionPath: path.resolve(assertionPath),
         },
+        artifactNames: syntheticArtifactNames,
       });
       syntheticReport.inputs.hasReleaseWorkflowReport = false;
-      syntheticReport.artifactNames = readSyntheticArtifactNames();
+      syntheticReport.artifactNames = syntheticArtifactNames;
       syntheticReport.evidenceFileNames = deriveEvidenceFileNamesFromArtifacts(
         syntheticReport.artifacts,
       );

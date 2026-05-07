@@ -876,6 +876,9 @@ test("assert-release-workflow-report writes a failure artifact when the report i
   assert.equal(assertion.report.artifactNames.summary, "release-workflow-summary");
   assert.equal(assertion.report.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(assertion.report.artifactNames.changesetsRelease, "changesets-release-report");
+  assert.equal(assertion.report.evidenceArtifactNames.releaseWorkflowAssertion, "release-workflow-assertion");
+  assert.equal(assertion.report.evidenceArtifactNames.releaseWorkflowReport, "release-workflow-report");
+  assert.equal(assertion.report.evidenceArtifactNames.releaseWorkflowSummary, "release-workflow-summary");
   assert.equal(assertion.report.evidenceFileNames.reportPath, "missing-release-workflow-report.json");
   assert.equal(assertion.report.evidenceFileNames.assertionPath, "release-workflow-assertion.json");
   assert.equal(assertion.report.workflowContext.repository, "CharlesMulic/equip");
