@@ -1251,43 +1251,20 @@ describe("installHooks / uninstallHooks / hasHooks", () => {
   const hookDefs = [
     { event: "PostToolUse", script: "// test hook\nconsole.log('hook ran');", name: "test-hook" },
   ];
-  let originalHome;
-  let originalEnv;
   let tempHome;
+  let hermeticHome;
 
   beforeEach(() => {
-    originalHome = os.homedir;
-    originalEnv = {
-      HOME: process.env.HOME,
-      USERPROFILE: process.env.USERPROFILE,
-      APPDATA: process.env.APPDATA,
-      LOCALAPPDATA: process.env.LOCALAPPDATA,
-      CODEX_HOME: process.env.CODEX_HOME,
-      HOMEDRIVE: process.env.HOMEDRIVE,
-      HOMEPATH: process.env.HOMEPATH,
-    };
-
-    tempHome = tmpPath("hooks-home");
-    const root = path.parse(tempHome).root;
-    process.env.HOME = tempHome;
-    process.env.USERPROFILE = tempHome;
-    process.env.APPDATA = path.join(tempHome, "AppData", "Roaming");
-    process.env.LOCALAPPDATA = path.join(tempHome, "AppData", "Local");
-    process.env.CODEX_HOME = path.join(tempHome, ".codex");
-    process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
-    process.env.HOMEPATH = tempHome.slice(root.length - 1);
-    os.homedir = () => tempHome;
+    hermeticHome = setupHermeticHome("hooks-home-");
+    tempHome = hermeticHome.homeDir;
 
     fs.mkdirSync(path.join(tempHome, ".claude"), { recursive: true });
   });
 
   afterEach(() => {
-    os.homedir = originalHome;
-    for (const [key, value] of Object.entries(originalEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-    fs.rmSync(tempHome, { recursive: true, force: true });
+    hermeticHome.restore();
+    hermeticHome = null;
+    tempHome = null;
   });
 
   it("installs hook scripts and registers in settings", () => {
