@@ -143,6 +143,8 @@ test("write-release-verification-report can rewrite a final report without dupli
   const assertionPath = path.join(root, "release-verification-assertion.json");
   const summaryPath = path.join(root, "release-verification-summary.md");
   const stepSummaryPath = path.join(root, "step-summary.md");
+  const releaseBootstrapResultPath = path.join(root, "release-bootstrap-result.json");
+  const releasePreflightResultPath = path.join(root, "release-preflight-result.json");
 
   writeJson(path.join(root, "pack-verification.json"), {
     status: "passed",
@@ -157,6 +159,28 @@ test("write-release-verification-report can rewrite a final report without dupli
   writeJson(path.join(root, "docker-acceptance-report.json"), {
     status: "passed",
     steps: [],
+  });
+  writeJson(releaseBootstrapResultPath, {
+    kind: "equip-release-bootstrap-result",
+    overallStatus: "passed",
+    summary: "dependency install passed",
+    artifactNames: {
+      bundle: "release-bootstrap",
+    },
+    evidenceArtifactNames: {
+      bundle: "release-bootstrap",
+    },
+  });
+  writeJson(releasePreflightResultPath, {
+    kind: "equip-release-preflight-result",
+    overallStatus: "passed",
+    summary: "build and tests passed",
+    artifactNames: {
+      bundle: "release-preflight",
+    },
+    evidenceArtifactNames: {
+      bundle: "release-preflight",
+    },
   });
   writeJson(assertionPath, {
     outcome: "passed",
@@ -174,9 +198,13 @@ test("write-release-verification-report can rewrite a final report without dupli
   fs.writeFileSync(stepSummaryPath, "## Existing step summary\n", "utf8");
 
   const result = runScript("scripts/ci/write-release-verification-report.mjs", {
+    RELEASE_BOOTSTRAP_RESULT_PATH: releaseBootstrapResultPath,
+    RELEASE_PREFLIGHT_RESULT_PATH: releasePreflightResultPath,
     PACK_VERIFICATION_PATH: path.join(root, "pack-verification.json"),
     PACK_INSTALL_SMOKE_PATH: path.join(root, "pack-install-smoke.json"),
     DOCKER_ACCEPTANCE_REPORT_PATH: path.join(root, "docker-acceptance-report.json"),
+    RELEASE_BOOTSTRAP_RESULT_ARTIFACT_NAME: "release-bootstrap",
+    RELEASE_PREFLIGHT_RESULT_ARTIFACT_NAME: "release-preflight",
     PACK_VERIFICATION_ARTIFACT_NAME: "pack-verification",
     PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
     PACK_INSTALL_SMOKE_ARTIFACT_NAME: "pack-install-smoke",
@@ -204,6 +232,8 @@ test("write-release-verification-report can rewrite a final report without dupli
   assert.equal(report.artifactNames.report, "release-verification-report");
   assert.equal(report.artifactNames.assertion, "release-verification-assertion");
   assert.equal(report.artifactNames.summary, "release-verification-summary");
+  assert.equal(report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
+  assert.equal(report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
   assert.equal(report.evidenceArtifactNames.releaseVerificationSummary, "release-verification-summary");
   assert.equal(report.evidenceFileNames.packageReportPath, "pack-verification.json");
