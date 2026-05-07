@@ -453,8 +453,9 @@ describe("fetchRegistryDef", () => {
     assert.ok(matches[0].includes(`${path.sep}registries${path.sep}`), "Cache path should be registry-scoped");
 
     const cached = JSON.parse(fs.readFileSync(matches[0], "utf-8"));
-    assert.equal(cached.name, HERMETIC_FIXTURE_NAME);
-    assert.equal(cached.installMode, "direct");
+    assert.equal(cached.schemaVersion, 1);
+    assert.equal(cached.def.name, HERMETIC_FIXTURE_NAME);
+    assert.equal(cached.def.installMode, "direct");
   });
 
   it("does not use cache entries written for another registry URL", async () => {
@@ -464,6 +465,118 @@ describe("fetchRegistryDef", () => {
     const def = await fetchFromOtherRegistry(HERMETIC_FIXTURE_NAME);
 
     assert.equal(def, null);
+  });
+
+  it("uses a compatible registry cache when the API is unavailable", async () => {
+    await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+    const priorFetch = global.fetch;
+    global.fetch = async () => {
+      throw new Error("offline");
+    };
+    try {
+      const def = await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+      assert.ok(def);
+      assert.equal(def.name, HERMETIC_FIXTURE_NAME);
+    } finally {
+      global.fetch = priorFetch;
+    }
+  });
+
+  it("ignores incompatible registry cache schemas", async () => {
+    await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+    const cacheRoot = path.join(hermeticHome.homeDir, ".equip", "cache");
+    const [cachePath] = findCachedDefinitionFiles(cacheRoot, HERMETIC_FIXTURE_NAME);
+    fs.writeFileSync(cachePath, JSON.stringify({
+      schemaVersion: 999,
+      registryKey: "wrong",
+      registryUrl: registry.origin,
+      fetchedAt: new Date().toISOString(),
+      def: buildFixture(registry.origin, HERMETIC_FIXTURE_NAME),
+    }, null, 2));
+
+    const priorFetch = global.fetch;
+    global.fetch = async () => {
+      throw new Error("offline");
+    };
+    try {
+      const def = await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+      assert.equal(def, null);
+    } finally {
+      global.fetch = priorFetch;
+    }
+  });
+
+  it("ignores cache envelopes for the wrong registry key", async () => {
+    await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+    const cacheRoot = path.join(hermeticHome.homeDir, ".equip", "cache");
+    const [cachePath] = findCachedDefinitionFiles(cacheRoot, HERMETIC_FIXTURE_NAME);
+    fs.writeFileSync(cachePath, JSON.stringify({
+      schemaVersion: 1,
+      registryKey: "wrong-registry",
+      registryUrl: "https://example.invalid/equip",
+      fetchedAt: new Date().toISOString(),
+      def: buildFixture(registry.origin, HERMETIC_FIXTURE_NAME),
+    }, null, 2));
+
+    const priorFetch = global.fetch;
+    global.fetch = async () => {
+      throw new Error("offline");
+    };
+    try {
+      const def = await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+      assert.equal(def, null);
+    } finally {
+      global.fetch = priorFetch;
+    }
+  });
+
+  it("ignores cache envelopes with malformed definitions", async () => {
+    await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+    const cacheRoot = path.join(hermeticHome.homeDir, ".equip", "cache");
+    const cachePaths = findCachedDefinitionFiles(cacheRoot, HERMETIC_FIXTURE_NAME);
+    assert.ok(cachePaths.length > 0, "expected at least one cached definition");
+    for (const cachePath of cachePaths) {
+      const cached = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+      const malformedDef = { ...cached.def };
+      delete malformedDef.title;
+      fs.writeFileSync(cachePath, JSON.stringify({
+        ...cached,
+        def: malformedDef,
+      }, null, 2));
+    }
+
+    const priorFetch = global.fetch;
+    global.fetch = async () => {
+      throw new Error("offline");
+    };
+    try {
+      const def = await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+      assert.equal(def, null);
+    } finally {
+      global.fetch = priorFetch;
+    }
+  });
+
+  it("one-shot migrates raw registry cache definitions", async () => {
+    await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+    const cacheRoot = path.join(hermeticHome.homeDir, ".equip", "cache");
+    const [cachePath] = findCachedDefinitionFiles(cacheRoot, HERMETIC_FIXTURE_NAME);
+    fs.writeFileSync(cachePath, JSON.stringify(buildFixture(registry.origin, HERMETIC_FIXTURE_NAME), null, 2));
+
+    const priorFetch = global.fetch;
+    global.fetch = async () => {
+      throw new Error("offline");
+    };
+    try {
+      const def = await fetchRegistryDef(HERMETIC_FIXTURE_NAME);
+      assert.ok(def);
+      assert.equal(def.name, HERMETIC_FIXTURE_NAME);
+      const migrated = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+      assert.equal(migrated.schemaVersion, 1);
+      assert.equal(migrated.def.name, HERMETIC_FIXTURE_NAME);
+    } finally {
+      global.fetch = priorFetch;
+    }
   });
 });
 

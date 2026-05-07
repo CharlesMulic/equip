@@ -18,6 +18,7 @@ import type { AuthConfig } from "./auth-engine";
 
 export const REGISTRY_API = process.env.EQUIP_REGISTRY_URL || "https://api.cg3.io/equip";
 const FETCH_TIMEOUT_MS = 8000;
+const REGISTRY_CACHE_SCHEMA_VERSION = 1;
 
 // ─── Paths ─────────────────────────────────────────────────
 
@@ -46,6 +47,17 @@ function registryCacheKey(): string {
 
 function cachePathFor(name: string): string {
   return path.join(cacheDir(), "registries", registryCacheKey(), `${name}.json`);
+}
+
+interface RegistryCacheEnvelope {
+  schemaVersion: number;
+  registryKey: string;
+  registryUrl: string;
+  fetchedAt: string;
+  contentHash?: string;
+  hashAlgorithm?: string;
+  version?: number;
+  def: RegistryDef;
 }
 
 // ─── Post-Install Actions ──────────────────────────────────
@@ -220,7 +232,17 @@ function cacheAugmentDef(name: string, def: RegistryDef, logger: EquipLogger): v
     const cachePath = cachePathFor(name);
     const dir = path.dirname(cachePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(cachePath, JSON.stringify(def, null, 2));
+    const envelope: RegistryCacheEnvelope = {
+      schemaVersion: REGISTRY_CACHE_SCHEMA_VERSION,
+      registryKey: registryCacheKey(),
+      registryUrl: REGISTRY_API,
+      fetchedAt: new Date().toISOString(),
+      ...(def.contentHash ? { contentHash: def.contentHash } : {}),
+      ...(def.hashAlgorithm ? { hashAlgorithm: def.hashAlgorithm } : {}),
+      ...(def.version ? { version: def.version } : {}),
+      def,
+    };
+    fs.writeFileSync(cachePath, JSON.stringify(envelope, null, 2));
     logger.debug("Augment definition cached", { name, path: cachePath });
   } catch (err: unknown) {
     logger.debug("Failed to cache augment definition", { name, error: (err as Error).message });
@@ -231,12 +253,59 @@ function readCachedAugmentDef(name: string, logger: EquipLogger): RegistryDef | 
   try {
     const cachePath = cachePathFor(name);
     const raw = fs.readFileSync(cachePath, "utf-8");
-    const def = JSON.parse(raw) as RegistryDef;
+    const parsed = JSON.parse(raw) as unknown;
+    const def = registryDefFromCachePayload(name, parsed, logger);
+    if (!def) return null;
     logger.info("Augment definition loaded from cache", { name });
     return def;
   } catch {
     return null;
   }
+}
+
+function registryDefFromCachePayload(
+  name: string,
+  parsed: unknown,
+  logger: EquipLogger,
+): RegistryDef | null {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    logger.debug("Registry cache ignored", { name, reason: "not_object" });
+    return null;
+  }
+
+  const record = parsed as Record<string, unknown>;
+  if ("schemaVersion" in record || "def" in record) {
+    if (record.schemaVersion !== REGISTRY_CACHE_SCHEMA_VERSION) {
+      logger.debug("Registry cache ignored", { name, reason: "schema_mismatch" });
+      return null;
+    }
+    if (record.registryKey !== registryCacheKey()) {
+      logger.debug("Registry cache ignored", { name, reason: "registry_key_mismatch" });
+      return null;
+    }
+    if (!record.def || typeof record.def !== "object" || Array.isArray(record.def)) {
+      logger.debug("Registry cache ignored", { name, reason: "missing_def" });
+      return null;
+    }
+    const def = record.def as RegistryDef;
+    if (def.name !== name || typeof def.title !== "string") {
+      logger.debug("Registry cache ignored", { name, reason: "def_shape_mismatch" });
+      return null;
+    }
+    return def;
+  }
+
+  const legacyDef = record as unknown as RegistryDef;
+  if (legacyDef.name !== name || typeof legacyDef.title !== "string") {
+    logger.debug("Registry cache ignored", { name, reason: "legacy_shape_mismatch" });
+    return null;
+  }
+
+  // One-shot migration preserves offline fallback for users who upgrade while
+  // already offline. Subsequent reads use the envelope path only.
+  cacheAugmentDef(name, legacyDef, logger);
+  logger.info("Registry cache migrated to envelope", { name });
+  return legacyDef;
 }
 
 async function fetchRegistryDefFromApi(
