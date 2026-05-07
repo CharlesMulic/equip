@@ -191,11 +191,17 @@ test("buildReleaseVerificationReport marks downstream lanes skipped when preflig
       kind: "equip-release-bootstrap-result",
       overallStatus: "passed",
       summary: "dependency install passed",
+      evidenceArtifactNames: {
+        bundle: "release-bootstrap",
+      },
     },
     releasePreflightResult: {
       kind: "equip-release-preflight-result",
       overallStatus: "failed",
       summary: "build failed (exit 2); test skipped",
+      evidenceArtifactNames: {
+        bundle: "release-preflight",
+      },
     },
     packVerification: null,
     packInstallSmoke: null,
@@ -213,6 +219,8 @@ test("buildReleaseVerificationReport marks downstream lanes skipped when preflig
   assert.equal(report.package.status, "skipped");
   assert.equal(report.tarballSmoke.status, "skipped");
   assert.equal(report.dockerAcceptance.status, "skipped");
+  assert.equal(report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
+  assert.equal(report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.match(report.package.skippedReason, /release preflight did not pass/i);
   assert.match(report.tarballSmoke.skippedReason, /release preflight did not pass/i);
   assert.match(report.dockerAcceptance.skippedReason, /release preflight did not pass/i);

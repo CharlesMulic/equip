@@ -461,7 +461,9 @@ function buildEvidenceArtifactNames({
 }) {
   return {
     ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.artifactNames),
+    ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.evidenceArtifactNames),
     ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.artifactNames),
+    ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.evidenceArtifactNames),
     ...prefixArtifactNameEntries("releaseVerification", artifactNames),
   };
 }
