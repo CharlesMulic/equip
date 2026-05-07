@@ -134,6 +134,8 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
   assert.match(summary, /Overall status: `passed`/i);
   assert.match(summary, /## Evidence file names/i);
   assert.match(summary, /resultPath: `release-bootstrap-result\.json`/i);
+  assert.match(summary, /summaryPath: `release-bootstrap-summary\.md`/i);
+  assert.match(summary, /logPath: `release-bootstrap\.log`/i);
   assert.match(summary, /bundle: `release-bootstrap`/i);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(log, /synthetic install ok/i);
@@ -173,5 +175,8 @@ test("run-release-bootstrap preserves failure artifacts before exiting nonzero",
   assert.equal(artifact.evidenceFileNames.logPath, "release-bootstrap.log");
   assert.match(summary, /Overall status: `failed`/i);
   assert.match(summary, /## Evidence file names/i);
+  assert.match(summary, /resultPath: `release-bootstrap-result\.json`/i);
+  assert.match(summary, /summaryPath: `release-bootstrap-summary\.md`/i);
+  assert.match(summary, /logPath: `release-bootstrap\.log`/i);
   assert.match(log, /synthetic install failed/i);
 });

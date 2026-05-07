@@ -157,6 +157,9 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.match(summary, /Overall status: `passed`/i);
   assert.match(summary, /## Evidence file names/i);
   assert.match(summary, /resultPath: `release-preflight-result\.json`/i);
+  assert.match(summary, /summaryPath: `release-preflight-summary\.md`/i);
+  assert.match(summary, /buildLogPath: `release-preflight-build\.log`/i);
+  assert.match(summary, /testLogPath: `release-preflight-test\.log`/i);
   assert.match(summary, /bundle: `release-preflight`/i);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(buildLog, /synthetic build ok/i);
@@ -210,6 +213,10 @@ test("run-release-preflight preserves failure artifacts and skips tests after bu
   assert.equal(artifact.evidenceFileNames.testLogPath, "release-preflight-test.log");
   assert.match(summary, /Overall status: `failed`/i);
   assert.match(summary, /## Evidence file names/i);
+  assert.match(summary, /resultPath: `release-preflight-result\.json`/i);
+  assert.match(summary, /summaryPath: `release-preflight-summary\.md`/i);
+  assert.match(summary, /buildLogPath: `release-preflight-build\.log`/i);
+  assert.match(summary, /testLogPath: `release-preflight-test\.log`/i);
   assert.match(buildLog, /synthetic build failed/i);
   assert.match(testLog, /test skipped because build preflight failed/i);
 });
