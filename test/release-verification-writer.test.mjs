@@ -164,6 +164,10 @@ test("write-release-verification-report can rewrite a final report without dupli
     kind: "equip-release-bootstrap-result",
     overallStatus: "passed",
     summary: "dependency install passed",
+    evidenceFileNames: {
+      resultPath: "release-bootstrap-result.json",
+      summaryPath: "release-bootstrap-summary.md",
+    },
     artifactNames: {
       bundle: "release-bootstrap",
     },
@@ -175,6 +179,10 @@ test("write-release-verification-report can rewrite a final report without dupli
     kind: "equip-release-preflight-result",
     overallStatus: "passed",
     summary: "build and tests passed",
+    evidenceFileNames: {
+      resultPath: "release-preflight-result.json",
+      summaryPath: "release-preflight-summary.md",
+    },
     artifactNames: {
       bundle: "release-preflight",
     },
@@ -236,6 +244,10 @@ test("write-release-verification-report can rewrite a final report without dupli
   assert.equal(report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
   assert.equal(report.evidenceArtifactNames.releaseVerificationSummary, "release-verification-summary");
+  assert.equal(report.evidenceFileNames.releaseBootstrapResultPath, "release-bootstrap-result.json");
+  assert.equal(report.evidenceFileNames.releaseBootstrapSummaryPath, "release-bootstrap-summary.md");
+  assert.equal(report.evidenceFileNames.releasePreflightResultPath, "release-preflight-result.json");
+  assert.equal(report.evidenceFileNames.releasePreflightSummaryPath, "release-preflight-summary.md");
   assert.equal(report.evidenceFileNames.packageReportPath, "pack-verification.json");
   assert.equal(report.evidenceFileNames.tarballSmokeResultPath, "pack-install-smoke.json");
   assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report.json");
