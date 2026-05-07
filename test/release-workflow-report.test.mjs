@@ -635,6 +635,10 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Release Workflow Summary: `release-workflow-summary`/i);
   assert.match(summary, /Release Workflow Report: `release-workflow-report`/i);
   assert.match(summary, /## Nested evidence file names/i);
+  assert.match(summary, /Release Bootstrap Result Path: `release-bootstrap-result\.json`/i);
+  assert.match(summary, /Release Bootstrap Summary Path: `release-bootstrap-summary\.md`/i);
+  assert.match(summary, /Release Preflight Result Path: `release-preflight-result\.json`/i);
+  assert.match(summary, /Release Preflight Summary Path: `release-preflight-summary\.md`/i);
   assert.match(summary, /Package Log Path: `pack-verification\.log`/i);
   assert.match(summary, /Tarball Smoke Log Path: `pack-install-smoke\.log`/i);
   assert.match(summary, /Docker Acceptance Run Log Path: `docker-run\.log`/i);
