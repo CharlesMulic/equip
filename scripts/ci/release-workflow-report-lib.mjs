@@ -127,7 +127,15 @@ function buildEvidenceArtifactNames({
     ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.artifactNames),
     ...prefixArtifactNameEntries("releasePreflight", releasePreflightResult?.artifactNames),
     ...prefixArtifactNameEntries("releaseVerification", releaseVerificationReport?.artifactNames),
+    ...prefixArtifactNameEntries(
+      "releaseVerification",
+      releaseVerificationReport?.evidenceArtifactNames,
+    ),
     ...prefixArtifactNameEntries("changesetsRelease", changesetsReleaseReport?.artifactNames),
+    ...prefixArtifactNameEntries(
+      "changesetsRelease",
+      changesetsReleaseReport?.evidenceArtifactNames,
+    ),
   };
 }
 

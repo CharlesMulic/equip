@@ -55,6 +55,12 @@ function createReleaseVerificationReport() {
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
+    evidenceArtifactNames: {
+      packageLog: "pack-verification-log",
+      tarballSmokeLog: "pack-install-smoke-log",
+      dockerAcceptanceBuildLog: "docker-build-log",
+      dockerAcceptanceRunLog: "docker-run-log",
+    },
   };
 }
 
@@ -76,6 +82,9 @@ function createChangesetsReleaseReport() {
       assertion: "changesets-release-assertion",
       report: "changesets-release-report",
       summary: "changesets-release-summary",
+    },
+    evidenceArtifactNames: {
+      upstreamReleaseVerification: "release-verification-report",
     },
   };
 }
@@ -216,10 +225,18 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(report.evidenceArtifactNames.releaseVerificationDockerAcceptance, "docker-acceptance");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationPackageLog, "pack-verification-log");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationTarballSmokeLog, "pack-install-smoke-log");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationDockerAcceptanceBuildLog, "docker-build-log");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationDockerAcceptanceRunLog, "docker-run-log");
   assert.equal(report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
   assert.equal(report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseResult, "changesets-release-result");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseAssertion, "changesets-release-assertion");
+  assert.equal(
+    report.evidenceArtifactNames.changesetsReleaseUpstreamReleaseVerification,
+    "release-verification-report",
+  );
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(report.workflowContext.workflow, "Release");
   assert.equal(report.workflowContext.runId, "1234567890");
@@ -549,6 +566,11 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(assertion.report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
   assert.equal(assertion.report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(assertion.report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
+  assert.equal(assertion.report.evidenceArtifactNames.releaseVerificationPackageLog, "pack-verification-log");
+  assert.equal(
+    assertion.report.evidenceArtifactNames.changesetsReleaseUpstreamReleaseVerification,
+    "release-verification-report",
+  );
   assert.equal(assertion.report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
   assert.equal(assertion.report.evidenceFiles.changesetsReleaseSummaryPath, "/tmp/changesets-release-summary.md");
   assert.equal(report.artifacts.releaseBootstrapResultPath, path.resolve(releaseBootstrapResultPath));
@@ -571,9 +593,15 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(report.evidenceFileNames.releaseWorkflowAssertionPath, "release-workflow-assertion.json");
   assert.equal(report.evidenceArtifactNames.releaseVerificationPackTarball, "pack-tarball");
   assert.equal(report.evidenceArtifactNames.releaseVerificationAssertion, "release-verification-assertion");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationPackageLog, "pack-verification-log");
+  assert.equal(report.evidenceArtifactNames.releaseVerificationDockerAcceptanceRunLog, "docker-run-log");
   assert.equal(report.evidenceArtifactNames.releaseBootstrapBundle, "release-bootstrap");
   assert.equal(report.evidenceArtifactNames.releasePreflightBundle, "release-preflight");
   assert.equal(report.evidenceArtifactNames.changesetsReleaseSummary, "changesets-release-summary");
+  assert.equal(
+    report.evidenceArtifactNames.changesetsReleaseUpstreamReleaseVerification,
+    "release-verification-report",
+  );
   assert.equal(report.evidenceFiles.releaseWorkflowReportPath, path.resolve(releaseWorkflowReportPath));
   assert.equal(report.evidenceFiles.releaseVerificationSummaryPath, "/tmp/release-verification-summary.md");
   assert.equal(report.evidenceFiles.changesetsReleaseSummaryPath, "/tmp/changesets-release-summary.md");
@@ -591,6 +619,9 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Release Bootstrap Bundle: `release-bootstrap`/i);
   assert.match(summary, /Release Preflight Bundle: `release-preflight`/i);
   assert.match(summary, /Release Verification Pack Tarball: `pack-tarball`/i);
+  assert.match(summary, /Release Verification Package Log: `pack-verification-log`/i);
+  assert.match(summary, /Release Verification Docker Acceptance Run Log: `docker-run-log`/i);
+  assert.match(summary, /Changesets Release Upstream Release Verification: `release-verification-report`/i);
   assert.match(summary, /## Nested evidence file names/i);
   assert.match(summary, /Package Log Path: `pack-verification\.log`/i);
   assert.match(summary, /Tarball Smoke Log Path: `pack-install-smoke\.log`/i);
