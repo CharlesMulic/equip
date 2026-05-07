@@ -30,6 +30,7 @@ const { buildStdioConfig } = require("../dist/lib/mcp");
 const { migrateConfigs } = require("../dist/lib/migrate");
 const { trackInstallation, trackUninstallation } = require("../dist/lib/installations");
 const { checkAuth, extractAuthHeader } = require("../dist/lib/auth");
+const { setupHermeticHome } = require("./helpers/hermetic-home");
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -1120,40 +1121,18 @@ describe("Augment.verify()", () => {
 // ─── Reconcile State ────────────────────────────────────────
 
 describe("reconcileState", () => {
-  let originalHome;
   let tempHome;
-  let originalEnv;
+  let hermeticHome;
 
   function setupTempHome() {
-    originalHome = os.homedir;
-    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "equip-reconcile-home-"));
-    const root = path.parse(tempHome).root;
-    originalEnv = {
-      HOME: process.env.HOME,
-      USERPROFILE: process.env.USERPROFILE,
-      APPDATA: process.env.APPDATA,
-      LOCALAPPDATA: process.env.LOCALAPPDATA,
-      CODEX_HOME: process.env.CODEX_HOME,
-      HOMEDRIVE: process.env.HOMEDRIVE,
-      HOMEPATH: process.env.HOMEPATH,
-    };
-    process.env.HOME = tempHome;
-    process.env.USERPROFILE = tempHome;
-    process.env.APPDATA = path.join(tempHome, "AppData", "Roaming");
-    process.env.LOCALAPPDATA = path.join(tempHome, "AppData", "Local");
-    process.env.CODEX_HOME = path.join(tempHome, ".codex");
-    process.env.HOMEDRIVE = root.replace(/[\\\/]+$/, "");
-    process.env.HOMEPATH = tempHome.slice(root.length - 1);
-    os.homedir = () => tempHome;
+    hermeticHome = setupHermeticHome("equip-reconcile-home-");
+    tempHome = hermeticHome.homeDir;
   }
 
   function teardownTempHome() {
-    os.homedir = originalHome;
-    for (const [key, value] of Object.entries(originalEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-    fs.rmSync(tempHome, { recursive: true, force: true });
+    hermeticHome.restore();
+    hermeticHome = null;
+    tempHome = null;
   }
 
   it("finds installed tools across platforms", () => {
