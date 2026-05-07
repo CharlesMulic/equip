@@ -124,8 +124,8 @@ export function validateHookDir(hookDir: string): string {
 
 // ─── URL Validation ─────────────────────────────────────────
 
-/** Trusted hosts that may receive credentials */
-const TRUSTED_CREDENTIAL_HOSTS = new Set(["api.cg3.io"]);
+/** Trusted hosts that may receive CG3 credentials */
+const TRUSTED_CREDENTIAL_HOSTS = new Set(["api.cg3.io", "api-staging.cg3.io"]);
 
 /**
  * Validate a URL uses a safe scheme (https or http only).

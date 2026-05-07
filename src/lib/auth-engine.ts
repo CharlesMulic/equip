@@ -522,12 +522,6 @@ export async function resolveAuth(options: AuthResolveOptions): Promise<AuthResu
 
 // ─── CG3 OIDC Delegated Auth Flow ─────────────────────────
 
-// Override only allowed in test mode to prevent credential redirect attacks in production.
-// Production builds must strip these env vars at launch (tracked in Phase 1 deferred items).
-const IDENTITY_TEST_MODE_OK = process.env.NODE_ENV === "development" || process.env.EQUIP_TEST_MODE === "1";
-const IDENTITY_TOKEN_URL = (IDENTITY_TEST_MODE_OK && process.env.EQUIP_IDENTITY_URL)
-  || "https://api.cg3.io";
-
 /** Check if a JWT string is expired (decode payload without verification). */
 function isJwtExpired(token: string): boolean {
   const parts = token.split(".");
@@ -658,7 +652,7 @@ async function resolveOidc(
       if (allowConsentAcceptance) {
         form.set("consent_action", "accept");
       }
-      const res = await fetch(`${IDENTITY_TOKEN_URL}/token`, {
+      const res = await fetch(session!.tokenUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

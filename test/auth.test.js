@@ -610,6 +610,47 @@ describe("prior delegated auth", () => {
 
     deleteStoredCredential(name);
   });
+
+  it("uses the session tokenUrl for delegated token exchange", async () => {
+    const name = testToolName();
+    if (originalFetch === undefined) originalFetch = global.fetch;
+
+    let calledUrl = "";
+    global.fetch = async (input, init) => {
+      calledUrl = typeof input === "string" ? input : input.url;
+
+      if (calledUrl === "https://api-staging.cg3.io/token") {
+        return new Response(JSON.stringify({
+          access_token: "staging-delegated-token",
+          token_type: "Bearer",
+          expires_in: 900,
+          scope: "cg3:prior:identity:read",
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected fetch: ${calledUrl}`);
+    };
+
+    const result = await resolveAuth({
+      toolName: name,
+      auth: { type: "oidc" },
+      session: {
+        accessToken: "session-access-token",
+        refreshToken: "session-refresh-token",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        tokenUrl: "https://api-staging.cg3.io/token",
+        clientId: "equip-desktop",
+      },
+    });
+
+    assert.equal(result.credential, "staging-delegated-token");
+    assert.equal(calledUrl, "https://api-staging.cg3.io/token");
+
+    deleteStoredCredential(name);
+  });
 });
 
 describe("listStoredCredentials", () => {

@@ -544,6 +544,10 @@ describe("isTrustedCredentialHost", () => {
     assert.equal(isTrustedCredentialHost("https://api.cg3.io/equip/augments"), true);
   });
 
+  it("trusts api-staging.cg3.io", () => {
+    assert.equal(isTrustedCredentialHost("https://api-staging.cg3.io/equip/augments"), true);
+  });
+
   it("rejects arbitrary hosts", () => {
     assert.equal(isTrustedCredentialHost("https://evil.com/steal"), false);
     assert.equal(isTrustedCredentialHost("https://api.cg3.io.evil.com/fake"), false);
