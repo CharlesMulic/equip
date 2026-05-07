@@ -122,6 +122,7 @@ function buildEvidenceArtifactNames({
   releasePreflightResult = null,
   releaseVerificationReport = null,
   changesetsReleaseReport = null,
+  artifactNames = {},
 }) {
   return {
     ...prefixArtifactNameEntries("releaseBootstrap", releaseBootstrapResult?.artifactNames),
@@ -136,6 +137,7 @@ function buildEvidenceArtifactNames({
       "changesetsRelease",
       changesetsReleaseReport?.evidenceArtifactNames,
     ),
+    ...prefixArtifactNameEntries("releaseWorkflow", artifactNames),
   };
 }
 
@@ -356,6 +358,7 @@ export function buildReleaseWorkflowReport({
       releasePreflightResult,
       releaseVerificationReport,
       changesetsReleaseReport,
+      artifactNames,
     }),
     evidenceFiles: buildEvidenceFiles({
       releaseBootstrapResult,
