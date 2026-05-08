@@ -841,6 +841,15 @@ test("write-release-workflow-summary preserves nested evidence when the workflow
   assert.match(summary, /Release Bootstrap: `release-bootstrap-result`/i);
   assert.match(summary, /Release Verification: `release-verification-report`/i);
   assert.match(summary, /Changesets Release: `changesets-release-report`/i);
+  assert.match(summary, /## Nested evidence artifacts/i);
+  assert.match(summary, /Release Bootstrap Bundle: `release-bootstrap`/i);
+  assert.match(summary, /Release Verification Package Log: `pack-verification-log`/i);
+  assert.match(summary, /Changesets Release Upstream Release Verification: `release-verification-report`/i);
+  assert.match(summary, /## Nested evidence file names/i);
+  assert.match(summary, /Release Bootstrap Result Path: `release-bootstrap-result\.json`/i);
+  assert.match(summary, /Release Verification Report Path: `release-verification-report\.json`/i);
+  assert.match(summary, /Release Workflow Changesets Release Report Path: `changesets-release-report\.json`/i);
+  assert.match(summary, /Release Workflow Summary Path: `release-workflow-summary\.md`/i);
 });
 
 test("assert-release-workflow-report writes a failure artifact when the report is missing", () => {
