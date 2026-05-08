@@ -98,11 +98,11 @@ test("assert-release-verification-report passes healthy rollups", () => {
       summary: "release-verification-summary",
     },
     evidenceFileNames: {
-      packageLogPath: "pack-verification",
-      tarballSmokeLogPath: "pack-install-smoke",
-      releaseVerificationReportPath: "release-verification-report",
-      releaseVerificationAssertionPath: "release-verification-assertion",
-      releaseVerificationSummaryPath: "release-verification-summary",
+      packageLogPath: "pack-verification.log",
+      tarballSmokeLogPath: "pack-install-smoke.log",
+      releaseVerificationReportPath: "release-verification-report.json",
+      releaseVerificationAssertionPath: "release-verification-assertion.json",
+      releaseVerificationSummaryPath: "release-verification-summary.md",
     },
     workflowContext: {
       repository: "CharlesMulic/equip",
@@ -157,9 +157,17 @@ test("assert-release-verification-report passes healthy rollups", () => {
   );
   assert.equal(assertion.artifacts.summaryPath, summaryPath);
   assert.equal(assertion.artifactNames.report, "release-verification-report");
-  assert.equal(assertion.evidenceFileNames.packageLogPath, "pack-verification");
-  assert.equal(assertion.evidenceFileNames.tarballSmokeLogPath, "pack-install-smoke");
-  assert.equal(assertion.evidenceFileNames.releaseVerificationReportPath, "release-verification-report");
+  assert.equal(assertion.evidenceFileNames.packageLogPath, "pack-verification.log");
+  assert.equal(assertion.evidenceFileNames.tarballSmokeLogPath, "pack-install-smoke.log");
+  assert.equal(assertion.evidenceFileNames.releaseVerificationReportPath, "release-verification-report.json");
+  assert.equal(
+    assertion.evidenceFileNames.releaseVerificationAssertionPath,
+    "release-verification-assertion.json",
+  );
+  assert.equal(
+    assertion.evidenceFileNames.releaseVerificationSummaryPath,
+    "release-verification-summary.md",
+  );
   assert.equal(assertion.evidenceArtifactNames.releaseVerificationPackVerification, "pack-verification");
   assert.equal(assertion.evidenceArtifactNames.releaseVerificationSummary, "release-verification-summary");
   assert.deepEqual(assertion.failureDetails, []);
