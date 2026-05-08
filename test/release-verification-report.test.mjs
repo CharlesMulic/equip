@@ -379,6 +379,11 @@ test("buildReleaseVerificationSummaryMarkdown can include the final assertion se
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
+    artifacts: {
+      reportPath: ".generated/release/release-verification-report.json",
+      assertionPath: ".generated/release/release-verification-assertion.json",
+      summaryPath: ".generated/release/release-verification-summary.md",
+    },
   });
 
   const markdown = buildReleaseVerificationSummaryMarkdown({
@@ -403,10 +408,16 @@ test("buildReleaseVerificationSummaryMarkdown can include the final assertion se
   assert.match(markdown, /## Release verification rollup/i);
   assert.match(markdown, /## Final assertion/i);
   assert.match(markdown, /## Evidence artifacts/i);
+  assert.match(markdown, /## Evidence file names/i);
   assert.match(markdown, /Outcome: `failed`/i);
   assert.match(markdown, /tarballSmoke: `failed`/i);
+  assert.match(markdown, /Release Verification Report: `release-verification-report`/i);
   assert.match(markdown, /Assertion: `release-verification-assertion`/i);
+  assert.match(markdown, /Summary: `release-verification-summary`/i);
   assert.match(markdown, /Assertion artifact: `\.generated\/release\/release-verification-assertion\.json`/i);
+  assert.match(markdown, /Release Verification Report Path: `release-verification-report\.json`/i);
+  assert.match(markdown, /Release Verification Assertion Path: `release-verification-assertion\.json`/i);
+  assert.match(markdown, /Release Verification Summary Path: `release-verification-summary\.md`/i);
   assert.match(markdown, /Failure details:/i);
   assert.match(markdown, /release verification failed/i);
 });
