@@ -125,6 +125,7 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
   assert.match(summary, /Run log: `.generated\/docker\/docker-run\.log`/);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/789`/i);
+  assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abc123`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /bundle: `docker-acceptance`/i);
   assert.match(summary, /## Evidence file names/i);
