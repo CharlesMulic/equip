@@ -404,6 +404,7 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   const assertionPath = path.join(root, "changesets-release-assertion.json");
   const summaryPath = path.join(root, "changesets-release-summary.md");
   const stepSummaryPath = path.join(root, "step-summary.md");
+  const releaseVerificationReportPath = path.join(root, "release-verification-report.json");
 
   fs.mkdirSync(path.dirname(resultPath), { recursive: true });
   fs.writeFileSync(resultPath, `${JSON.stringify(buildChangesetsReleaseResult({
@@ -414,6 +415,11 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
     ]),
     artifacts: {
       resultPath,
+      summaryPath,
+      releaseVerificationReportPath,
+    },
+    artifactNames: {
+      releaseVerification: "release-verification-report",
     },
   }), null, 2)}\n`, "utf8");
   fs.writeFileSync(assertionPath, `${JSON.stringify({
@@ -445,6 +451,7 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
     CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
+    RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     GITHUB_STEP_SUMMARY: stepSummaryPath,
     ...createWorkflowEnv(),
   });
@@ -458,8 +465,13 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(summaryArtifact, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summaryArtifact, /## Final assertion/i);
   assert.match(summaryArtifact, /## Evidence artifacts/i);
+  assert.match(summaryArtifact, /## Evidence artifact names/i);
   assert.match(summaryArtifact, /## Evidence file names/i);
+  assert.match(summaryArtifact, /Result: `changesets-release-result`/i);
+  assert.match(summaryArtifact, /Assertion: `changesets-release-assertion`/i);
   assert.match(summaryArtifact, /Result Path: `changesets-release-result\.json`/i);
+  assert.match(summaryArtifact, /Release Verification: `release-verification-report`/i);
+  assert.match(summaryArtifact, /Summary Path: `changesets-release-summary\.md`/i);
   assert.match(summaryArtifact, /Report: `changesets-release-report`/i);
   assert.match(summaryArtifact, /Outcome: `passed`/i);
   assert.match(stepSummary, /## Changesets release result/i);
