@@ -129,4 +129,6 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
   assert.match(summary, /bundle: `docker-acceptance`/i);
   assert.match(summary, /## Evidence file names/i);
   assert.match(summary, /reportPath: `docker-acceptance-report\.json`/i);
+  assert.match(summary, /buildLogPath: `docker-build\.log`/i);
+  assert.match(summary, /runLogPath: `docker-run\.log`/i);
 });
