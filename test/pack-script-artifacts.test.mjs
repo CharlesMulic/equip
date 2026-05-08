@@ -19,6 +19,66 @@ function runScript(scriptRelativePath, env) {
   );
 }
 
+test("verify-pack writes a passing artifact and step summary when a real tarball is produced", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-pack-script-artifacts-"));
+  const outputPath = path.join(root, "pack-verification.json");
+  const logPath = path.join(root, "pack-verification.log");
+  const stepSummaryPath = path.join(root, "step-summary.md");
+  const tarballOutputDir = path.join(root, "tarballs");
+
+  const result = runScript("scripts/ci/verify-pack.mjs", {
+    PACK_VERIFICATION_OUTPUT_PATH: outputPath,
+    PACK_VERIFICATION_LOG_PATH: logPath,
+    PACK_TARBALL_OUTPUT_DIR: tarballOutputDir,
+    GITHUB_STEP_SUMMARY: stepSummaryPath,
+    PACK_VERIFICATION_ARTIFACT_NAME: "pack-verification",
+    PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
+    GITHUB_REPOSITORY: "CharlesMulic/equip",
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ID: "234",
+    GITHUB_RUN_ATTEMPT: "5",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_SHA: "123456abcdef",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.ok(fs.existsSync(outputPath));
+  assert.ok(fs.existsSync(logPath));
+
+  const artifact = JSON.parse(fs.readFileSync(outputPath, "utf8"));
+  const stepSummary = fs.readFileSync(stepSummaryPath, "utf8");
+  assert.equal(artifact.kind, "equip-pack-verification");
+  assert.equal(artifact.status, "passed");
+  assert.equal(artifact.hasFailures, false);
+  assert.ok(artifact.tarballPath.endsWith(".tgz"));
+  assert.ok(fs.existsSync(artifact.tarballPath));
+  assert.equal(artifact.artifactNames.bundle, "pack-verification");
+  assert.equal(artifact.artifactNames.tarball, "pack-tarball");
+  assert.ok(artifact.evidenceFileNames.tarballPath.endsWith(".tgz"));
+  assert.equal(artifact.workflowContext.runAttempt, "5");
+  assert.equal(
+    artifact.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/234",
+  );
+  assert.match(stepSummary, /## npm pack verification/i);
+  assert.match(stepSummary, /Status: `passed`/i);
+  assert.match(stepSummary, /## Evidence artifacts/i);
+  assert.match(stepSummary, /bundle: `pack-verification`/i);
+  assert.match(stepSummary, /tarball: `pack-tarball`/i);
+  assert.match(stepSummary, /## Evidence file names/i);
+  assert.match(stepSummary, /reportPath: `pack-verification\.json`/i);
+  assert.match(stepSummary, /logPath: `pack-verification\.log`/i);
+  assert.match(
+    stepSummary,
+    new RegExp(String.raw`tarballPath: \`${artifact.evidenceFileNames.tarballPath.replace(/\./g, "\\.")}\``,"i"),
+  );
+  assert.match(stepSummary, /## GitHub workflow context/i);
+  assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/234`/i);
+});
+
 test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-pack-script-artifacts-"));
   const outputPath = path.join(root, "pack-verification.json");
