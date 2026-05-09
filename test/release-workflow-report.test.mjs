@@ -773,6 +773,9 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
   assert.match(summary, /## Missing inputs/i);
   assert.match(summary, /Release workflow report artifact was missing/i);
   assert.match(summary, /Release bootstrap result was missing/i);
+  assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /Assertion: `release-workflow-assertion`/i);
   assert.match(summary, /Summary: `release-workflow-summary`/i);
