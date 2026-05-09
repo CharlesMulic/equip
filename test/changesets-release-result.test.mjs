@@ -463,6 +463,7 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(summaryArtifact, /@cg3\/equip/);
   assert.match(summaryArtifact, /## GitHub workflow context/i);
   assert.match(summaryArtifact, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(summaryArtifact, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(summaryArtifact, /## Final assertion/i);
   assert.match(summaryArtifact, /## Evidence artifacts/i);
   assert.match(summaryArtifact, /## Evidence artifact names/i);
