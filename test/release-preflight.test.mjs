@@ -106,6 +106,7 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
   assert.match(markdown, /## Evidence artifact names/i);
   assert.match(markdown, /bundle: `release-preflight`/i);
   assert.match(markdown, /## GitHub workflow context/i);
+  assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });
 
