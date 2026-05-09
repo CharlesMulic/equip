@@ -92,6 +92,7 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
   assert.match(markdown, /bundle: `release-bootstrap`/i);
   assert.match(markdown, /## GitHub workflow context/i);
   assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
+  assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
 
 test("run-release-bootstrap writes passing artifacts for synthetic success commands", () => {
