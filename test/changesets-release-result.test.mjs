@@ -476,6 +476,8 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(summaryArtifact, /Report: `changesets-release-report`/i);
   assert.match(summaryArtifact, /Outcome: `passed`/i);
   assert.match(stepSummary, /## Changesets release result/i);
+  assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(stepSummary, /## Final assertion/i);
   assert.match(stepSummary, /Assertion: `changesets-release-assertion`/i);
 });
