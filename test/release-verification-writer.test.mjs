@@ -125,6 +125,7 @@ test("write-release-verification-summary writes a markdown artifact with the fin
   assert.match(summary, /## Release verification rollup/i);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);
   assert.match(summary, /## Evidence file names/i);
   assert.match(summary, /Release Verification Report Path: `release-verification-report\.json`/i);
