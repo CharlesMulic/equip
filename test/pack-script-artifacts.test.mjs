@@ -204,5 +204,6 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.match(stepSummary, /resultPath: `pack-install-smoke\.json`/i);
   assert.match(stepSummary, /logPath: `pack-install-smoke\.log`/i);
   assert.match(stepSummary, /## GitHub workflow context/i);
+  assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });
