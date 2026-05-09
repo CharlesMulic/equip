@@ -77,6 +77,7 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
   );
   assert.match(stepSummary, /## GitHub workflow context/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/234`/i);
+  assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/123456abcdef`/i);
 });
 
 test("verify-pack writes a failure artifact when npm pack cannot run", () => {
@@ -140,6 +141,7 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   assert.match(stepSummary, /logPath: `pack-verification\.log`/i);
   assert.match(stepSummary, /## GitHub workflow context/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
+  assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
 
 test("smoke-pack-install writes a failure artifact when the tarball path is missing", () => {
