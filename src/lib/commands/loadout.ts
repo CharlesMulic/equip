@@ -1,6 +1,7 @@
 // equip loadout - local loadout store commands.
 
 import {
+  applyLoadout,
   deleteLoadout,
   duplicateLoadout,
   getLoadout,
@@ -24,6 +25,7 @@ function usage(): void {
     "  show <id-or-name>        Show a saved loadout",
     "  save <name>              Save the current equipped augments",
     "  preview <id-or-name> --json  Preview switching to a loadout",
+    "  apply <id-or-name> --operation-id <id> --json  Apply a loadout",
     "  rename <id-or-name> <n>  Rename a loadout",
     "  duplicate <id-or-name> <n>  Duplicate a loadout",
     "  delete <id-or-name>      Delete a loadout",
@@ -48,6 +50,8 @@ export function runLoadout(parsedArgs: ParsedArgs): void {
         return save(args[0], parsedArgs);
       case "preview":
         return preview(args[0], parsedArgs);
+      case "apply":
+        return apply(args[0], parsedArgs);
       case "rename":
         return rename(args[0], args[1], parsedArgs);
       case "duplicate":
@@ -83,6 +87,20 @@ function preview(ref: string | undefined, parsedArgs: ParsedArgs): void {
   }
   const plan = previewLoadout(ref);
   process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
+}
+
+function apply(ref: string | undefined, parsedArgs: ParsedArgs): void {
+  if (!ref || !parsedArgs.json || !parsedArgs.operationId) {
+    cli.fail("Loadout apply is JSON-only for now. Use: equip loadout apply <id-or-name> --operation-id <id> --json");
+    process.exit(1);
+  }
+  const receipt = applyLoadout({
+    operationId: parsedArgs.operationId,
+    loadout: ref,
+    expectedPlanHash: parsedArgs.planHash ?? undefined,
+    mode: "replace",
+  });
+  process.stdout.write(JSON.stringify(receipt, null, 2) + "\n");
 }
 
 function list(parsedArgs: ParsedArgs): void {

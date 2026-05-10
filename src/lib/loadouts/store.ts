@@ -486,6 +486,15 @@ export function setActiveLoadout(ref: string | null, options: { now?: string } =
   });
 }
 
+export function markLoadoutApplied(ref: string, options: { now?: string } = {}): LoadoutManifest {
+  return withLoadoutLock(() => {
+    const manifest = requireLoadout(ref);
+    const updated = { ...manifest, lastAppliedAt: nowIso(options.now) };
+    writeManifest(updated);
+    return updated;
+  });
+}
+
 export function clearActiveLoadout(options: { now?: string } = {}): LoadoutState {
   return setActiveLoadout(null, options);
 }

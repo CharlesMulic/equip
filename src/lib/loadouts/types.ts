@@ -280,3 +280,68 @@ export interface LoadoutTargetResolution {
 
 export type LoadoutTargetResolver = (entry: LoadoutEntry) => LoadoutTargetResolution | null;
 export type LoadoutCredentialReader = (augmentName: string) => boolean;
+
+export type LoadoutApplyStatus =
+  | "success"
+  | "partial"
+  | "blocked"
+  | "failed"
+  | "in_progress"
+  | "replayed"
+  | "recovery_required";
+
+export type LoadoutApplyStepAction = "install" | "uninstall" | "noop" | "update";
+export type LoadoutApplyStepStatus = "success" | "skipped" | "failed";
+
+export interface ApplyLoadoutCommand {
+  operationId: string;
+  loadout: string;
+  expectedPlanHash?: string;
+  mode?: LoadoutMode;
+}
+
+export interface LoadoutApplyDiagnostic {
+  code: string;
+  message: string;
+  augmentName?: string;
+  platforms?: string[];
+}
+
+export interface LoadoutApplyStep {
+  augmentName: string;
+  action: LoadoutApplyStepAction;
+  status: LoadoutApplyStepStatus;
+  platforms: string[];
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface LoadoutApplyReceipt {
+  schemaVersion: 1;
+  operationId: string;
+  status: LoadoutApplyStatus;
+  replayed: boolean;
+  loadout: {
+    id: string;
+    name: string;
+  };
+  requestedAt: string;
+  completedAt?: string;
+  planHash: string;
+  expectedPlanHash?: string;
+  affectedPlatforms: string[];
+  steps: LoadoutApplyStep[];
+  diagnostics: LoadoutApplyDiagnostic[];
+  summary: {
+    installCount: number;
+    uninstallCount: number;
+    updateCount: number;
+    noopCount: number;
+    skippedCount: number;
+    failedCount: number;
+  };
+}
+
+export type LoadoutCredentialValueReader = (augmentName: string) => string | null;

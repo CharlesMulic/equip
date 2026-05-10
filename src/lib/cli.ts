@@ -144,11 +144,15 @@ export interface ParsedArgs {
   preserveAdded: boolean;
   /** Emit machine-readable JSON for commands that support it. */
   json: boolean;
+  /** Idempotency key for commands that write durable receipts. */
+  operationId: string | null;
+  /** Expected no-write preview hash for stale-plan checks. */
+  planHash: string | null;
 }
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, deleteAdded: false, preserveAdded: false, json: false };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, deleteAdded: false, preserveAdded: false, json: false, operationId: null, planHash: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
@@ -161,6 +165,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === "--delete-added") { args.deleteAdded = true; }
     else if (a === "--preserve-added") { args.preserveAdded = true; }
     else if (a === "--json") { args.json = true; }
+    else if (a === "--operation-id" && i + 1 < argv.length) { args.operationId = argv[++i]; }
+    else if (a === "--plan-hash" && i + 1 < argv.length) { args.planHash = argv[++i]; }
     else if (a === "--api-key" && i + 1 < argv.length) { args.apiKey = argv[++i]; }
     else if (a === "--api-key-file" && i + 1 < argv.length) {
       try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }

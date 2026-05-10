@@ -57,6 +57,14 @@ describe("parseArgs", () => {
     assert.deepStrictEqual(result._, ["claude-code"]);
   });
 
+  it("parses loadout apply idempotency flags", () => {
+    const result = parseArgs(["loadout", "apply", "Daily", "--operation-id", "op_123", "--plan-hash", "abc", "--json"]);
+    assert.strictEqual(result.operationId, "op_123");
+    assert.strictEqual(result.planHash, "abc");
+    assert.strictEqual(result.json, true);
+    assert.deepStrictEqual(result._, ["loadout", "apply", "Daily"]);
+  });
+
   it("parses --api-key with value", () => {
     const result = parseArgs(["--api-key", "sk-test-123"]);
     assert.strictEqual(result.apiKey, "sk-test-123");
@@ -258,6 +266,27 @@ describe("equip CLI", () => {
       assert.equal(plan.schemaVersion, 1);
       assert.equal(plan.loadout.name, "Empty");
       assert.equal(typeof plan.planHash, "string");
+    } finally {
+      full.dispose();
+    }
+  });
+
+  it("loadout apply command emits JSON", () => {
+    const full = setupFullHome("cli-loadout-apply");
+    const env = {
+      EQUIP_HOME: full.equipHome,
+      HOME: full.home,
+      USERPROFILE: full.home,
+      APPDATA: path.join(full.home, "AppData", "Roaming"),
+      CODEX_HOME: full.home,
+    };
+    try {
+      runCliStrict(equipBin, ["loadout", "save", "Empty"], env);
+      const output = runCliStrict(equipBin, ["loadout", "apply", "Empty", "--operation-id", "op_cli_apply", "--json"], env);
+      const receipt = JSON.parse(output);
+      assert.equal(receipt.schemaVersion, 1);
+      assert.equal(receipt.status, "success");
+      assert.equal(receipt.loadout.name, "Empty");
     } finally {
       full.dispose();
     }
