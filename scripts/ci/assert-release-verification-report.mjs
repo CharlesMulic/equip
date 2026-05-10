@@ -196,6 +196,35 @@ function appendAssertionSummary(summaryPath, result) {
     lines.push(`- Assertion artifact: \`${result.assertionPath}\``);
   }
 
+  const workflowContext =
+    result.workflowContext && typeof result.workflowContext === "object"
+      ? result.workflowContext
+      : {};
+  if (
+    workflowContext.repository ||
+    workflowContext.workflow ||
+    workflowContext.runId ||
+    workflowContext.runUrl ||
+    workflowContext.commitUrl
+  ) {
+    lines.push("", "## GitHub workflow context", "");
+    if (workflowContext.repository) {
+      lines.push(`- Repository: \`${workflowContext.repository}\``);
+    }
+    if (workflowContext.workflow) {
+      lines.push(`- Workflow: \`${workflowContext.workflow}\``);
+    }
+    if (workflowContext.runId) {
+      lines.push(`- Run ID: \`${workflowContext.runId}\``);
+    }
+    if (workflowContext.runUrl) {
+      lines.push(`- Run URL: \`${workflowContext.runUrl}\``);
+    }
+    if (workflowContext.commitUrl) {
+      lines.push(`- Commit URL: \`${workflowContext.commitUrl}\``);
+    }
+  }
+
   const failureDetails = Array.isArray(result.failureDetails) ? result.failureDetails : [];
   if (failureDetails.length > 0) {
     lines.push("- Failure details:");

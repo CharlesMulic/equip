@@ -175,21 +175,30 @@ test("assert-release-verification-report passes healthy rollups", () => {
   assert.match(summary, /Outcome: `passed`/i);
   assert.match(summary, /package: `passed`/i);
   assert.match(summary, /dockerAcceptance: `passed`/i);
+  assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(summary, /Workflow: `Release`/i);
+  assert.match(summary, /Run ID: `1234567890`/i);
+  assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
 });
 
 test("assert-release-verification-report preserves workflow context when the report is missing", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-release-verification-"));
   const reportPath = path.join(root, "missing-release-verification-report.json");
   const assertionPath = path.join(root, "release-verification-assertion.json");
+  const summaryPath = path.join(root, "step-summary.md");
 
   const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
     RELEASE_VERIFICATION_REPORT_PATH: reportPath,
     RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
+    GITHUB_STEP_SUMMARY: summaryPath,
     ...createWorkflowEnv(),
   });
 
   assert.notEqual(result.status, 0);
   const assertion = JSON.parse(fs.readFileSync(assertionPath, "utf8"));
+  const summary = fs.readFileSync(summaryPath, "utf8");
   assert.equal(assertion.outcome, "failed");
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(assertion.workflowContext.workflow, "Release");
@@ -201,6 +210,12 @@ test("assert-release-verification-report preserves workflow context when the rep
   assert.equal(assertion.artifacts.assertionPath, path.resolve(assertionPath));
   assert.equal(assertion.evidenceFileNames.reportPath, "missing-release-verification-report.json");
   assert.equal(assertion.evidenceFileNames.assertionPath, "release-verification-assertion.json");
+  assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(summary, /Workflow: `Release`/i);
+  assert.match(summary, /Run ID: `1234567890`/i);
+  assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
 });
 
 test("assert-release-verification-report can skip step summary output when requested", () => {
