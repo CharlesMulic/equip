@@ -22,6 +22,7 @@ import { runInstall } from "../lib/commands/install.js";
 import { runReauth } from "../lib/commands/reauth.js";
 import { runRefresh, autoRefreshExpired } from "../lib/commands/refresh.js";
 import { runSnapshot, runSnapshots, runSnapshotDiff, runRestore } from "../lib/commands/snapshot.js";
+import { runLoadout } from "../lib/commands/loadout.js";
 import { detectPlatforms } from "../lib/detect.js";
 import { ensureInitialSnapshots } from "../lib/snapshots.js";
 import { reconcileState } from "../lib/reconcile.js";
@@ -71,6 +72,7 @@ function cmdHelp(): void {
   console.log("  snapshots [plat] List available config snapshots");
   console.log("  snapshot-diff    Print JSON restore preview for a snapshot");
   console.log("  restore <plat>   Restore platform config from a snapshot");
+  console.log("  loadout          Manage saved loadouts");
   console.log("  demo             Run the built-in demo");
   console.log("");
   console.log("Options:");
@@ -329,6 +331,7 @@ async function main(): Promise<void> {
     case "snapshots": runSnapshots(parsedArgs); break;
     case "snapshot-diff": runSnapshotDiff(parsedArgs); break;
     case "restore":   await runRestore(parsedArgs); break;
+    case "loadout":   runLoadout(parsedArgs); break;
     case "uninstall": cmdUninstall(parsedArgs._); break;
     case "reauth":    await runReauth(parsedArgs); break;
     case "refresh":   await runRefresh(parsedArgs); break;

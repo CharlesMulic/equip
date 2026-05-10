@@ -440,6 +440,37 @@ export {
   redactSecrets,
 } from "./lib/adoption-snapshot";
 export type { AdoptionSnapshot } from "./lib/adoption-snapshot";
+export {
+  LOADOUT_SCHEMA_VERSION,
+  LOADOUT_STATE_SCHEMA_VERSION,
+  LoadoutStoreError,
+  createLoadout,
+  clearActiveLoadout,
+  deleteLoadout,
+  duplicateLoadout,
+  entriesFromResolved,
+  getLoadout,
+  getLoadoutProjection,
+  listLoadoutManifests,
+  listLoadouts,
+  migrateLegacySets,
+  readLoadoutState,
+  renameLoadout,
+  saveCurrentLoadout,
+  setActiveLoadout,
+  updateLoadoutMetadata,
+} from "./lib/loadouts";
+export type {
+  CreateLoadoutCommand,
+  DeleteLoadoutResult,
+  LoadoutEntry,
+  LoadoutManifest,
+  LoadoutProjection,
+  LoadoutState,
+  LoadoutSummary,
+  SaveCurrentLoadoutCommand,
+  UpdateLoadoutMetadataCommand,
+} from "./lib/loadouts";
 
 export type {
   DetectedPlatform,

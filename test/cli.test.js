@@ -3,12 +3,15 @@
 
 "use strict";
 
+require("./_isolation");
+
 const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const { execFileSync } = require("child_process");
+const { execFileSync, spawnSync } = require("child_process");
+const { setupFullHome } = require("./_isolation");
 
 const { parseArgs, isLocalPath } = require("../dist/lib/cli");
 
@@ -140,13 +143,17 @@ describe("isLocalPath", () => {
 const equipBin = path.join(__dirname, "..", "bin", "equip.js");
 const unequipBin = path.join(__dirname, "..", "bin", "unequip.js");
 
-function runCli(bin, args) {
+function makeCliEnv(overrides = {}) {
+  return { ...process.env, NO_COLOR: "1", ...overrides };
+}
+
+function runCli(bin, args, envOverrides = {}) {
   try {
     return execFileSync(process.execPath, [bin, ...args], {
       encoding: "utf-8",
       timeout: 10000,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, NO_COLOR: "1" },
+      env: makeCliEnv(envOverrides),
     });
   } catch (e) {
     // Some commands write to stderr and exit 0, execFileSync only throws on non-zero
@@ -155,7 +162,7 @@ function runCli(bin, args) {
 }
 
 /** Run CLI and return stdout + stderr combined (equip writes most output to stderr). */
-function runCliAll(bin, args) {
+function runCliAll(bin, args, envOverrides = {}) {
   const { execSync } = require("child_process");
   try {
     // Redirect stderr to stdout so we capture everything
@@ -164,11 +171,22 @@ function runCliAll(bin, args) {
       encoding: "utf-8",
       timeout: 10000,
       shell: true,
-      env: { ...process.env, NO_COLOR: "1" },
+      env: makeCliEnv(envOverrides),
     });
   } catch (e) {
     return e.stdout || e.stderr || "";
   }
+}
+
+function runCliStrict(bin, args, envOverrides = {}) {
+  const result = spawnSync(process.execPath, [bin, ...args], {
+    encoding: "utf-8",
+    timeout: 10000,
+    env: makeCliEnv(envOverrides),
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  assert.equal(result.status, 0, output);
+  return output;
 }
 
 describe("equip CLI", () => {
@@ -189,6 +207,7 @@ describe("equip CLI", () => {
     assert.match(output, /--verbose/);
     assert.match(output, /--api-key-file <path>/);
     assert.match(output, /shell history\/process lists/);
+    assert.match(output, /loadout/);
     assert.match(output, /Telemetry/);
   });
 
@@ -205,6 +224,22 @@ describe("equip CLI", () => {
   it("doctor command runs without error", () => {
     const output = runCliAll(equipBin, ["doctor"]);
     assert.match(output, /doctor|config/i);
+  });
+
+  it("loadout list command runs without error", () => {
+    const full = setupFullHome("cli-loadout");
+    try {
+      const output = runCliStrict(equipBin, ["loadout", "list"], {
+        EQUIP_HOME: full.equipHome,
+        HOME: full.home,
+        USERPROFILE: full.home,
+        APPDATA: path.join(full.home, "AppData", "Roaming"),
+        CODEX_HOME: full.home,
+      });
+      assert.match(output, /equip loadout list|No saved loadouts/i);
+    } finally {
+      full.dispose();
+    }
   });
 });
 
