@@ -7,6 +7,7 @@ import { JsonStore, type EquipDataStore } from "../storage/datastore";
 import type { ResolvedAugment } from "../storage/materializer";
 import type { ContentSource } from "../storage/intent";
 import { validateToolName } from "../validation";
+import { readPlatformsMeta } from "../platform-state";
 import {
   LOADOUT_SCHEMA_VERSION,
   LOADOUT_STATE_SCHEMA_VERSION,
@@ -39,6 +40,7 @@ export class LoadoutStoreError extends Error {
 interface StoreOptions {
   migrateLegacy?: boolean;
   store?: EquipDataStore;
+  enabledPlatformIds?: Iterable<string>;
 }
 
 function loadoutsRoot(): string {
@@ -370,7 +372,9 @@ export function saveCurrentLoadout(command: SaveCurrentLoadoutCommand, options: 
   return withLoadoutLock(() => {
     ensureLegacy(options);
     const now = nowIso(command.now);
-    const entries = entriesFromResolved((options.store ?? JsonStore).listResolved());
+    const entries = entriesFromResolved((options.store ?? JsonStore).listResolved(), {
+      platformFilter: currentPlatformFilter(options),
+    });
     const existing = command.id ? getLoadout(command.id, { migrateLegacy: false }) : getLoadout(command.name, { migrateLegacy: false });
 
     let manifest: LoadoutManifest;
@@ -506,7 +510,9 @@ export function getLoadoutProjection(options: StoreOptions = {}): LoadoutProject
   const activeLoadout = state.activeLoadoutId
     ? manifests.find((manifest) => manifest.id === state.activeLoadoutId) ?? null
     : null;
-  const currentMembershipHash = computeCurrentMembershipHash((options.store ?? JsonStore).listResolved());
+  const currentMembershipHash = computeCurrentMembershipHash((options.store ?? JsonStore).listResolved(), {
+    platformFilter: currentPlatformFilter(options),
+  });
   const activeModified = !!activeLoadout && currentMembershipHash !== computeLoadoutMembershipHash(activeLoadout);
 
   return {
@@ -543,28 +549,58 @@ export function computeLoadoutMembershipHash(manifest: LoadoutManifest): string 
   return sha256(stableStringify({ mode: manifest.mode, entries }));
 }
 
-export function computeCurrentMembershipHash(resolved: ResolvedAugment[]): string {
+export function computeCurrentMembershipHash(
+  resolved: ResolvedAugment[],
+  options: { platformFilter?: Set<string> | null } = {},
+): string {
   const entries = resolved
-    .filter((augment) => augment.installed)
+    .filter((augment) => isCurrentEquipped(augment, options.platformFilter ?? null))
     .map((augment) => ({ augmentName: augment.name, enabled: true, required: true }))
     .sort((a, b) => a.augmentName.localeCompare(b.augmentName));
   return sha256(stableStringify({ mode: "replace", entries }));
 }
 
-export function entriesFromResolved(resolved: ResolvedAugment[]): LoadoutEntry[] {
+export function entriesFromResolved(
+  resolved: ResolvedAugment[],
+  options: { platformFilter?: Set<string> | null } = {},
+): LoadoutEntry[] {
   return normalizeEntries(resolved
-    .filter((augment) => augment.installed)
-    .map((augment) => ({
-      augmentName: augment.name,
-      enabled: true,
-      required: true,
-      sourceKind: sourceKindFromContentSource(augment.contentSource),
-      contentHash: augment.contentHash,
-      registryVersion: registryVersionFromContentSource(augment.contentSource),
-      platformTargets: augment.installedPlatforms,
-      installMode: installModeHint(augment.installModes, augment.installedPlatforms),
-      shareBehavior: shareBehaviorFromContentSource(augment.contentSource),
-    })));
+    .filter((augment) => isCurrentEquipped(augment, options.platformFilter ?? null))
+    .map((augment) => {
+      const platformTargets = currentInstalledPlatforms(augment, options.platformFilter ?? null);
+      return {
+        augmentName: augment.name,
+        enabled: true,
+        required: true,
+        sourceKind: sourceKindFromContentSource(augment.contentSource),
+        contentHash: augment.contentHash,
+        registryVersion: registryVersionFromContentSource(augment.contentSource),
+        platformTargets,
+        installMode: installModeHint(augment.installModes, platformTargets),
+        shareBehavior: shareBehaviorFromContentSource(augment.contentSource),
+      };
+    }));
+}
+
+function currentPlatformFilter(options: StoreOptions): Set<string> | null {
+  if (options.enabledPlatformIds !== undefined) {
+    return new Set([...options.enabledPlatformIds].filter(Boolean));
+  }
+  const meta = readPlatformsMeta();
+  const platformIds = Object.keys(meta.platforms ?? {});
+  if (platformIds.length === 0) return null;
+  return new Set(platformIds.filter((id) => meta.platforms[id]?.enabled));
+}
+
+function isCurrentEquipped(augment: ResolvedAugment, platformFilter: Set<string> | null): boolean {
+  if (!augment.installed) return false;
+  if (platformFilter === null) return true;
+  return augment.installedPlatforms.some((platform) => platformFilter.has(platform));
+}
+
+function currentInstalledPlatforms(augment: ResolvedAugment, platformFilter: Set<string> | null): string[] {
+  if (platformFilter === null) return augment.installedPlatforms;
+  return augment.installedPlatforms.filter((platform) => platformFilter.has(platform));
 }
 
 function sourceKindFromContentSource(source: ContentSource): LoadoutSourceKind {

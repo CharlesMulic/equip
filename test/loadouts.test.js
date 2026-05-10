@@ -168,6 +168,37 @@ describe("loadout store", () => {
     assert.equal(projection.loadouts[0].modified, false);
   });
 
+  it("saves only augments equipped on enabled platforms", () => {
+    writeJson(path.join(process.env.EQUIP_HOME, "platforms.json"), {
+      lastScanned: "2026-05-10T00:00:00.000Z",
+      platforms: {
+        codex: { enabled: true, detected: true, name: "Codex", configPath: "codex.toml", configPathShort: "codex.toml", configFormat: "toml", capabilities: ["MCP"] },
+        cursor: { enabled: false, detected: true, name: "Cursor", configPath: "cursor.json", configPathShort: "cursor.json", configFormat: "json", capabilities: ["MCP"] },
+      },
+    });
+
+    installAugment("codex-tool", { platforms: ["codex"] });
+    installAugment("cursor-only-local", { source: "local-authored", platforms: ["cursor"] });
+    installAugment("shared-tool", {
+      platforms: ["codex", "cursor"],
+      installModes: { codex: "broker", cursor: "direct" },
+    });
+
+    const manifest = saveCurrentLoadout({ name: "Enabled Platforms" });
+    assert.deepEqual(manifest.entries.map((entry) => entry.augmentName), ["codex-tool", "shared-tool"]);
+
+    const shared = manifest.entries.find((entry) => entry.augmentName === "shared-tool");
+    assert.deepEqual(shared.platformTargets, ["codex"]);
+    assert.equal(shared.installMode, "broker");
+    assert.equal(getLoadoutProjection().activeModified, false);
+
+    installAugment("cursor-extra", { platforms: ["cursor"] });
+    assert.equal(getLoadoutProjection().activeModified, false, "disabled-platform-only install does not dirty active loadout");
+
+    installAugment("codex-extra", { platforms: ["codex"] });
+    assert.equal(getLoadoutProjection().activeModified, true, "enabled-platform install dirties active loadout");
+  });
+
   it("enforces unique names and prefers ID lookup over name lookup", () => {
     const byId = createLoadout({ id: "shared", name: "Primary", entries: [] });
     const byName = createLoadout({ id: "secondary", name: "shared", entries: [] });
