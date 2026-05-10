@@ -241,6 +241,27 @@ describe("equip CLI", () => {
       full.dispose();
     }
   });
+
+  it("loadout preview command emits JSON", () => {
+    const full = setupFullHome("cli-loadout-preview");
+    const env = {
+      EQUIP_HOME: full.equipHome,
+      HOME: full.home,
+      USERPROFILE: full.home,
+      APPDATA: path.join(full.home, "AppData", "Roaming"),
+      CODEX_HOME: full.home,
+    };
+    try {
+      runCliStrict(equipBin, ["loadout", "save", "Empty"], env);
+      const output = runCliStrict(equipBin, ["loadout", "preview", "Empty", "--json"], env);
+      const plan = JSON.parse(output);
+      assert.equal(plan.schemaVersion, 1);
+      assert.equal(plan.loadout.name, "Empty");
+      assert.equal(typeof plan.planHash, "string");
+    } finally {
+      full.dispose();
+    }
+  });
 });
 
 describe("unequip CLI", () => {

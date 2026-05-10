@@ -6,6 +6,7 @@ import {
   getLoadout,
   getLoadoutProjection,
   migrateLegacySets,
+  previewLoadout,
   renameLoadout,
   saveCurrentLoadout,
   clearActiveLoadout,
@@ -22,6 +23,7 @@ function usage(): void {
     "  list                     List saved loadouts",
     "  show <id-or-name>        Show a saved loadout",
     "  save <name>              Save the current equipped augments",
+    "  preview <id-or-name> --json  Preview switching to a loadout",
     "  rename <id-or-name> <n>  Rename a loadout",
     "  duplicate <id-or-name> <n>  Duplicate a loadout",
     "  delete <id-or-name>      Delete a loadout",
@@ -44,6 +46,8 @@ export function runLoadout(parsedArgs: ParsedArgs): void {
         return show(args[0], parsedArgs);
       case "save":
         return save(args[0], parsedArgs);
+      case "preview":
+        return preview(args[0], parsedArgs);
       case "rename":
         return rename(args[0], args[1], parsedArgs);
       case "duplicate":
@@ -70,6 +74,15 @@ export function runLoadout(parsedArgs: ParsedArgs): void {
     cli.fail((error as Error).message);
     process.exit(1);
   }
+}
+
+function preview(ref: string | undefined, parsedArgs: ParsedArgs): void {
+  if (!ref || !parsedArgs.json) {
+    cli.fail("Loadout preview is JSON-only for now. Use: equip loadout preview <id-or-name> --json");
+    process.exit(1);
+  }
+  const plan = previewLoadout(ref);
+  process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
 }
 
 function list(parsedArgs: ParsedArgs): void {

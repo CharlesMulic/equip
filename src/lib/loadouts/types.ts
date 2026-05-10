@@ -2,9 +2,11 @@ import type { PlatformInstallMode } from "../storage/intent";
 
 export const LOADOUT_SCHEMA_VERSION = 1 as const;
 export const LOADOUT_STATE_SCHEMA_VERSION = 1 as const;
+export const LOADOUT_PLAN_SCHEMA_VERSION = 1 as const;
 
 export type LoadoutSchemaVersion = typeof LOADOUT_SCHEMA_VERSION;
 export type LoadoutStateSchemaVersion = typeof LOADOUT_STATE_SCHEMA_VERSION;
+export type LoadoutPlanSchemaVersion = typeof LOADOUT_PLAN_SCHEMA_VERSION;
 
 export type LoadoutSourceKind = "registry" | "local-authored" | "wrapped" | "unknown";
 export type LoadoutShareBehavior = "public-ref" | "local-private" | "unavailable-placeholder";
@@ -124,3 +126,157 @@ export interface LegacySetsData {
   sets: LegacySet[];
   activeSet: string | null;
 }
+
+export type LoadoutPlanStatus = "ready" | "blocked" | "noop";
+export type LoadoutPlanEntryStatus = "ready" | "blocked" | "warning";
+export type LoadoutPlanAction = "install" | "uninstall" | "noop" | "update";
+export type LoadoutPlanDiagnosticSeverity = "info" | "warning" | "blocked";
+
+// `action` is the canonical operation field. `codes` intentionally repeats
+// that action code alongside diagnostics so UI/sidecar callers can filter a
+// single stable code array without parsing display strings.
+export type LoadoutPlanCode =
+  | "install"
+  | "uninstall"
+  | "noop"
+  | "update"
+  | "hash_version_mismatch"
+  | "missing_registry_entry"
+  | "unavailable_registry_entry"
+  | "retracted_entry"
+  | "unapproved_entry"
+  | "auth_required"
+  | "credential_needed"
+  | "local_private_available"
+  | "local_private_unavailable"
+  | "unavailable_placeholder"
+  | "platform_unsupported"
+  | "no_enabled_platforms"
+  | "unmanaged_inventory_ignored";
+
+export interface LoadoutComponentSummary {
+  mcp: boolean;
+  rules: boolean;
+  skills: number;
+  hooks: number;
+}
+
+export interface LoadoutPlanDiagnostic {
+  code: LoadoutPlanCode;
+  severity: LoadoutPlanDiagnosticSeverity;
+  platforms?: string[];
+}
+
+export interface LoadoutPlanEntrySnapshot {
+  augmentName: string;
+  sourceKind: LoadoutSourceKind;
+  contentHash?: string;
+  registryVersion?: number;
+  installed?: boolean;
+  platforms?: string[];
+  requiresAuth?: boolean;
+  componentSummary: LoadoutComponentSummary;
+  baseWeight?: number;
+  loadedWeight?: number;
+}
+
+export interface LoadoutPlanEntry {
+  augmentName: string;
+  action: LoadoutPlanAction;
+  status: LoadoutPlanEntryStatus;
+  required: boolean;
+  sourceKind: LoadoutSourceKind;
+  shareBehavior: LoadoutShareBehavior;
+  platforms: string[];
+  savedPlatformTargets?: string[];
+  codes: LoadoutPlanCode[];
+  diagnostics: LoadoutPlanDiagnostic[];
+  current?: LoadoutPlanEntrySnapshot;
+  target?: LoadoutPlanEntrySnapshot;
+  componentSummary: LoadoutComponentSummary;
+}
+
+export interface LoadoutIgnoredInventory {
+  name: string;
+  platformId: string;
+  kind: "mcp" | "skill-bundle";
+  code: "unmanaged_inventory_ignored";
+}
+
+export interface LoadoutDesiredEntry {
+  augmentName: string;
+  sourceKind: LoadoutSourceKind;
+  shareBehavior: LoadoutShareBehavior;
+  required: boolean;
+  platforms: string[];
+  contentHash?: string;
+  registryVersion?: number;
+  requiresAuth: boolean;
+  credentialAvailable?: boolean;
+  canRenderTemporaryInputs: boolean;
+  componentSummary: LoadoutComponentSummary;
+}
+
+export interface LoadoutDesiredStateProjection {
+  loadoutId: string;
+  mode: LoadoutMode;
+  platforms: string[];
+  entries: LoadoutDesiredEntry[];
+  componentSummary: LoadoutComponentSummary;
+}
+
+export interface LoadoutPlanSummary {
+  beforeCount: number;
+  afterCount: number;
+  installCount: number;
+  uninstallCount: number;
+  updateCount: number;
+  noopCount: number;
+  ignoredCount: number;
+  blockedCount: number;
+  warningCount: number;
+  componentSummary: LoadoutComponentSummary;
+  baseWeight?: number;
+  loadedWeight?: number;
+}
+
+export interface LoadoutPreviewPlan {
+  schemaVersion: LoadoutPlanSchemaVersion;
+  generatedAt: string;
+  planHash: string;
+  status: LoadoutPlanStatus;
+  canApply: boolean;
+  loadout: {
+    id: string;
+    name: string;
+    updatedAt: string;
+  };
+  enabledPlatforms: string[];
+  affectedPlatforms: string[];
+  entries: LoadoutPlanEntry[];
+  ignoredInventory: LoadoutIgnoredInventory[];
+  desiredState: LoadoutDesiredStateProjection;
+  summary: LoadoutPlanSummary;
+}
+
+export type LoadoutTargetResolutionStatus =
+  | "available"
+  | "missing"
+  | "unavailable"
+  | "retracted"
+  | "unapproved";
+
+export interface LoadoutTargetResolution {
+  status: LoadoutTargetResolutionStatus;
+  sourceKind?: LoadoutSourceKind;
+  contentHash?: string;
+  registryVersion?: number;
+  requiresAuth?: boolean;
+  supportedPlatforms?: string[];
+  componentSummary?: LoadoutComponentSummary;
+  baseWeight?: number;
+  loadedWeight?: number;
+}
+
+export type LoadoutTargetResolver = (entry: LoadoutEntry) => LoadoutTargetResolution | null;
+export type LoadoutCredentialReader = (augmentName: string) => boolean;
