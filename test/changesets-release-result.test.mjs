@@ -91,9 +91,15 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
   assert.equal(result.artifactNames.result, "changesets-release-result");
   assert.equal(result.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(result.workflowContext.workflow, "Release");
+  assert.equal(result.workflowContext.runId, "1234567890");
   assert.equal(
     result.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    result.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
   );
   assert.equal(result.publishedPackages.length, 1);
   assert.equal(result.publishedPackages[0].name, "@cg3/equip");
@@ -160,6 +166,16 @@ test("write-changesets-release-result writes an artifact and appends summary out
   assert.equal(artifact.artifactNames.result, "changesets-release-result");
   assert.equal(artifact.artifactNames.releaseVerification, "release-verification-report");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(artifact.workflowContext.workflow, "Release");
+  assert.equal(artifact.workflowContext.runId, "1234567890");
+  assert.equal(
+    artifact.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    artifact.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
   assert.equal(artifact.publishedPackages[0].version, "0.17.8");
 });
 
