@@ -232,6 +232,50 @@ describe("loadout apply", () => {
     assert.equal(JsonStore.resolve("alpha"), null);
   });
 
+  it("applies changes when an auth-required current augment is only kept", () => {
+    const secureHash = putContent("secure-tool", { requiresAuth: true });
+    installIntent("secure-tool", { contentHash: secureHash });
+    const nextHash = putContent("next-tool");
+    const loadout = createLoadout({
+      name: "Keep Secure",
+      entries: [
+        loadoutEntry("secure-tool", secureHash),
+        loadoutEntry("next-tool", nextHash),
+      ],
+    });
+    const writer = {
+      install() {
+        return { simulated: "installed" };
+      },
+      uninstall() {
+        return { simulated: "removed" };
+      },
+    };
+
+    const plan = previewLoadout(loadout, {
+      enabledPlatformIds: ["codex"],
+      credentialReader: () => false,
+    });
+    assert.equal(plan.canApply, true);
+
+    const receipt = applyLoadout({
+      operationId: "op_auth_noop",
+      loadout: loadout.id,
+      expectedPlanHash: plan.planHash,
+    }, {
+      enabledPlatformIds: ["codex"],
+      credentialReader: () => false,
+      writer,
+      now: "2026-05-10T00:00:00.000Z",
+    });
+
+    assert.equal(receipt.status, "success");
+    assert.deepEqual(receipt.steps.map((step) => `${step.action}:${step.augmentName}:${step.status}`), [
+      "install:next-tool:success",
+      "noop:secure-tool:skipped",
+    ]);
+  });
+
   it("records partial failure receipts and requires recovery on duplicate", () => {
     installIntent("old-tool");
     const alphaHash = putContent("alpha");

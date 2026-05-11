@@ -61,7 +61,7 @@ export function previewLoadout(
   const now = options.now ?? new Date().toISOString();
   const enabledPlatforms = normalizeSorted(options.enabledPlatformIds ?? defaultEnabledPlatformIds());
   const currentResolved = store.listResolved();
-  const currentInstalled = currentResolved.filter((augment) => augment.installed);
+  const currentInstalled = currentResolved.filter((augment) => isInstalledOnEnabledPlatform(augment, enabledPlatforms));
   const currentByName = new Map(currentInstalled.map((augment) => [augment.name, augment]));
   const targetEntries = loadout.entries.filter((entry) => entry.enabled);
   const targetByName = new Map(targetEntries.map((entry) => [entry.augmentName, entry]));
@@ -193,9 +193,11 @@ function planTargetEntry(
 
   addResolutionDiagnostics(entry, targetResolution, diagnostics);
 
+  const action = actionFor(entry, current, targetResolution);
+
   if (targetResolution.requiresAuth) {
     diagnostics.push(diagnostic("auth_required", "info"));
-    if (!hasCredential(entry.augmentName)) {
+    if ((action === "install" || action === "update") && !hasCredential(entry.augmentName)) {
       diagnostics.push(diagnostic("credential_needed", "blocked"));
     }
   }
@@ -206,8 +208,6 @@ function planTargetEntry(
   } else if (entry.shareBehavior === "unavailable-placeholder" && targetResolution.status !== "available") {
     diagnostics.push(diagnostic("unavailable_placeholder", "blocked"));
   }
-
-  const action = actionFor(entry, current, targetResolution);
   codes.push(action);
   if (isHashOrVersionMismatch(entry, targetResolution)) {
     diagnostics.push(diagnostic("hash_version_mismatch", "warning"));
@@ -535,6 +535,12 @@ function hasRenderableComponents(summary: LoadoutComponentSummary): boolean {
 function intersectEnabled(platforms: string[], enabledPlatforms: string[]): string[] {
   const enabled = new Set(enabledPlatforms);
   return normalizeSorted(platforms.filter((platform) => enabled.has(platform)));
+}
+
+function isInstalledOnEnabledPlatform(augment: ResolvedAugment, enabledPlatforms: string[]): boolean {
+  if (!augment.installed) return false;
+  if (enabledPlatforms.length === 0) return false;
+  return augment.installedPlatforms.some((platform) => enabledPlatforms.includes(platform));
 }
 
 function normalizeSorted(values: Iterable<string>): string[] {

@@ -302,6 +302,61 @@ describe("loadout preview planner", () => {
     assert.equal(secureDesired.canRenderTemporaryInputs, false);
   });
 
+  it("does not block keeping an auth-required current augment without a credential", () => {
+    const secureHash = installAugment("secure-tool", { requiresAuth: true });
+    const nextHash = JsonStore.putContent({
+      name: "next-tool",
+      title: "next-tool",
+      description: "Fixture for next-tool",
+      transport: "http",
+      serverUrl: "https://example.com/next-tool/mcp",
+      requiresAuth: false,
+      skills: [],
+      hooks: [],
+    });
+    const loadout = createLoadout({
+      name: "Keep Secure",
+      entries: [
+        entry("secure-tool", { contentHash: secureHash, registryVersion: 1 }),
+        entry("next-tool", { contentHash: nextHash, registryVersion: 1 }),
+      ],
+    });
+
+    const plan = previewLoadout(loadout, {
+      enabledPlatformIds: ["codex"],
+      credentialReader: () => false,
+    });
+
+    assert.equal(plan.status, "ready");
+    assert.equal(plan.canApply, true);
+    const secure = assertEntry(plan, "secure-tool", "noop", ["auth_required"]);
+    assert.ok(!secure.codes.includes("credential_needed"), "noop auth entries do not require a fresh credential");
+    assertEntry(plan, "next-tool", "install", ["install"]);
+  });
+
+  it("treats current state as enabled-platform equipped state", () => {
+    const disabledTargetHash = installAugment("disabled-target", { platforms: ["cursor"] });
+    installAugment("disabled-extra", { platforms: ["cursor"] });
+    const enabledHash = installAugment("enabled-current", { platforms: ["codex"] });
+    const loadout = createLoadout({
+      name: "Enabled Only",
+      entries: [
+        entry("disabled-target", { contentHash: disabledTargetHash, registryVersion: 1, platformTargets: ["codex"] }),
+        entry("enabled-current", { contentHash: enabledHash, registryVersion: 1, platformTargets: ["codex"] }),
+      ],
+    });
+
+    const plan = previewLoadout(loadout, {
+      enabledPlatformIds: ["codex"],
+    });
+
+    assert.equal(plan.summary.beforeCount, 1);
+    assert.equal(plan.summary.uninstallCount, 0);
+    assertEntry(plan, "disabled-target", "install", ["install"]);
+    assertEntry(plan, "enabled-current", "noop", ["noop"]);
+    assert.equal(plan.entries.some((planned) => planned.augmentName === "disabled-extra"), false);
+  });
+
   it("uses default target identity checks before falling back to current installs", () => {
     installAugment("private-tool", { source: "local-authored" });
     installAugment("registry-tool", { source: "registry", version: 3 });
