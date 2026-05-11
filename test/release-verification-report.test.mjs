@@ -309,6 +309,8 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
   assert.match(summary, /Docker run log: `\.generated\/docker-acceptance\/docker-run\.log`/i);
   assert.match(summary, /## GitHub workflow context/i);
   assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(summary, /Workflow: `Release`/i);
+  assert.match(summary, /Run ID: `1234567890`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);
