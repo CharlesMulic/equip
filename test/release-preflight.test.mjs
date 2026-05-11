@@ -166,6 +166,9 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.match(summary, /## Evidence artifact names/i);
   assert.match(summary, /bundle: `release-preflight`/i);
   assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(summary, /Workflow: `Release`/i);
+  assert.match(summary, /Run ID: `456`/i);
   assert.match(summary, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(summary, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
   assert.match(buildLog, /synthetic build ok/i);
