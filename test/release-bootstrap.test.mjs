@@ -91,6 +91,9 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
   assert.match(markdown, /## Evidence artifact names/i);
   assert.match(markdown, /bundle: `release-bootstrap`/i);
   assert.match(markdown, /## GitHub workflow context/i);
+  assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(markdown, /Workflow: `Release`/i);
+  assert.match(markdown, /Run ID: `123`/i);
   assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
