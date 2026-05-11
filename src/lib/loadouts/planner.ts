@@ -9,9 +9,15 @@ import {
 } from "../platform-state";
 import { JsonStore, type EquipDataStore } from "../storage/datastore";
 import type { ResolvedAugment } from "../storage/materializer";
-import { getLoadout, LoadoutStoreError } from "./store";
+import {
+  computeCurrentMembershipHash,
+  getLoadout,
+  listLoadoutManifests,
+  LoadoutStoreError,
+} from "./store";
 import {
   LOADOUT_PLAN_SCHEMA_VERSION,
+  type LoadoutBulkPreviewResult,
   type LoadoutComponentSummary,
   type LoadoutCredentialReader,
   type LoadoutDesiredEntry,
@@ -39,6 +45,19 @@ export interface PreviewLoadoutOptions {
   now?: string;
 }
 
+type PreviewLoadoutsOptions = PreviewLoadoutOptions;
+
+interface PreviewPlannerContext {
+  now: string;
+  enabledPlatforms: string[];
+  currentInstalled: ResolvedAugment[];
+  currentByName: Map<string, ResolvedAugment>;
+  ignoredInventory: LoadoutIgnoredInventory[];
+  currentMembershipHash: string;
+  resolveTarget: LoadoutTargetResolver;
+  hasCredential: LoadoutCredentialReader;
+}
+
 const EMPTY_COMPONENT_SUMMARY: LoadoutComponentSummary = {
   mcp: false,
   rules: false,
@@ -50,41 +69,115 @@ export function previewLoadout(
   target: string | LoadoutManifest,
   options: PreviewLoadoutOptions = {},
 ): LoadoutPreviewPlan {
+  const context = createPreviewPlannerContext(options);
+  const loadout = resolveLoadoutForPreview(target);
+  return planLoadout(loadout, context);
+}
+
+export function previewLoadouts(
+  targets?: Array<string | LoadoutManifest>,
+  options: PreviewLoadoutsOptions = {},
+): LoadoutBulkPreviewResult {
+  const context = createPreviewPlannerContext(options);
+  const requestedTargets = targets ?? listLoadoutManifests({ migrateLegacy: false });
+
+  return {
+    schemaVersion: LOADOUT_PLAN_SCHEMA_VERSION,
+    generatedAt: context.now,
+    context: {
+      enabledPlatforms: context.enabledPlatforms,
+      currentMembershipHash: context.currentMembershipHash,
+    },
+    previews: requestedTargets.map((target, requestIndex) => {
+      const requestedRef = typeof target === "string" ? target : target.id;
+      try {
+        const loadout = resolveLoadoutForPreview(target);
+        return {
+          requestIndex,
+          requestedRef,
+          loadoutId: loadout.id,
+          loadoutUpdatedAt: loadout.updatedAt,
+          plan: planLoadout(loadout, context),
+        };
+      } catch (error) {
+        return {
+          requestIndex,
+          requestedRef,
+          error: loadoutPreviewError(error),
+        };
+      }
+    }),
+  };
+}
+
+function createPreviewPlannerContext(options: PreviewLoadoutOptions): PreviewPlannerContext {
   const store = options.store ?? JsonStore;
+  const now = options.now ?? new Date().toISOString();
+  const enabledPlatforms = normalizeSorted(options.enabledPlatformIds ?? defaultEnabledPlatformIds());
+  const currentResolved = store.listResolved();
+  const currentInstalled = currentResolved.filter((augment) => isInstalledOnEnabledPlatform(augment, enabledPlatforms));
+  const currentByName = new Map(currentInstalled.map((augment) => [augment.name, augment]));
+  const resolveTarget = options.targetResolver ?? createDefaultTargetResolver(store, currentByName);
+  const hasCredential = options.credentialReader ?? defaultCredentialReader;
+  const readScan = options.platformScanReader ?? readPlatformScan;
+
+  return {
+    now,
+    enabledPlatforms,
+    currentInstalled,
+    currentByName,
+    resolveTarget,
+    hasCredential,
+    ignoredInventory: collectIgnoredInventory(enabledPlatforms, readScan),
+    currentMembershipHash: computeCurrentMembershipHash(currentResolved, {
+      platformFilter: new Set(enabledPlatforms),
+    }),
+  };
+}
+
+function resolveLoadoutForPreview(target: string | LoadoutManifest): LoadoutManifest {
   const loadout = typeof target === "string"
     ? getLoadout(target, { migrateLegacy: false })
     : target;
   if (!loadout) {
     throw new LoadoutStoreError("loadout_not_found", `Loadout not found: ${target}`);
   }
+  return loadout;
+}
 
-  const now = options.now ?? new Date().toISOString();
-  const enabledPlatforms = normalizeSorted(options.enabledPlatformIds ?? defaultEnabledPlatformIds());
-  const currentResolved = store.listResolved();
-  const currentInstalled = currentResolved.filter((augment) => isInstalledOnEnabledPlatform(augment, enabledPlatforms));
-  const currentByName = new Map(currentInstalled.map((augment) => [augment.name, augment]));
+function loadoutPreviewError(error: unknown): { code: string; message: string } {
+  if (error instanceof LoadoutStoreError) {
+    return { code: error.code, message: error.message };
+  }
+  return {
+    code: "preview_failed",
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
+function planLoadout(
+  loadout: LoadoutManifest,
+  context: PreviewPlannerContext,
+): LoadoutPreviewPlan {
   const targetEntries = loadout.entries.filter((entry) => entry.enabled);
   const targetByName = new Map(targetEntries.map((entry) => [entry.augmentName, entry]));
-  const resolveTarget = options.targetResolver ?? createDefaultTargetResolver(store, currentByName);
-  const hasCredential = options.credentialReader ?? defaultCredentialReader;
-  const readScan = options.platformScanReader ?? readPlatformScan;
 
   const entries: LoadoutPlanEntry[] = [];
   const affectedPlatformSet = new Set<string>();
 
   for (const entry of targetEntries) {
-    const current = currentByName.get(entry.augmentName) ?? null;
-    const resolved = resolveTarget(entry);
-    const planned = planTargetEntry(entry, current, resolved, enabledPlatforms, hasCredential);
+    const current = context.currentByName.get(entry.augmentName) ?? null;
+    const resolved = context.resolveTarget(entry);
+    const planned = planTargetEntry(entry, current, resolved, context.enabledPlatforms, context.hasCredential);
     entries.push(planned);
     for (const platform of planned.platforms) affectedPlatformSet.add(platform);
   }
 
-  for (const current of currentInstalled) {
+  for (const current of context.currentInstalled) {
     if (targetByName.has(current.name)) continue;
-    const platforms = intersectEnabled(current.installedPlatforms, enabledPlatforms);
-    if (platforms.length === 0 && enabledPlatforms.length > 0) continue;
-    const diagnostics = enabledPlatforms.length === 0
+    const platforms = intersectEnabled(current.installedPlatforms, context.enabledPlatforms);
+    if (platforms.length === 0 && context.enabledPlatforms.length > 0) continue;
+    const diagnostics = context.enabledPlatforms.length === 0
       ? [diagnostic("no_enabled_platforms", "blocked")]
       : [];
     const status = diagnostics.some((d) => d.severity === "blocked") ? "blocked" : "ready";
@@ -106,19 +199,18 @@ export function previewLoadout(
     for (const platform of platforms) affectedPlatformSet.add(platform);
   }
 
-  const ignoredInventory = collectIgnoredInventory(enabledPlatforms, readScan);
-  for (const item of ignoredInventory) {
+  for (const item of context.ignoredInventory) {
     affectedPlatformSet.add(item.platformId);
   }
 
   const desiredEntries = buildDesiredEntries(entries);
   const desiredComponentSummary = sumComponentSummaries(desiredEntries.map((entry) => entry.componentSummary));
   const status = planStatus(entries);
-  const summary = summarizePlan(currentInstalled, targetEntries, entries, ignoredInventory, desiredComponentSummary);
+  const summary = summarizePlan(context.currentInstalled, targetEntries, entries, context.ignoredInventory, desiredComponentSummary);
   const desiredState = {
     loadoutId: loadout.id,
     mode: loadout.mode,
-    platforms: enabledPlatforms,
+    platforms: context.enabledPlatforms,
     entries: desiredEntries.sort((a, b) => a.augmentName.localeCompare(b.augmentName)),
     componentSummary: desiredComponentSummary,
   };
@@ -130,16 +222,16 @@ export function previewLoadout(
       mode: loadout.mode,
       entries: targetEntries.map(hashableTargetEntry).sort((a, b) => a.augmentName.localeCompare(b.augmentName)),
     },
-    enabledPlatforms,
+    enabledPlatforms: context.enabledPlatforms,
     affectedPlatforms,
     entries: entries.map(hashablePlanEntry).sort((a, b) => a.augmentName.localeCompare(b.augmentName)),
-    ignoredInventory: ignoredInventory.map(hashableIgnoredInventory),
+    ignoredInventory: context.ignoredInventory.map(hashableIgnoredInventory),
     desiredState,
   });
 
   return {
     schemaVersion: LOADOUT_PLAN_SCHEMA_VERSION,
-    generatedAt: now,
+    generatedAt: context.now,
     planHash,
     status,
     canApply: status !== "blocked",
@@ -148,10 +240,10 @@ export function previewLoadout(
       name: loadout.name,
       updatedAt: loadout.updatedAt,
     },
-    enabledPlatforms,
+    enabledPlatforms: context.enabledPlatforms,
     affectedPlatforms,
     entries: entries.sort((a, b) => a.augmentName.localeCompare(b.augmentName)),
-    ignoredInventory,
+    ignoredInventory: context.ignoredInventory,
     desiredState,
     summary,
   };

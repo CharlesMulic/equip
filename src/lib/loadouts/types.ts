@@ -259,6 +259,30 @@ export interface LoadoutPreviewPlan {
   summary: LoadoutPlanSummary;
 }
 
+export interface LoadoutBulkPreviewError {
+  code: string;
+  message: string;
+}
+
+export interface LoadoutBulkPreviewEntry {
+  requestIndex: number;
+  requestedRef: string;
+  loadoutId?: string;
+  loadoutUpdatedAt?: string;
+  plan?: LoadoutPreviewPlan;
+  error?: LoadoutBulkPreviewError;
+}
+
+export interface LoadoutBulkPreviewResult {
+  schemaVersion: LoadoutPlanSchemaVersion;
+  generatedAt: string;
+  context: {
+    enabledPlatforms: string[];
+    currentMembershipHash: string;
+  };
+  previews: LoadoutBulkPreviewEntry[];
+}
+
 export type LoadoutTargetResolutionStatus =
   | "available"
   | "missing"

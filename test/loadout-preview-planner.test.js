@@ -11,6 +11,7 @@ const { setupEquipHome, setupFullHome } = require("./_isolation");
 const {
   createLoadout,
   previewLoadout,
+  previewLoadouts,
 } = require("../dist/lib/loadouts");
 const { JsonStore } = require("../dist/lib/storage/datastore");
 const { _resetSeqForTests } = require("../dist/lib/storage/intent-journal");
@@ -102,6 +103,90 @@ describe("loadout preview planner", () => {
   afterEach(teardown);
 
   const absentPrivateHash = "f".repeat(64);
+
+  it("bulk preview matches single preview planner semantics", () => {
+    const alphaHash = installAugment("alpha");
+    installAugment("beta");
+    const loadout = createLoadout({
+      name: "Bulk Daily",
+      entries: [
+        entry("alpha", { contentHash: alphaHash, registryVersion: 1 }),
+        entry("gamma", { contentHash: "saved-gamma", registryVersion: 1 }),
+      ],
+    });
+    const options = {
+      enabledPlatformIds: ["codex"],
+      targetResolver: resolver({
+        gamma: {
+          status: "available",
+          sourceKind: "registry",
+          contentHash: "resolved-gamma",
+          registryVersion: 1,
+          componentSummary: { mcp: true, rules: true, skills: 0, hooks: 0 },
+        },
+      }),
+      now: "2026-05-10T00:00:00.000Z",
+    };
+
+    const single = previewLoadout(loadout.id, options);
+    const bulk = previewLoadouts([loadout.id], options);
+
+    assert.equal(bulk.schemaVersion, 1);
+    assert.deepEqual(bulk.context.enabledPlatforms, ["codex"]);
+    assert.equal(bulk.previews.length, 1);
+    assert.equal(bulk.previews[0].requestIndex, 0);
+    assert.equal(bulk.previews[0].requestedRef, loadout.id);
+    assert.equal(bulk.previews[0].loadoutId, loadout.id);
+    assert.equal(bulk.previews[0].loadoutUpdatedAt, loadout.updatedAt);
+    assert.equal(bulk.previews[0].error, undefined);
+    assert.equal(bulk.previews[0].plan.planHash, single.planHash);
+    assert.deepEqual(bulk.previews[0].plan.summary, single.summary);
+  });
+
+  it("bulk preview preserves request identity, duplicates, omitted refs, and empty refs", () => {
+    const alpha = createLoadout({
+      name: "Alpha",
+      entries: [entry("alpha")],
+    });
+    const beta = createLoadout({
+      name: "Beta",
+      entries: [entry("beta")],
+    });
+    const options = {
+      enabledPlatformIds: ["codex"],
+      targetResolver: resolver({
+        alpha: {
+          status: "available",
+          sourceKind: "registry",
+          contentHash: "alpha-hash",
+          componentSummary: { mcp: true, rules: false, skills: 0, hooks: 0 },
+        },
+        beta: {
+          status: "available",
+          sourceKind: "registry",
+          contentHash: "beta-hash",
+          componentSummary: { mcp: true, rules: false, skills: 0, hooks: 0 },
+        },
+      }),
+      now: "2026-05-10T00:00:00.000Z",
+    };
+
+    const explicit = previewLoadouts([beta.id, "missing", alpha.id, beta.id], options);
+    assert.deepEqual(explicit.previews.map((item) => item.requestIndex), [0, 1, 2, 3]);
+    assert.deepEqual(explicit.previews.map((item) => item.requestedRef), [beta.id, "missing", alpha.id, beta.id]);
+    assert.equal(explicit.previews[0].loadoutId, beta.id);
+    assert.equal(explicit.previews[1].loadoutId, undefined);
+    assert.equal(explicit.previews[1].error.code, "loadout_not_found");
+    assert.match(explicit.previews[1].error.message, /Loadout not found/);
+    assert.equal(explicit.previews[2].loadoutId, alpha.id);
+    assert.equal(explicit.previews[3].loadoutId, beta.id);
+
+    const omitted = previewLoadouts(undefined, options);
+    assert.deepEqual(omitted.previews.map((item) => item.loadoutId), [alpha.id, beta.id]);
+
+    const empty = previewLoadouts([], options);
+    assert.deepEqual(empty.previews, []);
+  });
 
   it("plans install, uninstall, noop, update, and stable hashes without writes", () => {
     const alphaHash = installAugment("alpha");
@@ -482,7 +567,7 @@ describe("loadout preview planner", () => {
       });
       const before = snapshotFiles(full.home);
 
-      previewLoadout(loadout.id, {
+      const previewOptions = {
         enabledPlatformIds: ["codex"],
         targetResolver: resolver({
           alpha: {
@@ -499,7 +584,9 @@ describe("loadout preview planner", () => {
           managedCount: 0,
         }),
         credentialReader: () => true,
-      });
+      };
+      previewLoadout(loadout.id, previewOptions);
+      previewLoadouts([loadout.id], previewOptions);
 
       const after = snapshotFiles(full.home);
       assert.deepEqual(after, before);
