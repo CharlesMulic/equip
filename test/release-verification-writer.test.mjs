@@ -134,6 +134,12 @@ test("write-release-verification-summary writes a markdown artifact with the fin
   assert.match(summary, /Tarball smoke failure: Installed equip --help output did not include the expected usage header\./i);
   assert.match(summary, /Error: release verification failed/i);
   assert.match(stepSummary, /## Release verification rollup/i);
+  assert.match(stepSummary, /## GitHub workflow context/i);
+  assert.match(stepSummary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(stepSummary, /Workflow: `Release`/i);
+  assert.match(stepSummary, /Run ID: `1234567890`/i);
+  assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(stepSummary, /Summary: `release-verification-summary`/i);
   assert.match(stepSummary, /## Final assertion/i);
 });
