@@ -142,6 +142,9 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
   assert.match(summary, /## Evidence artifact names/i);
   assert.match(summary, /bundle: `release-bootstrap`/i);
   assert.match(summary, /## GitHub workflow context/i);
+  assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(summary, /Workflow: `Release`/i);
+  assert.match(summary, /Run ID: `123`/i);
   assert.match(summary, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(summary, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
   assert.match(log, /synthetic install ok/i);
