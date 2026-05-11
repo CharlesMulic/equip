@@ -240,6 +240,10 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
   assert.match(markdown, /0\.17\.8/);
   assert.match(markdown, /## GitHub workflow context/i);
   assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
+  assert.match(markdown, /Workflow: `Release`/i);
+  assert.match(markdown, /Run ID: `1234567890`/i);
+  assert.match(markdown, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
+  assert.match(markdown, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(markdown, /## Evidence artifacts/i);
   assert.match(markdown, /## Evidence artifact names/i);
   assert.match(markdown, /Result: `changesets-release-result`/i);
