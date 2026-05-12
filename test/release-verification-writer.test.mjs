@@ -262,9 +262,15 @@ test("write-release-verification-report can rewrite a final report without dupli
   assert.equal(report.evidenceFileNames.tarballSmokeResultPath, "pack-install-smoke.json");
   assert.equal(report.evidenceFileNames.releaseVerificationReportPath, "release-verification-report.json");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(report.workflowContext.workflow, "Release");
+  assert.equal(report.workflowContext.runId, "1234567890");
   assert.equal(
     report.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    report.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
   );
   assert.equal(report.assertion?.outcome, "passed");
   assert.equal(stepSummary, "## Existing step summary\n");
