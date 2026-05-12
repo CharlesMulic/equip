@@ -108,7 +108,10 @@ test("assert-release-verification-report passes healthy rollups", () => {
       repository: "CharlesMulic/equip",
       workflow: "Release",
       runId: "1234567890",
+      runAttempt: "2",
+      ref: "refs/heads/main",
       serverUrl: "https://github.com",
+      eventName: "push",
       sha: "abcdef1234567890",
       runUrl: "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
       commitUrl: "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
@@ -144,6 +147,12 @@ test("assert-release-verification-report passes healthy rollups", () => {
   assert.equal(assertion.releaseBootstrap.status, "passed");
   assert.equal(assertion.releasePreflight.status, "passed");
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.workflowContext.workflow, "Release");
+  assert.equal(assertion.workflowContext.runId, "1234567890");
+  assert.equal(assertion.workflowContext.runAttempt, "2");
+  assert.equal(assertion.workflowContext.ref, "refs/heads/main");
+  assert.equal(assertion.workflowContext.sha, "abcdef1234567890");
+  assert.equal(assertion.workflowContext.eventName, "push");
   assert.equal(
     assertion.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
@@ -202,6 +211,11 @@ test("assert-release-verification-report preserves workflow context when the rep
   assert.equal(assertion.outcome, "failed");
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(assertion.workflowContext.workflow, "Release");
+  assert.equal(assertion.workflowContext.runId, "1234567890");
+  assert.equal(assertion.workflowContext.runAttempt, "2");
+  assert.equal(assertion.workflowContext.ref, "refs/heads/main");
+  assert.equal(assertion.workflowContext.sha, "abcdef1234567890");
+  assert.equal(assertion.workflowContext.eventName, "push");
   assert.equal(
     assertion.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
