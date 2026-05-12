@@ -58,10 +58,17 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
   assert.equal(artifact.artifactNames.bundle, "pack-verification");
   assert.equal(artifact.artifactNames.tarball, "pack-tarball");
   assert.ok(artifact.evidenceFileNames.tarballPath.endsWith(".tgz"));
+  assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(artifact.workflowContext.workflow, "Release");
+  assert.equal(artifact.workflowContext.runId, "234");
   assert.equal(artifact.workflowContext.runAttempt, "5");
   assert.equal(
     artifact.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/234",
+  );
+  assert.equal(
+    artifact.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/123456abcdef",
   );
   assert.match(stepSummary, /## npm pack verification/i);
   assert.match(stepSummary, /Status: `passed`/i);
@@ -130,9 +137,14 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   assert.equal(artifact.artifactNames.tarball, "");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(artifact.workflowContext.workflow, "Release");
+  assert.equal(artifact.workflowContext.runId, "123");
   assert.equal(
     artifact.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/123",
+  );
+  assert.equal(
+    artifact.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef123456",
   );
   assert.match(log, /\$ npm pack/i);
   assert.match(stepSummary, /## npm pack verification/i);
@@ -194,7 +206,13 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.equal(artifact.artifactNames.bundle, "pack-install-smoke");
   assert.equal(artifact.artifactNames.tarball, "pack-tarball");
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(artifact.workflowContext.workflow, "Release");
+  assert.equal(artifact.workflowContext.runId, "456");
   assert.equal(artifact.workflowContext.runAttempt, "3");
+  assert.equal(
+    artifact.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/456",
+  );
   assert.equal(
     artifact.workflowContext.commitUrl,
     "https://github.com/CharlesMulic/equip/commit/fedcba654321",
