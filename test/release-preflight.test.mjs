@@ -44,7 +44,10 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
       repository: "CharlesMulic/equip",
       workflow: "Release",
       runId: "456",
+      runAttempt: "3",
+      ref: "refs/heads/main",
       sha: "fedcba654321",
+      eventName: "push",
       serverUrl: "https://github.com",
     },
   });
@@ -61,6 +64,10 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(result.workflowContext.workflow, "Release");
   assert.equal(result.workflowContext.runId, "456");
+  assert.equal(result.workflowContext.runAttempt, "3");
+  assert.equal(result.workflowContext.ref, "refs/heads/main");
+  assert.equal(result.workflowContext.sha, "fedcba654321");
+  assert.equal(result.workflowContext.eventName, "push");
   assert.equal(result.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/456");
   assert.equal(result.workflowContext.commitUrl, "https://github.com/CharlesMulic/equip/commit/fedcba654321");
 });
@@ -141,7 +148,10 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
     GITHUB_REPOSITORY: "CharlesMulic/equip",
     GITHUB_WORKFLOW: "Release",
     GITHUB_RUN_ID: "456",
+    GITHUB_RUN_ATTEMPT: "3",
+    GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "fedcba654321",
+    GITHUB_EVENT_NAME: "push",
     GITHUB_SERVER_URL: "https://github.com",
   });
 
@@ -163,6 +173,10 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(artifact.workflowContext.workflow, "Release");
   assert.equal(artifact.workflowContext.runId, "456");
+  assert.equal(artifact.workflowContext.runAttempt, "3");
+  assert.equal(artifact.workflowContext.ref, "refs/heads/main");
+  assert.equal(artifact.workflowContext.sha, "fedcba654321");
+  assert.equal(artifact.workflowContext.eventName, "push");
   assert.equal(artifact.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/456");
   assert.equal(
     artifact.workflowContext.commitUrl,
