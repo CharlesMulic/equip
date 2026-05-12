@@ -66,6 +66,16 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
   assert.equal(report.artifactNames.bundle, "docker-acceptance");
   assert.equal(report.evidenceFileNames.reportPath, "docker-acceptance-report.json");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(report.workflowContext.workflow, "Release");
+  assert.equal(report.workflowContext.runId, "789");
+  assert.equal(
+    report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/789",
+  );
+  assert.equal(
+    report.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abc123",
+  );
 });
 
 test("deriveDockerAcceptanceEvidenceFileNames derives stable file-name breadcrumbs", () => {

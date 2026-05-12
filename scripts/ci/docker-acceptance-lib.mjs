@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { appendGitHubWorkflowContextSection } from "./workflow-context-lib.mjs";
+import {
+  appendGitHubWorkflowContextSection,
+  normalizeWorkflowContext,
+} from "./workflow-context-lib.mjs";
 
 export function resolveDockerAcceptanceArtifacts({
   outputDir = "",
@@ -65,7 +68,11 @@ export function writeDockerAcceptanceArtifacts({
 
   if (reportPath) {
     fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-    fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    const normalizedReport = {
+      ...report,
+      workflowContext: normalizeWorkflowContext(report?.workflowContext),
+    };
+    fs.writeFileSync(reportPath, `${JSON.stringify(normalizedReport, null, 2)}\n`, "utf8");
   }
 }
 
