@@ -111,6 +111,7 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
   assert.equal(report.artifactNames.report, "release-verification-report");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(report.workflowContext.workflow, "Release");
+  assert.equal(report.workflowContext.runId, "1234567890");
   assert.equal(
     report.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
