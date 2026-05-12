@@ -1018,6 +1018,16 @@ test("assert-changesets-release-result writes a failure artifact when the result
   assert.equal(assertion.result.inputs.hasReleaseVerificationReport, true);
   assert.equal(assertion.result.prerequisites.releaseVerificationStatus, "passed");
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.workflowContext.workflow, "Release");
+  assert.equal(assertion.workflowContext.runId, "1234567890");
+  assert.equal(
+    assertion.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    assertion.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
   assert.equal(assertion.result.artifacts.resultPath, path.resolve(resultPath));
   assert.equal(assertion.result.artifacts.assertionPath, path.resolve(assertionPath));
   assert.equal(assertion.result.artifacts.summaryPath, path.resolve(summaryPath));
