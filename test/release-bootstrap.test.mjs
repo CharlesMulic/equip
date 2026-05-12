@@ -52,7 +52,13 @@ test("buildReleaseBootstrapResult marks passing install step as passed", () => {
   assert.equal(result.artifactNames.bundle, "release-bootstrap");
   assert.equal(result.evidenceArtifactNames.bundle, "release-bootstrap");
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(result.workflowContext.workflow, "Release");
+  assert.equal(result.workflowContext.runId, "123");
   assert.equal(result.workflowContext.runUrl, "https://github.com/CharlesMulic/equip/actions/runs/123");
+  assert.equal(
+    result.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef123456",
+  );
 });
 
 test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
@@ -133,7 +139,13 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
   assert.equal(artifact.evidenceFileNames.logPath, "release-bootstrap.log");
   assert.equal(artifact.artifactNames.bundle, "release-bootstrap");
   assert.equal(artifact.evidenceArtifactNames.bundle, "release-bootstrap");
+  assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(artifact.workflowContext.workflow, "Release");
+  assert.equal(artifact.workflowContext.runId, "123");
+  assert.equal(
+    artifact.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/123",
+  );
   assert.equal(artifact.workflowContext.commitUrl, "https://github.com/CharlesMulic/equip/commit/abcdef123456");
   assert.match(summary, /Overall status: `passed`/i);
   assert.match(summary, /## Evidence file names/i);
