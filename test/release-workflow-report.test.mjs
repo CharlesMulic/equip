@@ -559,6 +559,10 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     assertion.report.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
   );
+  assert.equal(
+    assertion.report.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
   assert.equal(assertion.report.artifactNames.report, "release-workflow-report");
   assert.equal(assertion.report.evidenceFileNames.releaseBootstrapResultPath, "release-bootstrap-result.json");
   assert.equal(assertion.report.evidenceFileNames.releasePreflightResultPath, "release-preflight-result.json");
@@ -594,6 +598,10 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.equal(
     report.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    report.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
   );
   assert.equal(report.evidenceFileNames.releaseBootstrapResultPath, "release-bootstrap-result.json");
   assert.equal(report.evidenceFileNames.releasePreflightSummaryPath, "release-preflight-summary.md");
@@ -910,6 +918,10 @@ test("assert-release-workflow-report writes a failure artifact when the report i
   assert.equal(
     assertion.report.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    assertion.report.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
   );
   assert.match(assertion.assertion.failureDetails.join("\n"), /release workflow report artifact not found/i);
   assert.match(result.stderr || result.stdout, /assertion failed/i);
