@@ -630,6 +630,12 @@ test("write-changesets-release-report writes a machine-readable rollup artifact"
   assert.equal(report.evidenceFileNames.summaryPath, "changesets-release-summary.md");
   assert.equal(report.evidenceFileNames.reportPath, "changesets-release-report.json");
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(report.workflowContext.workflow, "Release");
+  assert.equal(report.workflowContext.runId, "1234567890");
+  assert.equal(
+    report.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
   assert.equal(
     report.workflowContext.commitUrl,
     "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
@@ -814,9 +820,15 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
   assert.equal(assertion.inputs.hasAssertionArtifact, false);
   assert.equal(assertion.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.workflowContext.workflow, "Release");
+  assert.equal(assertion.workflowContext.runId, "1234567890");
   assert.equal(
     assertion.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    assertion.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
   );
   assert.equal(assertion.assertion.published, true);
   assert.equal(assertion.assertion.publishedPackages[0].name, "@cg3/equip");
@@ -880,6 +892,16 @@ test("assert-changesets-release-result preserves self-contained evidence pointer
   assert.equal(assertion.inputs.hasAssertionArtifact, false);
   assert.equal(assertion.result.inputs.hasReleaseVerificationReport, false);
   assert.equal(assertion.workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(assertion.workflowContext.workflow, "Release");
+  assert.equal(assertion.workflowContext.runId, "1234567890");
+  assert.equal(
+    assertion.workflowContext.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    assertion.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
   assert.equal(assertion.artifacts.reportPath, path.resolve(reportPath));
   assert.equal(assertion.evidenceFileNames.resultPath, "changesets-release-result.json");
   assert.equal(assertion.evidenceFileNames.assertionPath, "changesets-release-assertion.json");
