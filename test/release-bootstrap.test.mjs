@@ -57,6 +57,7 @@ test("buildReleaseBootstrapResult marks passing install step as passed", () => {
   assert.equal(result.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(result.workflowContext.workflow, "Release");
   assert.equal(result.workflowContext.runId, "123");
+  assert.equal(result.workflowContext.serverUrl, "https://github.com");
   assert.equal(result.workflowContext.runAttempt, "2");
   assert.equal(result.workflowContext.ref, "refs/heads/main");
   assert.equal(result.workflowContext.sha, "abcdef123456");
@@ -159,6 +160,7 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(artifact.workflowContext.workflow, "Release");
   assert.equal(artifact.workflowContext.runId, "123");
+  assert.equal(artifact.workflowContext.serverUrl, "https://github.com");
   assert.equal(artifact.workflowContext.runAttempt, "2");
   assert.equal(artifact.workflowContext.ref, "refs/heads/main");
   assert.equal(artifact.workflowContext.sha, "abcdef123456");
