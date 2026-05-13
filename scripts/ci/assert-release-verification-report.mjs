@@ -204,6 +204,10 @@ function appendAssertionSummary(summaryPath, result) {
     workflowContext.repository ||
     workflowContext.workflow ||
     workflowContext.runId ||
+    workflowContext.runAttempt ||
+    workflowContext.eventName ||
+    workflowContext.ref ||
+    workflowContext.sha ||
     workflowContext.runUrl ||
     workflowContext.commitUrl
   ) {
@@ -216,6 +220,18 @@ function appendAssertionSummary(summaryPath, result) {
     }
     if (workflowContext.runId) {
       lines.push(`- Run ID: \`${workflowContext.runId}\``);
+    }
+    if (workflowContext.runAttempt) {
+      lines.push(`- Run attempt: \`${workflowContext.runAttempt}\``);
+    }
+    if (workflowContext.eventName) {
+      lines.push(`- Event: \`${workflowContext.eventName}\``);
+    }
+    if (workflowContext.ref) {
+      lines.push(`- Ref: \`${workflowContext.ref}\``);
+    }
+    if (workflowContext.sha) {
+      lines.push(`- SHA: \`${workflowContext.sha}\``);
     }
     if (workflowContext.runUrl) {
       lines.push(`- Run URL: \`${workflowContext.runUrl}\``);
