@@ -147,6 +147,10 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
   assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(summary, /Workflow: `Release`/i);
   assert.match(summary, /Run ID: `789`/i);
+  assert.match(summary, /Run attempt: `4`/i);
+  assert.match(summary, /Event: `push`/i);
+  assert.match(summary, /Ref: `refs\/heads\/main`/i);
+  assert.match(summary, /SHA: `abc123`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/789`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abc123`/i);
   assert.match(summary, /## Evidence artifacts/i);

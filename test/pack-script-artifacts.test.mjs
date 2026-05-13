@@ -89,6 +89,10 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
   assert.match(stepSummary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(stepSummary, /Workflow: `Release`/i);
   assert.match(stepSummary, /Run ID: `234`/i);
+  assert.match(stepSummary, /Run attempt: `5`/i);
+  assert.match(stepSummary, /Event: `push`/i);
+  assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
+  assert.match(stepSummary, /SHA: `123456abcdef`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/234`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/123456abcdef`/i);
 });
@@ -165,6 +169,10 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   assert.match(stepSummary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(stepSummary, /Workflow: `Release`/i);
   assert.match(stepSummary, /Run ID: `123`/i);
+  assert.match(stepSummary, /Run attempt: `2`/i);
+  assert.match(stepSummary, /Event: `push`/i);
+  assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
+  assert.match(stepSummary, /SHA: `abcdef123456`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
@@ -241,6 +249,10 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.match(stepSummary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(stepSummary, /Workflow: `Release`/i);
   assert.match(stepSummary, /Run ID: `456`/i);
+  assert.match(stepSummary, /Run attempt: `3`/i);
+  assert.match(stepSummary, /Event: `push`/i);
+  assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
+  assert.match(stepSummary, /SHA: `fedcba654321`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });
