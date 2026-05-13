@@ -157,6 +157,10 @@ test("assert-release-verification-report passes healthy rollups", () => {
     assertion.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
   );
+  assert.equal(
+    assertion.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
   assert.equal(assertion.package.tarballFileName, "cg3-equip-0.17.7.tgz");
   assert.equal(assertion.package.artifacts.logPath, ".generated/release/pack-verification.log");
   assert.equal(assertion.tarballSmoke.artifacts.logPath, ".generated/release/pack-install-smoke.log");
@@ -219,6 +223,10 @@ test("assert-release-verification-report preserves workflow context when the rep
   assert.equal(
     assertion.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    assertion.workflowContext.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
   );
   assert.equal(assertion.artifacts.reportPath, path.resolve(reportPath));
   assert.equal(assertion.artifacts.assertionPath, path.resolve(assertionPath));
