@@ -266,6 +266,10 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
   assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
   assert.match(markdown, /Workflow: `Release`/i);
   assert.match(markdown, /Run ID: `1234567890`/i);
+  assert.match(markdown, /Run attempt: `2`/i);
+  assert.match(markdown, /Event: `push`/i);
+  assert.match(markdown, /Ref: `refs\/heads\/main`/i);
+  assert.match(markdown, /SHA: `abcdef1234567890`/i);
   assert.match(markdown, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(markdown, /## Evidence artifacts/i);
@@ -493,6 +497,10 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(summaryArtifact, /Repository: `CharlesMulic\/equip`/i);
   assert.match(summaryArtifact, /Workflow: `Release`/i);
   assert.match(summaryArtifact, /Run ID: `1234567890`/i);
+  assert.match(summaryArtifact, /Run attempt: `2`/i);
+  assert.match(summaryArtifact, /Event: `push`/i);
+  assert.match(summaryArtifact, /Ref: `refs\/heads\/main`/i);
+  assert.match(summaryArtifact, /SHA: `abcdef1234567890`/i);
   assert.match(summaryArtifact, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summaryArtifact, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(summaryArtifact, /## Final assertion/i);
@@ -511,6 +519,10 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(stepSummary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(stepSummary, /Workflow: `Release`/i);
   assert.match(stepSummary, /Run ID: `1234567890`/i);
+  assert.match(stepSummary, /Run attempt: `2`/i);
+  assert.match(stepSummary, /Event: `push`/i);
+  assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
+  assert.match(stepSummary, /SHA: `abcdef1234567890`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(stepSummary, /## Final assertion/i);
