@@ -98,7 +98,10 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
         repository: "CharlesMulic/equip",
         workflow: "Release",
         runId: "456",
+        runAttempt: "3",
+        ref: "refs/heads/main",
         sha: "fedcba654321",
+        eventName: "push",
         serverUrl: "https://github.com",
       },
     }),
@@ -119,6 +122,10 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
   assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
   assert.match(markdown, /Workflow: `Release`/i);
   assert.match(markdown, /Run ID: `456`/i);
+  assert.match(markdown, /Run attempt: `3`/i);
+  assert.match(markdown, /Event: `push`/i);
+  assert.match(markdown, /Ref: `refs\/heads\/main`/i);
+  assert.match(markdown, /SHA: `fedcba654321`/i);
   assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });
@@ -196,6 +203,10 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(summary, /Workflow: `Release`/i);
   assert.match(summary, /Run ID: `456`/i);
+  assert.match(summary, /Run attempt: `3`/i);
+  assert.match(summary, /Event: `push`/i);
+  assert.match(summary, /Ref: `refs\/heads\/main`/i);
+  assert.match(summary, /SHA: `fedcba654321`/i);
   assert.match(summary, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(summary, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
   assert.match(buildLog, /synthetic build ok/i);

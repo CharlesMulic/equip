@@ -87,7 +87,10 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
         repository: "CharlesMulic/equip",
         workflow: "Release",
         runId: "123",
+        runAttempt: "2",
+        ref: "refs/heads/main",
         sha: "abcdef123456",
+        eventName: "push",
         serverUrl: "https://github.com",
       },
     }),
@@ -107,6 +110,10 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
   assert.match(markdown, /Repository: `CharlesMulic\/equip`/i);
   assert.match(markdown, /Workflow: `Release`/i);
   assert.match(markdown, /Run ID: `123`/i);
+  assert.match(markdown, /Run attempt: `2`/i);
+  assert.match(markdown, /Event: `push`/i);
+  assert.match(markdown, /Ref: `refs\/heads\/main`/i);
+  assert.match(markdown, /SHA: `abcdef123456`/i);
   assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
@@ -174,6 +181,10 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
   assert.match(summary, /Repository: `CharlesMulic\/equip`/i);
   assert.match(summary, /Workflow: `Release`/i);
   assert.match(summary, /Run ID: `123`/i);
+  assert.match(summary, /Run attempt: `2`/i);
+  assert.match(summary, /Event: `push`/i);
+  assert.match(summary, /Ref: `refs\/heads\/main`/i);
+  assert.match(summary, /SHA: `abcdef123456`/i);
   assert.match(summary, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(summary, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
   assert.match(log, /synthetic install ok/i);
