@@ -62,6 +62,9 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
   assert.equal(artifact.workflowContext.workflow, "Release");
   assert.equal(artifact.workflowContext.runId, "234");
   assert.equal(artifact.workflowContext.runAttempt, "5");
+  assert.equal(artifact.workflowContext.ref, "refs/heads/main");
+  assert.equal(artifact.workflowContext.sha, "123456abcdef");
+  assert.equal(artifact.workflowContext.eventName, "push");
   assert.equal(
     artifact.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/234",
@@ -138,6 +141,10 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   assert.equal(artifact.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(artifact.workflowContext.workflow, "Release");
   assert.equal(artifact.workflowContext.runId, "123");
+  assert.equal(artifact.workflowContext.runAttempt, "2");
+  assert.equal(artifact.workflowContext.ref, "refs/heads/main");
+  assert.equal(artifact.workflowContext.sha, "abcdef123456");
+  assert.equal(artifact.workflowContext.eventName, "push");
   assert.equal(
     artifact.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/123",
@@ -209,6 +216,9 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.equal(artifact.workflowContext.workflow, "Release");
   assert.equal(artifact.workflowContext.runId, "456");
   assert.equal(artifact.workflowContext.runAttempt, "3");
+  assert.equal(artifact.workflowContext.ref, "refs/heads/main");
+  assert.equal(artifact.workflowContext.sha, "fedcba654321");
+  assert.equal(artifact.workflowContext.eventName, "push");
   assert.equal(
     artifact.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/456",
