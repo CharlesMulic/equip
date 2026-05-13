@@ -79,6 +79,7 @@ export function appendGitHubWorkflowContextSection(
     !normalized.ref &&
     !normalized.sha &&
     !normalized.eventName &&
+    !normalized.apiUrl &&
     !normalized.runUrl &&
     !normalized.commitUrl
   ) {
@@ -113,6 +114,10 @@ export function appendGitHubWorkflowContextSection(
 
   if (normalized.sha) {
     lines.push(`- SHA: \`${normalized.sha}\``);
+  }
+
+  if (normalized.apiUrl) {
+    lines.push(`- API URL: \`${normalized.apiUrl}\``);
   }
 
   if (normalized.runUrl) {

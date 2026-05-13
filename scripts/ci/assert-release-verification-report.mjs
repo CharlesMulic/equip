@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  appendGitHubWorkflowContextSection,
   normalizeWorkflowContext,
   readGitHubWorkflowContext,
 } from "./workflow-context-lib.mjs";
@@ -200,46 +201,7 @@ function appendAssertionSummary(summaryPath, result) {
     result.workflowContext && typeof result.workflowContext === "object"
       ? result.workflowContext
       : {};
-  if (
-    workflowContext.repository ||
-    workflowContext.workflow ||
-    workflowContext.runId ||
-    workflowContext.runAttempt ||
-    workflowContext.eventName ||
-    workflowContext.ref ||
-    workflowContext.sha ||
-    workflowContext.runUrl ||
-    workflowContext.commitUrl
-  ) {
-    lines.push("", "## GitHub workflow context", "");
-    if (workflowContext.repository) {
-      lines.push(`- Repository: \`${workflowContext.repository}\``);
-    }
-    if (workflowContext.workflow) {
-      lines.push(`- Workflow: \`${workflowContext.workflow}\``);
-    }
-    if (workflowContext.runId) {
-      lines.push(`- Run ID: \`${workflowContext.runId}\``);
-    }
-    if (workflowContext.runAttempt) {
-      lines.push(`- Run attempt: \`${workflowContext.runAttempt}\``);
-    }
-    if (workflowContext.eventName) {
-      lines.push(`- Event: \`${workflowContext.eventName}\``);
-    }
-    if (workflowContext.ref) {
-      lines.push(`- Ref: \`${workflowContext.ref}\``);
-    }
-    if (workflowContext.sha) {
-      lines.push(`- SHA: \`${workflowContext.sha}\``);
-    }
-    if (workflowContext.runUrl) {
-      lines.push(`- Run URL: \`${workflowContext.runUrl}\``);
-    }
-    if (workflowContext.commitUrl) {
-      lines.push(`- Commit URL: \`${workflowContext.commitUrl}\``);
-    }
-  }
+  appendGitHubWorkflowContextSection(lines, workflowContext);
 
   const failureDetails = Array.isArray(result.failureDetails) ? result.failureDetails : [];
   if (failureDetails.length > 0) {

@@ -527,6 +527,7 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
   assert.match(stepSummary, /Event: `push`/i);
   assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
   assert.match(stepSummary, /SHA: `abcdef1234567890`/i);
+  assert.match(stepSummary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(stepSummary, /## Final assertion/i);

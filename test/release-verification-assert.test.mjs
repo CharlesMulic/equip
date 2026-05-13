@@ -111,6 +111,7 @@ test("assert-release-verification-report passes healthy rollups", () => {
       runAttempt: "2",
       ref: "refs/heads/main",
       serverUrl: "https://github.com",
+      apiUrl: "https://api.github.com",
       eventName: "push",
       sha: "abcdef1234567890",
       runUrl: "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
@@ -197,6 +198,7 @@ test("assert-release-verification-report passes healthy rollups", () => {
   assert.match(summary, /Event: `push`/i);
   assert.match(summary, /Ref: `refs\/heads\/main`/i);
   assert.match(summary, /SHA: `abcdef1234567890`/i);
+  assert.match(summary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
 });

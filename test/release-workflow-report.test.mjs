@@ -375,6 +375,7 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /Event: `push`/i);
   assert.match(markdown, /Ref: `refs\/heads\/main`/i);
   assert.match(markdown, /SHA: `abcdef1234567890`/i);
+  assert.match(markdown, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(markdown, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(markdown, /Release Verification: `release-verification-report`/i);
