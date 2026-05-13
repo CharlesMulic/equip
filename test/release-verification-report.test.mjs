@@ -112,6 +112,7 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(report.workflowContext.workflow, "Release");
   assert.equal(report.workflowContext.runId, "1234567890");
+  assert.equal(report.workflowContext.serverUrl, "https://github.com");
   assert.equal(report.workflowContext.runAttempt, "2");
   assert.equal(report.workflowContext.ref, "refs/heads/main");
   assert.equal(report.workflowContext.sha, "abcdef1234567890");
