@@ -40,7 +40,10 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
         repository: "CharlesMulic/equip",
         workflow: "Release",
         runId: "789",
+        runAttempt: "4",
+        ref: "refs/heads/main",
         sha: "abc123",
+        eventName: "push",
         serverUrl: "https://github.com",
       },
       artifactNames: {
@@ -68,6 +71,10 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
   assert.equal(report.workflowContext.repository, "CharlesMulic/equip");
   assert.equal(report.workflowContext.workflow, "Release");
   assert.equal(report.workflowContext.runId, "789");
+  assert.equal(report.workflowContext.runAttempt, "4");
+  assert.equal(report.workflowContext.ref, "refs/heads/main");
+  assert.equal(report.workflowContext.sha, "abc123");
+  assert.equal(report.workflowContext.eventName, "push");
   assert.equal(
     report.workflowContext.runUrl,
     "https://github.com/CharlesMulic/equip/actions/runs/789",
@@ -114,7 +121,10 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
         repository: "CharlesMulic/equip",
         workflow: "Release",
         runId: "789",
+        runAttempt: "4",
+        ref: "refs/heads/main",
         sha: "abc123",
+        eventName: "push",
         serverUrl: "https://github.com",
       },
       artifactNames: {
