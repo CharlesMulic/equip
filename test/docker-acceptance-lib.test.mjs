@@ -45,6 +45,7 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
         sha: "abc123",
         eventName: "push",
         serverUrl: "https://github.com",
+        apiUrl: "https://api.github.com",
       },
       artifactNames: {
         bundle: "docker-acceptance",
@@ -127,6 +128,7 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
         sha: "abc123",
         eventName: "push",
         serverUrl: "https://github.com",
+        apiUrl: "https://api.github.com",
       },
       artifactNames: {
         bundle: "docker-acceptance",
@@ -152,6 +154,7 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
   assert.match(summary, /Event: `push`/i);
   assert.match(summary, /Ref: `refs\/heads\/main`/i);
   assert.match(summary, /SHA: `abc123`/i);
+  assert.match(summary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/789`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abc123`/i);
   assert.match(summary, /## Evidence artifacts/i);

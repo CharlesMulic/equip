@@ -49,6 +49,7 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
       sha: "fedcba654321",
       eventName: "push",
       serverUrl: "https://github.com",
+      apiUrl: "https://api.github.com",
     },
   });
 
@@ -104,6 +105,7 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
         sha: "fedcba654321",
         eventName: "push",
         serverUrl: "https://github.com",
+        apiUrl: "https://api.github.com",
       },
     }),
   });
@@ -127,6 +129,7 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
   assert.match(markdown, /Event: `push`/i);
   assert.match(markdown, /Ref: `refs\/heads\/main`/i);
   assert.match(markdown, /SHA: `fedcba654321`/i);
+  assert.match(markdown, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });

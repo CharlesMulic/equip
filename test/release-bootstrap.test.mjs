@@ -43,6 +43,7 @@ test("buildReleaseBootstrapResult marks passing install step as passed", () => {
       sha: "abcdef123456",
       eventName: "push",
       serverUrl: "https://github.com",
+      apiUrl: "https://api.github.com",
     },
   });
 
@@ -93,6 +94,7 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
         sha: "abcdef123456",
         eventName: "push",
         serverUrl: "https://github.com",
+        apiUrl: "https://api.github.com",
       },
     }),
   });
@@ -115,6 +117,7 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
   assert.match(markdown, /Event: `push`/i);
   assert.match(markdown, /Ref: `refs\/heads\/main`/i);
   assert.match(markdown, /SHA: `abcdef123456`/i);
+  assert.match(markdown, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });

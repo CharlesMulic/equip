@@ -94,6 +94,7 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
   assert.match(stepSummary, /Event: `push`/i);
   assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
   assert.match(stepSummary, /SHA: `123456abcdef`/i);
+  assert.match(stepSummary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/234`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/123456abcdef`/i);
 });
