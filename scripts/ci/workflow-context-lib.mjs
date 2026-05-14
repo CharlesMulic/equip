@@ -43,7 +43,7 @@ export function normalizeWorkflowContext(workflowContext) {
     ref: workflowContext.ref || "",
     sha,
     eventName: workflowContext.eventName || "",
-    serverUrl,
+    serverUrl: normalizedServerUrl,
     apiUrl: workflowContext.apiUrl || "",
     runUrl,
     commitUrl,
