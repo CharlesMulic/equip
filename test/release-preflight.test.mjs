@@ -164,6 +164,7 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
     GITHUB_SHA: "fedcba654321",
     GITHUB_EVENT_NAME: "push",
     GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_API_URL: "https://api.github.com",
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -212,6 +213,7 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.match(summary, /Event: `push`/i);
   assert.match(summary, /Ref: `refs\/heads\/main`/i);
   assert.match(summary, /SHA: `fedcba654321`/i);
+  assert.match(summary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(summary, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
   assert.match(buildLog, /synthetic build ok/i);
