@@ -4,6 +4,7 @@ import {
   buildReleaseWorkflowReport,
   writeReleaseWorkflowReportArtifact,
 } from "./release-workflow-report-lib.mjs";
+import { readGitHubWorkflowContext } from "./workflow-context-lib.mjs";
 
 const releaseVerificationReportPath =
   process.env.RELEASE_VERIFICATION_REPORT_PATH ||
@@ -74,17 +75,7 @@ const report = buildReleaseWorkflowReport({
     summary: process.env.RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME || "",
     report: process.env.RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME || "",
   },
-  workflowContext: {
-    repository: process.env.GITHUB_REPOSITORY || "",
-    workflow: process.env.GITHUB_WORKFLOW || "",
-    runId: process.env.GITHUB_RUN_ID || "",
-    runAttempt: process.env.GITHUB_RUN_ATTEMPT || "",
-    ref: process.env.GITHUB_REF || "",
-    sha: process.env.GITHUB_SHA || "",
-    eventName: process.env.GITHUB_EVENT_NAME || "",
-    serverUrl: process.env.GITHUB_SERVER_URL || "",
-    apiUrl: process.env.GITHUB_API_URL || "",
-  },
+  workflowContext: readGitHubWorkflowContext(process.env),
 });
 
 writeReleaseWorkflowReportArtifact({
