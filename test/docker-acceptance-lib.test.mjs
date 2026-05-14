@@ -73,6 +73,7 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
   assert.equal(report.workflowContext.workflow, "Release");
   assert.equal(report.workflowContext.runId, "789");
   assert.equal(report.workflowContext.serverUrl, "https://github.com");
+  assert.equal(report.workflowContext.apiUrl, "https://api.github.com");
   assert.equal(report.workflowContext.runAttempt, "4");
   assert.equal(report.workflowContext.ref, "refs/heads/main");
   assert.equal(report.workflowContext.sha, "abc123");
