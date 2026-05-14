@@ -180,6 +180,7 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
   assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
   assert.match(stepSummary, /SHA: `abcdef123456`/i);
   assert.match(stepSummary, /Server URL: `https:\/\/github\.com`/i);
+  assert.match(stepSummary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
@@ -263,6 +264,7 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
   assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
   assert.match(stepSummary, /SHA: `fedcba654321`/i);
   assert.match(stepSummary, /Server URL: `https:\/\/github\.com`/i);
+  assert.match(stepSummary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/456`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/fedcba654321`/i);
 });
