@@ -95,3 +95,38 @@ test("appendGitHubWorkflowContextSection renders server and api URLs from normal
   assert.match(lines.join("\n"), /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(lines.join("\n"), /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
+
+test("normalizeWorkflowContext preserves explicit run and commit URLs", () => {
+  const workflowContext = normalizeWorkflowContext({
+    repository: "CharlesMulic/equip",
+    runId: "123",
+    sha: "abcdef123456",
+    serverUrl: "https://github.com///",
+    runUrl: "https://ci.example.test/runs/123",
+    commitUrl: "https://git.example.test/commit/abcdef123456",
+  });
+
+  assert.equal(workflowContext.serverUrl, "https://github.com");
+  assert.equal(workflowContext.runUrl, "https://ci.example.test/runs/123");
+  assert.equal(workflowContext.commitUrl, "https://git.example.test/commit/abcdef123456");
+});
+
+test("appendGitHubWorkflowContextSection skips blank workflow context", () => {
+  const lines = ["# Summary"];
+  const workflowContext = appendGitHubWorkflowContextSection(lines, {});
+
+  assert.deepEqual(workflowContext, {
+    repository: "",
+    workflow: "",
+    runId: "",
+    runAttempt: "",
+    ref: "",
+    sha: "",
+    eventName: "",
+    serverUrl: "",
+    apiUrl: "",
+    runUrl: "",
+    commitUrl: "",
+  });
+  assert.deepEqual(lines, ["# Summary"]);
+});
