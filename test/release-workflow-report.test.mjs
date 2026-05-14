@@ -468,7 +468,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_SERVER_URL: "https://github.com/",
     GITHUB_API_URL: "https://api.github.com",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -484,7 +484,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_SERVER_URL: "https://github.com/",
     GITHUB_API_URL: "https://api.github.com",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -664,6 +664,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
+  assert.doesNotMatch(summary, /https:\/\/github\.com\/\/CharlesMulic/i);
   assert.match(summary, /Final assertion/i);
   assert.match(summary, /## Nested evidence artifacts/i);
   assert.match(summary, /Release Bootstrap Bundle: `release-bootstrap`/i);
@@ -876,7 +877,7 @@ test("write-release-workflow-summary preserves nested evidence when the workflow
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_SERVER_URL: "https://github.com/",
     GITHUB_API_URL: "https://api.github.com",
   });
 
