@@ -118,6 +118,7 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
   assert.match(markdown, /Event: `push`/i);
   assert.match(markdown, /Ref: `refs\/heads\/main`/i);
   assert.match(markdown, /SHA: `abcdef123456`/i);
+  assert.match(markdown, /Server URL: `https:\/\/github\.com`/i);
   assert.match(markdown, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(markdown, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
@@ -193,6 +194,7 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
   assert.match(summary, /Event: `push`/i);
   assert.match(summary, /Ref: `refs\/heads\/main`/i);
   assert.match(summary, /SHA: `abcdef123456`/i);
+  assert.match(summary, /Server URL: `https:\/\/github\.com`/i);
   assert.match(summary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(summary, /Commit URL: `https:\/\/github.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);

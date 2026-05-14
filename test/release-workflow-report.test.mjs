@@ -375,6 +375,7 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
   assert.match(markdown, /Event: `push`/i);
   assert.match(markdown, /Ref: `refs\/heads\/main`/i);
   assert.match(markdown, /SHA: `abcdef1234567890`/i);
+  assert.match(markdown, /Server URL: `https:\/\/github\.com`/i);
   assert.match(markdown, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(markdown, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(markdown, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
@@ -659,6 +660,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
   assert.match(summary, /Event: `push`/i);
   assert.match(summary, /Ref: `refs\/heads\/main`/i);
   assert.match(summary, /SHA: `abcdef1234567890`/i);
+  assert.match(summary, /Server URL: `https:\/\/github\.com`/i);
   assert.match(summary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
@@ -820,6 +822,7 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
   assert.match(summary, /Event: `push`/i);
   assert.match(summary, /Ref: `refs\/heads\/main`/i);
   assert.match(summary, /SHA: `abcdef1234567890`/i);
+  assert.match(summary, /Server URL: `https:\/\/github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
   assert.match(summary, /## Evidence artifacts/i);

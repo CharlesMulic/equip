@@ -135,6 +135,7 @@ test("write-release-verification-summary writes a markdown artifact with the fin
   assert.match(summary, /Event: `push`/i);
   assert.match(summary, /Ref: `refs\/heads\/main`/i);
   assert.match(summary, /SHA: `abcdef1234567890`/i);
+  assert.match(summary, /Server URL: `https:\/\/github\.com`/i);
   assert.match(summary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(summary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(summary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
@@ -154,6 +155,7 @@ test("write-release-verification-summary writes a markdown artifact with the fin
   assert.match(stepSummary, /Event: `push`/i);
   assert.match(stepSummary, /Ref: `refs\/heads\/main`/i);
   assert.match(stepSummary, /SHA: `abcdef1234567890`/i);
+  assert.match(stepSummary, /Server URL: `https:\/\/github\.com`/i);
   assert.match(stepSummary, /API URL: `https:\/\/api\.github\.com`/i);
   assert.match(stepSummary, /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/1234567890`/i);
   assert.match(stepSummary, /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef1234567890`/i);
