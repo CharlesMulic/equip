@@ -66,6 +66,7 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
   assert.equal(result.workflowContext.workflow, "Release");
   assert.equal(result.workflowContext.runId, "456");
   assert.equal(result.workflowContext.serverUrl, "https://github.com");
+  assert.equal(result.workflowContext.apiUrl, "https://api.github.com");
   assert.equal(result.workflowContext.runAttempt, "3");
   assert.equal(result.workflowContext.ref, "refs/heads/main");
   assert.equal(result.workflowContext.sha, "fedcba654321");
@@ -186,6 +187,7 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
   assert.equal(artifact.workflowContext.workflow, "Release");
   assert.equal(artifact.workflowContext.runId, "456");
   assert.equal(artifact.workflowContext.serverUrl, "https://github.com");
+  assert.equal(artifact.workflowContext.apiUrl, "https://api.github.com");
   assert.equal(artifact.workflowContext.runAttempt, "3");
   assert.equal(artifact.workflowContext.ref, "refs/heads/main");
   assert.equal(artifact.workflowContext.sha, "fedcba654321");
