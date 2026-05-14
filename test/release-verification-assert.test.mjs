@@ -151,6 +151,7 @@ test("assert-release-verification-report passes healthy rollups", () => {
   assert.equal(assertion.workflowContext.workflow, "Release");
   assert.equal(assertion.workflowContext.runId, "1234567890");
   assert.equal(assertion.workflowContext.serverUrl, "https://github.com");
+  assert.equal(assertion.workflowContext.apiUrl, "https://api.github.com");
   assert.equal(assertion.workflowContext.runAttempt, "2");
   assert.equal(assertion.workflowContext.ref, "refs/heads/main");
   assert.equal(assertion.workflowContext.sha, "abcdef1234567890");
@@ -224,6 +225,7 @@ test("assert-release-verification-report preserves workflow context when the rep
   assert.equal(assertion.workflowContext.workflow, "Release");
   assert.equal(assertion.workflowContext.runId, "1234567890");
   assert.equal(assertion.workflowContext.serverUrl, "https://github.com");
+  assert.equal(assertion.workflowContext.apiUrl, "https://api.github.com");
   assert.equal(assertion.workflowContext.runAttempt, "2");
   assert.equal(assertion.workflowContext.ref, "refs/heads/main");
   assert.equal(assertion.workflowContext.sha, "abcdef1234567890");
