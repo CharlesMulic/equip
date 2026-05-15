@@ -4,7 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { createWorkflowEnv } from "./helpers/workflow-context.mjs";
+import {
+  createWorkflowContext,
+  createWorkflowEnv,
+} from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -71,19 +74,10 @@ test("write-release-verification-summary writes a markdown artifact with the fin
       releaseVerificationAssertionPath: "release-verification-assertion.json",
       releaseVerificationSummaryPath: "release-verification-summary.md",
     },
-    workflowContext: {
-      repository: "CharlesMulic/equip",
-      workflow: "Release",
-      runId: "1234567890",
-      runAttempt: "2",
-      ref: "refs/heads/main",
-      serverUrl: "https://github.com",
-      apiUrl: "https://api.github.com",
-      sha: "abcdef1234567890",
-      eventName: "push",
+    workflowContext: createWorkflowContext({
       runUrl: "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
       commitUrl: "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
-    },
+    }),
   });
 
   writeJson(assertionPath, {
