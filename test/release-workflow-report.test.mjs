@@ -8,6 +8,10 @@ import {
   buildReleaseWorkflowReport,
   buildReleaseWorkflowSummaryMarkdown,
 } from "../scripts/ci/release-workflow-report-lib.mjs";
+import {
+  createWorkflowContext,
+  createWorkflowEnv,
+} from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -140,20 +144,6 @@ function createReleasePreflightResult() {
     artifactNames: {
       bundle: "release-preflight",
     },
-  };
-}
-
-function createWorkflowContext() {
-  return {
-    repository: "CharlesMulic/equip",
-    workflow: "Release",
-    runId: "1234567890",
-    runAttempt: "2",
-    ref: "refs/heads/main",
-    sha: "abcdef1234567890",
-    eventName: "push",
-    serverUrl: "https://github.com",
-    apiUrl: "https://api.github.com",
   };
 }
 

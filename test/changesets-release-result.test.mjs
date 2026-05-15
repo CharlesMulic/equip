@@ -10,6 +10,10 @@ import {
   buildChangesetsReleaseSummaryMarkdown,
   writeChangesetsReleaseAssertionArtifact,
 } from "../scripts/ci/changesets-release-result-lib.mjs";
+import {
+  createWorkflowContext,
+  createWorkflowEnv,
+} from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -23,34 +27,6 @@ function runScript(scriptRelativePath, env) {
       encoding: "utf8",
     },
   );
-}
-
-function createWorkflowEnv() {
-  return {
-    GITHUB_REPOSITORY: "CharlesMulic/equip",
-    GITHUB_WORKFLOW: "Release",
-    GITHUB_RUN_ID: "1234567890",
-    GITHUB_RUN_ATTEMPT: "2",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_SHA: "abcdef1234567890",
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com/",
-    GITHUB_API_URL: "https://api.github.com",
-  };
-}
-
-function createWorkflowContext() {
-  return {
-    repository: "CharlesMulic/equip",
-    workflow: "Release",
-    runId: "1234567890",
-    runAttempt: "2",
-    ref: "refs/heads/main",
-    sha: "abcdef1234567890",
-    eventName: "push",
-    serverUrl: "https://github.com",
-    apiUrl: "https://api.github.com",
-  };
 }
 
 test("buildChangesetsReleaseResult captures published packages from changesets outputs", () => {
