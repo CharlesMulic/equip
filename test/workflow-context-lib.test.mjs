@@ -152,3 +152,30 @@ test("appendGitHubWorkflowContextSection skips blank workflow context", () => {
   });
   assert.deepEqual(lines, ["# Summary"]);
 });
+
+test("appendGitHubWorkflowContextSection honors a custom heading and does not invent links", () => {
+  const lines = ["# Summary"];
+  const workflowContext = appendGitHubWorkflowContextSection(
+    lines,
+    {
+      workflow: "Release",
+      eventName: "workflow_dispatch",
+      serverUrl: "https://github.com/",
+      apiUrl: "https://api.github.com",
+    },
+    "## Workflow metadata",
+  );
+
+  const rendered = lines.join("\n");
+  assert.equal(workflowContext.serverUrl, "https://github.com");
+  assert.equal(workflowContext.apiUrl, "https://api.github.com");
+  assert.equal(workflowContext.runUrl, "");
+  assert.equal(workflowContext.commitUrl, "");
+  assert.match(rendered, /## Workflow metadata/i);
+  assert.match(rendered, /Workflow: `Release`/i);
+  assert.match(rendered, /Event: `workflow_dispatch`/i);
+  assert.match(rendered, /Server URL: `https:\/\/github\.com`/i);
+  assert.match(rendered, /API URL: `https:\/\/api\.github\.com`/i);
+  assert.doesNotMatch(rendered, /Run URL:/i);
+  assert.doesNotMatch(rendered, /Commit URL:/i);
+});
