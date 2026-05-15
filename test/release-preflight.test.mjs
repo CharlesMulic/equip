@@ -8,6 +8,7 @@ import {
   buildReleasePreflightResult,
   buildReleasePreflightSummaryMarkdown,
 } from "../scripts/ci/release-preflight-lib.mjs";
+import { createWorkflowContext } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -40,17 +41,11 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
     artifactNames: {
       bundle: "release-preflight",
     },
-    workflowContext: {
-      repository: "CharlesMulic/equip",
-      workflow: "Release",
+    workflowContext: createWorkflowContext({
       runId: "456",
       runAttempt: "3",
-      ref: "refs/heads/main",
       sha: "fedcba654321",
-      eventName: "push",
-      serverUrl: "https://github.com",
-      apiUrl: "https://api.github.com",
-    },
+    }),
   });
 
   assert.equal(result.kind, "equip-release-preflight-result");
@@ -97,17 +92,11 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
       artifactNames: {
         bundle: "release-preflight",
       },
-      workflowContext: {
-        repository: "CharlesMulic/equip",
-        workflow: "Release",
+      workflowContext: createWorkflowContext({
         runId: "456",
         runAttempt: "3",
-        ref: "refs/heads/main",
         sha: "fedcba654321",
-        eventName: "push",
-        serverUrl: "https://github.com",
-        apiUrl: "https://api.github.com",
-      },
+      }),
     }),
   });
 

@@ -8,6 +8,7 @@ import {
   buildReleaseBootstrapResult,
   buildReleaseBootstrapSummaryMarkdown,
 } from "../scripts/ci/release-bootstrap-lib.mjs";
+import { createWorkflowContext } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -34,17 +35,10 @@ test("buildReleaseBootstrapResult marks passing install step as passed", () => {
     artifactNames: {
       bundle: "release-bootstrap",
     },
-    workflowContext: {
-      repository: "CharlesMulic/equip",
-      workflow: "Release",
+    workflowContext: createWorkflowContext({
       runId: "123",
-      runAttempt: "2",
-      ref: "refs/heads/main",
       sha: "abcdef123456",
-      eventName: "push",
-      serverUrl: "https://github.com",
-      apiUrl: "https://api.github.com",
-    },
+    }),
   });
 
   assert.equal(result.kind, "equip-release-bootstrap-result");
@@ -86,17 +80,10 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
       artifactNames: {
         bundle: "release-bootstrap",
       },
-      workflowContext: {
-        repository: "CharlesMulic/equip",
-        workflow: "Release",
+      workflowContext: createWorkflowContext({
         runId: "123",
-        runAttempt: "2",
-        ref: "refs/heads/main",
         sha: "abcdef123456",
-        eventName: "push",
-        serverUrl: "https://github.com",
-        apiUrl: "https://api.github.com",
-      },
+      }),
     }),
   });
 
