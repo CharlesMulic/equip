@@ -24,6 +24,8 @@ export function normalizeWorkflowContext(workflowContext) {
   const sha = workflowContext.sha || "";
   const serverUrl = workflowContext.serverUrl || "";
   const normalizedServerUrl = serverUrl.replace(/\/+$/, "");
+  const apiUrl = workflowContext.apiUrl || "";
+  const normalizedApiUrl = apiUrl.replace(/\/+$/, "");
   const runUrl =
     workflowContext.runUrl ||
     (normalizedServerUrl && repository && runId
@@ -44,7 +46,7 @@ export function normalizeWorkflowContext(workflowContext) {
     sha,
     eventName: workflowContext.eventName || "",
     serverUrl: normalizedServerUrl,
-    apiUrl: workflowContext.apiUrl || "",
+    apiUrl: normalizedApiUrl,
     runUrl,
     commitUrl,
   };

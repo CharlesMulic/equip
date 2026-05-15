@@ -33,7 +33,7 @@ test("normalizeWorkflowContext trims trailing serverUrl slashes and derives link
     sha: "abcdef123456",
     eventName: "push",
     serverUrl: "https://github.com///",
-    apiUrl: "https://api.github.com",
+    apiUrl: "https://api.github.com/",
   });
 
   assert.equal(workflowContext.repository, "CharlesMulic/equip");
@@ -62,7 +62,7 @@ test("readGitHubWorkflowContext normalizes workflow env inputs", () => {
     GITHUB_SHA: "abcdef123456",
     GITHUB_EVENT_NAME: "push",
     GITHUB_SERVER_URL: "https://github.com/",
-    GITHUB_API_URL: "https://api.github.com",
+    GITHUB_API_URL: "https://api.github.com/",
   });
 
   assert.equal(workflowContext.serverUrl, "https://github.com");
@@ -80,7 +80,7 @@ test("readGitHubWorkflowContext leaves derived links blank when required env is 
     GITHUB_RUN_ATTEMPT: "7",
     GITHUB_EVENT_NAME: "push",
     GITHUB_SERVER_URL: "https://github.com/",
-    GITHUB_API_URL: "https://api.github.com",
+    GITHUB_API_URL: "https://api.github.com/",
   });
 
   assert.equal(workflowContext.repository, "");
@@ -107,13 +107,14 @@ test("appendGitHubWorkflowContextSection renders server and api URLs from normal
     sha: "abcdef123456",
     eventName: "push",
     serverUrl: "https://github.com/",
-    apiUrl: "https://api.github.com",
+    apiUrl: "https://api.github.com/",
   });
 
   assert.equal(workflowContext.serverUrl, "https://github.com");
   assert.equal(workflowContext.apiUrl, "https://api.github.com");
   assert.match(lines.join("\n"), /Server URL: `https:\/\/github\.com`/i);
   assert.match(lines.join("\n"), /API URL: `https:\/\/api\.github\.com`/i);
+  assert.doesNotMatch(lines.join("\n"), /API URL: `https:\/\/api\.github\.com\/`/i);
   assert.match(lines.join("\n"), /Run URL: `https:\/\/github\.com\/CharlesMulic\/equip\/actions\/runs\/123`/i);
   assert.match(lines.join("\n"), /Commit URL: `https:\/\/github\.com\/CharlesMulic\/equip\/commit\/abcdef123456`/i);
 });
@@ -161,7 +162,7 @@ test("appendGitHubWorkflowContextSection honors a custom heading and does not in
       workflow: "Release",
       eventName: "workflow_dispatch",
       serverUrl: "https://github.com/",
-      apiUrl: "https://api.github.com",
+      apiUrl: "https://api.github.com/",
     },
     "## Workflow metadata",
   );
@@ -176,6 +177,7 @@ test("appendGitHubWorkflowContextSection honors a custom heading and does not in
   assert.match(rendered, /Event: `workflow_dispatch`/i);
   assert.match(rendered, /Server URL: `https:\/\/github\.com`/i);
   assert.match(rendered, /API URL: `https:\/\/api\.github\.com`/i);
+  assert.doesNotMatch(rendered, /API URL: `https:\/\/api\.github\.com\/`/i);
   assert.doesNotMatch(rendered, /Run URL:/i);
   assert.doesNotMatch(rendered, /Commit URL:/i);
 });
