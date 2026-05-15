@@ -8,7 +8,10 @@ import {
   buildReleaseBootstrapResult,
   buildReleaseBootstrapSummaryMarkdown,
 } from "../scripts/ci/release-bootstrap-lib.mjs";
-import { createWorkflowContext } from "./helpers/workflow-context.mjs";
+import {
+  createWorkflowContext,
+  createWorkflowEnv,
+} from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -127,15 +130,11 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
     RELEASE_BOOTSTRAP_EXECUTABLE: process.execPath,
     RELEASE_BOOTSTRAP_ARGS_JSON: JSON.stringify([installScriptPath]),
     RELEASE_BOOTSTRAP_ARTIFACT_NAME: "release-bootstrap",
-    GITHUB_REPOSITORY: "CharlesMulic/equip",
-    GITHUB_WORKFLOW: "Release",
-    GITHUB_RUN_ID: "123",
-    GITHUB_RUN_ATTEMPT: "2",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_SHA: "abcdef123456",
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_API_URL: "https://api.github.com",
+    ...createWorkflowEnv({
+      GITHUB_RUN_ID: "123",
+      GITHUB_SHA: "abcdef123456",
+      GITHUB_SERVER_URL: "https://github.com",
+    }),
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);

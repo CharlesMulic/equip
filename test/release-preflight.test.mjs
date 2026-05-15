@@ -8,7 +8,10 @@ import {
   buildReleasePreflightResult,
   buildReleasePreflightSummaryMarkdown,
 } from "../scripts/ci/release-preflight-lib.mjs";
-import { createWorkflowContext } from "./helpers/workflow-context.mjs";
+import {
+  createWorkflowContext,
+  createWorkflowEnv,
+} from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -147,15 +150,12 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
     RELEASE_PREFLIGHT_TEST_EXECUTABLE: process.execPath,
     RELEASE_PREFLIGHT_TEST_ARGS_JSON: JSON.stringify([testScriptPath]),
     RELEASE_PREFLIGHT_ARTIFACT_NAME: "release-preflight",
-    GITHUB_REPOSITORY: "CharlesMulic/equip",
-    GITHUB_WORKFLOW: "Release",
-    GITHUB_RUN_ID: "456",
-    GITHUB_RUN_ATTEMPT: "3",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_SHA: "fedcba654321",
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_API_URL: "https://api.github.com",
+    ...createWorkflowEnv({
+      GITHUB_RUN_ID: "456",
+      GITHUB_RUN_ATTEMPT: "3",
+      GITHUB_SHA: "fedcba654321",
+      GITHUB_SERVER_URL: "https://github.com",
+    }),
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
