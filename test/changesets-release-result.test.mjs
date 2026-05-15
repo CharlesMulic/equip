@@ -34,7 +34,7 @@ function createWorkflowEnv() {
     GITHUB_REF: "refs/heads/main",
     GITHUB_SHA: "abcdef1234567890",
     GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_SERVER_URL: "https://github.com/",
     GITHUB_API_URL: "https://api.github.com",
   };
 }
