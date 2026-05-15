@@ -74,6 +74,28 @@ test("readGitHubWorkflowContext normalizes workflow env inputs", () => {
   );
 });
 
+test("readGitHubWorkflowContext leaves derived links blank when required env is missing", () => {
+  const workflowContext = readGitHubWorkflowContext({
+    GITHUB_WORKFLOW: "Release",
+    GITHUB_RUN_ATTEMPT: "7",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_SERVER_URL: "https://github.com/",
+    GITHUB_API_URL: "https://api.github.com",
+  });
+
+  assert.equal(workflowContext.repository, "");
+  assert.equal(workflowContext.workflow, "Release");
+  assert.equal(workflowContext.runId, "");
+  assert.equal(workflowContext.runAttempt, "7");
+  assert.equal(workflowContext.ref, "");
+  assert.equal(workflowContext.sha, "");
+  assert.equal(workflowContext.eventName, "push");
+  assert.equal(workflowContext.serverUrl, "https://github.com");
+  assert.equal(workflowContext.apiUrl, "https://api.github.com");
+  assert.equal(workflowContext.runUrl, "");
+  assert.equal(workflowContext.commitUrl, "");
+});
+
 test("appendGitHubWorkflowContextSection renders server and api URLs from normalized context", () => {
   const lines = ["# Summary"];
   const workflowContext = appendGitHubWorkflowContextSection(lines, {
