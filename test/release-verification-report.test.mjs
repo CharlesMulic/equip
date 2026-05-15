@@ -9,20 +9,7 @@ import {
   buildReleaseVerificationReport,
   rebaseReleaseVerificationInputs,
 } from "../scripts/ci/release-verification-report-lib.mjs";
-
-function createWorkflowContext() {
-  return {
-    repository: "CharlesMulic/equip",
-    workflow: "Release",
-    runId: "1234567890",
-    runAttempt: "2",
-    ref: "refs/heads/main",
-    sha: "abcdef1234567890",
-    eventName: "push",
-    serverUrl: "https://github.com",
-    apiUrl: "https://api.github.com",
-  };
-}
+import { createWorkflowContext } from "./helpers/workflow-context.mjs";
 
 test("buildReleaseVerificationReport marks the rollup passed when all component gates pass", () => {
   const report = buildReleaseVerificationReport({

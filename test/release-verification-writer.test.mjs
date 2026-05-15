@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createWorkflowEnv } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -22,20 +23,6 @@ function runScript(scriptRelativePath, env) {
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
-function createWorkflowEnv() {
-  return {
-    GITHUB_REPOSITORY: "CharlesMulic/equip",
-    GITHUB_WORKFLOW: "Release",
-    GITHUB_RUN_ID: "1234567890",
-    GITHUB_RUN_ATTEMPT: "2",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_SHA: "abcdef1234567890",
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_API_URL: "https://api.github.com",
-  };
 }
 
 test("write-release-verification-summary writes a markdown artifact with the final assertion", () => {
