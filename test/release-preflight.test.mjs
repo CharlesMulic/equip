@@ -9,20 +9,24 @@ import {
   buildReleasePreflightSummaryMarkdown,
 } from "../scripts/ci/release-preflight-lib.mjs";
 import {
-  createWorkflowContext,
-  createWorkflowEnv,
+  createWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
-const preflightWorkflowContext = createWorkflowContext({
-  runId: "456",
-  runAttempt: "3",
-  sha: "fedcba654321",
-});
-const preflightWorkflowEnv = createWorkflowEnv({
-  GITHUB_RUN_ID: "456",
-  GITHUB_RUN_ATTEMPT: "3",
-  GITHUB_SHA: "fedcba654321",
+const {
+  workflowContext: preflightWorkflowContext,
+  workflowEnv: preflightWorkflowEnv,
+} = createWorkflowFixture({
+  context: {
+    runId: "456",
+    runAttempt: "3",
+    sha: "fedcba654321",
+  },
+  env: {
+    GITHUB_RUN_ID: "456",
+    GITHUB_RUN_ATTEMPT: "3",
+    GITHUB_SHA: "fedcba654321",
+  },
 });
 
 function runScript(env) {
