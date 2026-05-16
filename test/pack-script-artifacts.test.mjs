@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createWorkflowEnv } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -33,15 +34,12 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
     GITHUB_STEP_SUMMARY: stepSummaryPath,
     PACK_VERIFICATION_ARTIFACT_NAME: "pack-verification",
     PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
-    GITHUB_REPOSITORY: "CharlesMulic/equip",
-    GITHUB_WORKFLOW: "Release",
-    GITHUB_RUN_ID: "234",
-    GITHUB_RUN_ATTEMPT: "5",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_SHA: "123456abcdef",
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_API_URL: "https://api.github.com",
+    ...createWorkflowEnv({
+      GITHUB_RUN_ID: "234",
+      GITHUB_RUN_ATTEMPT: "5",
+      GITHUB_SHA: "123456abcdef",
+      GITHUB_SERVER_URL: "https://github.com",
+    }),
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -114,15 +112,11 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
     PACK_VERIFICATION_LOG_PATH: logPath,
     GITHUB_STEP_SUMMARY: stepSummaryPath,
     PATH: emptyPathDir,
-    GITHUB_REPOSITORY: "CharlesMulic/equip",
-    GITHUB_WORKFLOW: "Release",
-    GITHUB_RUN_ID: "123",
-    GITHUB_RUN_ATTEMPT: "2",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_SHA: "abcdef123456",
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_API_URL: "https://api.github.com",
+    ...createWorkflowEnv({
+      GITHUB_RUN_ID: "123",
+      GITHUB_SHA: "abcdef123456",
+      GITHUB_SERVER_URL: "https://github.com",
+    }),
   });
 
   assert.notEqual(result.status, 0);
@@ -199,15 +193,12 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
     GITHUB_STEP_SUMMARY: stepSummaryPath,
     PACK_INSTALL_SMOKE_ARTIFACT_NAME: "pack-install-smoke",
     PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
-    GITHUB_REPOSITORY: "CharlesMulic/equip",
-    GITHUB_WORKFLOW: "Release",
-    GITHUB_RUN_ID: "456",
-    GITHUB_RUN_ATTEMPT: "3",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_SHA: "fedcba654321",
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_API_URL: "https://api.github.com",
+    ...createWorkflowEnv({
+      GITHUB_RUN_ID: "456",
+      GITHUB_RUN_ATTEMPT: "3",
+      GITHUB_SHA: "fedcba654321",
+      GITHUB_SERVER_URL: "https://github.com",
+    }),
   });
 
   assert.notEqual(result.status, 0);
