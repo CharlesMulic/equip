@@ -7,6 +7,20 @@ import { spawnSync } from "node:child_process";
 import { createWorkflowEnv } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const verifyPackSuccessWorkflowEnv = createWorkflowEnv({
+  GITHUB_RUN_ID: "234",
+  GITHUB_RUN_ATTEMPT: "5",
+  GITHUB_SHA: "123456abcdef",
+});
+const verifyPackFailureWorkflowEnv = createWorkflowEnv({
+  GITHUB_RUN_ID: "123",
+  GITHUB_SHA: "abcdef123456",
+});
+const smokePackInstallWorkflowEnv = createWorkflowEnv({
+  GITHUB_RUN_ID: "456",
+  GITHUB_RUN_ATTEMPT: "3",
+  GITHUB_SHA: "fedcba654321",
+});
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(
@@ -34,11 +48,7 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
     GITHUB_STEP_SUMMARY: stepSummaryPath,
     PACK_VERIFICATION_ARTIFACT_NAME: "pack-verification",
     PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
-    ...createWorkflowEnv({
-      GITHUB_RUN_ID: "234",
-      GITHUB_RUN_ATTEMPT: "5",
-      GITHUB_SHA: "123456abcdef",
-    }),
+    ...verifyPackSuccessWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -111,10 +121,7 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
     PACK_VERIFICATION_LOG_PATH: logPath,
     GITHUB_STEP_SUMMARY: stepSummaryPath,
     PATH: emptyPathDir,
-    ...createWorkflowEnv({
-      GITHUB_RUN_ID: "123",
-      GITHUB_SHA: "abcdef123456",
-    }),
+    ...verifyPackFailureWorkflowEnv,
   });
 
   assert.notEqual(result.status, 0);
@@ -191,11 +198,7 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
     GITHUB_STEP_SUMMARY: stepSummaryPath,
     PACK_INSTALL_SMOKE_ARTIFACT_NAME: "pack-install-smoke",
     PACK_TARBALL_ARTIFACT_NAME: "pack-tarball",
-    ...createWorkflowEnv({
-      GITHUB_RUN_ID: "456",
-      GITHUB_RUN_ATTEMPT: "3",
-      GITHUB_SHA: "fedcba654321",
-    }),
+    ...smokePackInstallWorkflowEnv,
   });
 
   assert.notEqual(result.status, 0);

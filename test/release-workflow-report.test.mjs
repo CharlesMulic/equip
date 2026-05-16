@@ -14,6 +14,8 @@ import {
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const releaseWorkflowContext = createWorkflowContext();
+const releaseWorkflowEnv = createWorkflowEnv();
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(process.execPath, [path.join(workspaceRoot, scriptRelativePath)], {
@@ -179,7 +181,7 @@ test("buildReleaseWorkflowReport combines verification and changesets release st
       summary: "release-workflow-summary",
       report: "release-workflow-report",
     },
-    workflowContext: createWorkflowContext(),
+    workflowContext: releaseWorkflowContext,
   });
 
   assert.equal(report.kind, "equip-release-workflow-report");
@@ -337,11 +339,11 @@ test("buildReleaseWorkflowSummaryMarkdown renders artifact names and missing inp
         releasePreflight: "release-preflight-result",
         releaseVerification: "release-verification-report",
         changesetsRelease: "changesets-release-report",
-        assertion: "release-workflow-assertion",
-        summary: "release-workflow-summary",
-        report: "release-workflow-report",
-      },
-      workflowContext: createWorkflowContext(),
+      assertion: "release-workflow-assertion",
+      summary: "release-workflow-summary",
+      report: "release-workflow-report",
+    },
+      workflowContext: releaseWorkflowContext,
     }),
   });
 
@@ -451,7 +453,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
     RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -459,7 +461,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_ASSERTION_PATH: releaseWorkflowAssertionPath,
     RELEASE_WORKFLOW_ALLOWED_STATUSES: "published,completed",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -467,7 +469,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
     RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -486,7 +488,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_ASSERTION_ARTIFACT_NAME: "release-workflow-assertion",
     RELEASE_WORKFLOW_REPORT_ARTIFACT_NAME: "release-workflow-report",
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -494,7 +496,7 @@ test("workflow report and summary scripts write final rollup artifacts", () => {
     RELEASE_WORKFLOW_REPORT_PATH: releaseWorkflowReportPath,
     RELEASE_WORKFLOW_SUMMARY_PATH: releaseWorkflowSummaryPath,
     RELEASE_WORKFLOW_APPEND_STEP_SUMMARY: "false",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -748,7 +750,7 @@ test("write-release-workflow-summary renders a truthful missing-report summary",
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -812,7 +814,7 @@ test("write-release-workflow-summary preserves nested evidence when the workflow
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
