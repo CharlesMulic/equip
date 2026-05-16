@@ -10,6 +10,8 @@ import {
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const releaseVerificationWorkflowContext = createWorkflowContext();
+const releaseVerificationWorkflowEnv = createWorkflowEnv();
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(
@@ -94,10 +96,7 @@ test("assert-release-verification-report passes healthy rollups", () => {
       releaseVerificationAssertionPath: "release-verification-assertion.json",
       releaseVerificationSummaryPath: "release-verification-summary.md",
     },
-    workflowContext: createWorkflowContext({
-      runUrl: "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
-      commitUrl: "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
-    }),
+    workflowContext: releaseVerificationWorkflowContext,
   });
 
   const result = runScript("scripts/ci/assert-release-verification-report.mjs", {
@@ -196,7 +195,7 @@ test("assert-release-verification-report preserves workflow context when the rep
     RELEASE_VERIFICATION_REPORT_PATH: reportPath,
     RELEASE_VERIFICATION_ASSERTION_PATH: assertionPath,
     GITHUB_STEP_SUMMARY: summaryPath,
-    ...createWorkflowEnv(),
+    ...releaseVerificationWorkflowEnv,
   });
 
   assert.notEqual(result.status, 0);
@@ -443,7 +442,7 @@ test("assert-release-verification-report preserves synthetic artifact metadata w
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     RELEASE_VERIFICATION_ASSERTION_ARTIFACT_NAME: "release-verification-assertion",
     RELEASE_VERIFICATION_SUMMARY_ARTIFACT_NAME: "release-verification-summary",
-    ...createWorkflowEnv(),
+    ...releaseVerificationWorkflowEnv,
   });
 
   assert.notEqual(result.status, 0);

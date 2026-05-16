@@ -11,6 +11,8 @@ import {
 } from "../scripts/ci/release-verification-report-lib.mjs";
 import { createWorkflowContext } from "./helpers/workflow-context.mjs";
 
+const releaseVerificationWorkflowContext = createWorkflowContext();
+
 test("buildReleaseVerificationReport marks the rollup passed when all component gates pass", () => {
   const report = buildReleaseVerificationReport({
     packVerification: {
@@ -74,7 +76,7 @@ test("buildReleaseVerificationReport marks the rollup passed when all component 
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
-    workflowContext: createWorkflowContext(),
+    workflowContext: releaseVerificationWorkflowContext,
   });
 
   assert.equal(report.overallStatus, "passed");
@@ -287,7 +289,7 @@ test("appendReleaseVerificationSummary includes artifact pointers for each verif
       assertion: "release-verification-assertion",
       summary: "release-verification-summary",
     },
-    workflowContext: createWorkflowContext(),
+    workflowContext: releaseVerificationWorkflowContext,
   });
 
   appendReleaseVerificationSummary({

@@ -10,6 +10,8 @@ import {
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const releaseVerificationWorkflowContext = createWorkflowContext();
+const releaseVerificationWorkflowEnv = createWorkflowEnv();
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(
@@ -74,10 +76,7 @@ test("write-release-verification-summary writes a markdown artifact with the fin
       releaseVerificationAssertionPath: "release-verification-assertion.json",
       releaseVerificationSummaryPath: "release-verification-summary.md",
     },
-    workflowContext: createWorkflowContext({
-      runUrl: "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
-      commitUrl: "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
-    }),
+    workflowContext: releaseVerificationWorkflowContext,
   });
 
   writeJson(assertionPath, {
@@ -232,7 +231,7 @@ test("write-release-verification-report can rewrite a final report without dupli
     RELEASE_VERIFICATION_SUMMARY_ARTIFACT_NAME: "release-verification-summary",
     RELEASE_VERIFICATION_APPEND_STEP_SUMMARY: "false",
     GITHUB_STEP_SUMMARY: stepSummaryPath,
-    ...createWorkflowEnv(),
+    ...releaseVerificationWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
