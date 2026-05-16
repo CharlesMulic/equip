@@ -11,6 +11,9 @@ import {
   createWorkflowEnv,
 } from "./helpers/workflow-context.mjs";
 
+const workflowContextFixture = createWorkflowContext();
+const workflowEnvFixture = createWorkflowEnv();
+
 test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
   assert.deepEqual(normalizeWorkflowContext(null), {
     repository: "",
@@ -28,13 +31,14 @@ test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
 });
 
 test("normalizeWorkflowContext trims trailing serverUrl slashes and derives links", () => {
-  const workflowContext = normalizeWorkflowContext(createWorkflowContext({
+  const workflowContext = normalizeWorkflowContext({
+    ...workflowContextFixture,
     runId: "123",
     runAttempt: "4",
     sha: "abcdef123456",
     serverUrl: "https://github.com///",
     apiUrl: "https://api.github.com/",
-  }));
+  });
 
   assert.equal(workflowContext.repository, "CharlesMulic/equip");
   assert.equal(workflowContext.workflow, "Release");
@@ -54,13 +58,14 @@ test("normalizeWorkflowContext trims trailing serverUrl slashes and derives link
 
 test("readGitHubWorkflowContext normalizes workflow env inputs", () => {
   const workflowContext = readGitHubWorkflowContext(
-    createWorkflowEnv({
+    {
+      ...workflowEnvFixture,
       GITHUB_RUN_ID: "123",
       GITHUB_RUN_ATTEMPT: "7",
       GITHUB_REF: "refs/tags/v1.2.3",
       GITHUB_SHA: "abcdef123456",
       GITHUB_API_URL: "https://api.github.com/",
-    }),
+    },
   );
 
   assert.equal(workflowContext.serverUrl, "https://github.com");
@@ -74,14 +79,15 @@ test("readGitHubWorkflowContext normalizes workflow env inputs", () => {
 
 test("readGitHubWorkflowContext leaves derived links blank when required env is missing", () => {
   const workflowContext = readGitHubWorkflowContext(
-    createWorkflowEnv({
+    {
+      ...workflowEnvFixture,
       GITHUB_REPOSITORY: "",
       GITHUB_RUN_ID: "",
       GITHUB_REF: "",
       GITHUB_SHA: "",
       GITHUB_RUN_ATTEMPT: "7",
       GITHUB_API_URL: "https://api.github.com/",
-    }),
+    },
   );
 
   assert.equal(workflowContext.repository, "");
@@ -101,13 +107,14 @@ test("appendGitHubWorkflowContextSection renders server and api URLs from normal
   const lines = ["# Summary"];
   const workflowContext = appendGitHubWorkflowContextSection(
     lines,
-    createWorkflowContext({
+    {
+      ...workflowContextFixture,
       runId: "123",
       runAttempt: "2",
       sha: "abcdef123456",
       serverUrl: "https://github.com/",
       apiUrl: "https://api.github.com/",
-    }),
+    },
   );
 
   assert.equal(workflowContext.serverUrl, "https://github.com");
@@ -120,13 +127,14 @@ test("appendGitHubWorkflowContextSection renders server and api URLs from normal
 });
 
 test("normalizeWorkflowContext preserves explicit run and commit URLs", () => {
-  const workflowContext = normalizeWorkflowContext(createWorkflowContext({
+  const workflowContext = normalizeWorkflowContext({
+    ...workflowContextFixture,
     runId: "123",
     sha: "abcdef123456",
     serverUrl: "https://github.com///",
     runUrl: "https://ci.example.test/runs/123",
     commitUrl: "https://git.example.test/commit/abcdef123456",
-  }));
+  });
 
   assert.equal(workflowContext.serverUrl, "https://github.com");
   assert.equal(workflowContext.runUrl, "https://ci.example.test/runs/123");
@@ -157,9 +165,9 @@ test("appendGitHubWorkflowContextSection honors a custom heading and does not in
   const lines = ["# Summary"];
   const workflowContext = appendGitHubWorkflowContextSection(
     lines,
-    createWorkflowContext({
+    {
+      ...workflowContextFixture,
       repository: "",
-      workflow: "Release",
       runId: "",
       runAttempt: "",
       ref: "",
@@ -167,7 +175,7 @@ test("appendGitHubWorkflowContextSection honors a custom heading and does not in
       eventName: "workflow_dispatch",
       serverUrl: "https://github.com/",
       apiUrl: "https://api.github.com/",
-    }),
+    },
     "## Workflow metadata",
   );
 
