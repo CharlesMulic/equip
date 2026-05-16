@@ -27,3 +27,10 @@ export function createWorkflowContext(overrides = {}) {
     ...overrides,
   };
 }
+
+export function createWorkflowFixture({ env = {}, context = {} } = {}) {
+  return {
+    workflowEnv: createWorkflowEnv(env),
+    workflowContext: createWorkflowContext(context),
+  };
+}

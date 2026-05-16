@@ -9,18 +9,22 @@ import {
   buildReleaseBootstrapSummaryMarkdown,
 } from "../scripts/ci/release-bootstrap-lib.mjs";
 import {
-  createWorkflowContext,
-  createWorkflowEnv,
+  createWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
-const bootstrapWorkflowContext = createWorkflowContext({
-  runId: "123",
-  sha: "abcdef123456",
-});
-const bootstrapWorkflowEnv = createWorkflowEnv({
-  GITHUB_RUN_ID: "123",
-  GITHUB_SHA: "abcdef123456",
+const {
+  workflowContext: bootstrapWorkflowContext,
+  workflowEnv: bootstrapWorkflowEnv,
+} = createWorkflowFixture({
+  context: {
+    runId: "123",
+    sha: "abcdef123456",
+  },
+  env: {
+    GITHUB_RUN_ID: "123",
+    GITHUB_SHA: "abcdef123456",
+  },
 });
 
 function runScript(env) {
