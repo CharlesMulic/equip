@@ -14,6 +14,16 @@ import {
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const preflightWorkflowContext = createWorkflowContext({
+  runId: "456",
+  runAttempt: "3",
+  sha: "fedcba654321",
+});
+const preflightWorkflowEnv = createWorkflowEnv({
+  GITHUB_RUN_ID: "456",
+  GITHUB_RUN_ATTEMPT: "3",
+  GITHUB_SHA: "fedcba654321",
+});
 
 function runScript(env) {
   return spawnSync(process.execPath, [path.join(workspaceRoot, "scripts/ci/run-release-preflight.mjs")], {
@@ -44,11 +54,7 @@ test("buildReleasePreflightResult marks passing phases as passed", () => {
     artifactNames: {
       bundle: "release-preflight",
     },
-    workflowContext: createWorkflowContext({
-      runId: "456",
-      runAttempt: "3",
-      sha: "fedcba654321",
-    }),
+    workflowContext: preflightWorkflowContext,
   });
 
   assert.equal(result.kind, "equip-release-preflight-result");
@@ -95,11 +101,7 @@ test("buildReleasePreflightSummaryMarkdown includes phase details", () => {
       artifactNames: {
         bundle: "release-preflight",
       },
-      workflowContext: createWorkflowContext({
-        runId: "456",
-        runAttempt: "3",
-        sha: "fedcba654321",
-      }),
+      workflowContext: preflightWorkflowContext,
     }),
   });
 
@@ -150,11 +152,7 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
     RELEASE_PREFLIGHT_TEST_EXECUTABLE: process.execPath,
     RELEASE_PREFLIGHT_TEST_ARGS_JSON: JSON.stringify([testScriptPath]),
     RELEASE_PREFLIGHT_ARTIFACT_NAME: "release-preflight",
-    ...createWorkflowEnv({
-      GITHUB_RUN_ID: "456",
-      GITHUB_RUN_ATTEMPT: "3",
-      GITHUB_SHA: "fedcba654321",
-    }),
+    ...preflightWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);

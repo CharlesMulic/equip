@@ -14,6 +14,14 @@ import {
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const bootstrapWorkflowContext = createWorkflowContext({
+  runId: "123",
+  sha: "abcdef123456",
+});
+const bootstrapWorkflowEnv = createWorkflowEnv({
+  GITHUB_RUN_ID: "123",
+  GITHUB_SHA: "abcdef123456",
+});
 
 function runScript(env) {
   return spawnSync(process.execPath, [path.join(workspaceRoot, "scripts/ci/run-release-bootstrap.mjs")], {
@@ -38,10 +46,7 @@ test("buildReleaseBootstrapResult marks passing install step as passed", () => {
     artifactNames: {
       bundle: "release-bootstrap",
     },
-    workflowContext: createWorkflowContext({
-      runId: "123",
-      sha: "abcdef123456",
-    }),
+    workflowContext: bootstrapWorkflowContext,
   });
 
   assert.equal(result.kind, "equip-release-bootstrap-result");
@@ -83,10 +88,7 @@ test("buildReleaseBootstrapSummaryMarkdown includes install details", () => {
       artifactNames: {
         bundle: "release-bootstrap",
       },
-      workflowContext: createWorkflowContext({
-        runId: "123",
-        sha: "abcdef123456",
-      }),
+      workflowContext: bootstrapWorkflowContext,
     }),
   });
 
@@ -130,10 +132,7 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
     RELEASE_BOOTSTRAP_EXECUTABLE: process.execPath,
     RELEASE_BOOTSTRAP_ARGS_JSON: JSON.stringify([installScriptPath]),
     RELEASE_BOOTSTRAP_ARTIFACT_NAME: "release-bootstrap",
-    ...createWorkflowEnv({
-      GITHUB_RUN_ID: "123",
-      GITHUB_SHA: "abcdef123456",
-    }),
+    ...bootstrapWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);

@@ -11,6 +11,12 @@ import {
 } from "../scripts/ci/docker-acceptance-lib.mjs";
 import { createWorkflowContext } from "./helpers/workflow-context.mjs";
 
+const dockerWorkflowContext = createWorkflowContext({
+  runId: "789",
+  runAttempt: "4",
+  sha: "abc123",
+});
+
 test("resolveDockerAcceptanceArtifacts derives default artifact paths from an output directory", () => {
   const artifacts = resolveDockerAcceptanceArtifacts({
     outputDir: path.join("artifacts", "docker"),
@@ -37,11 +43,7 @@ test("writeDockerAcceptanceArtifacts persists logs and a machine-readable report
     report: {
       kind: "equip-docker-acceptance-report",
       status: "passed",
-      workflowContext: createWorkflowContext({
-        runId: "789",
-        runAttempt: "4",
-        sha: "abc123",
-      }),
+      workflowContext: dockerWorkflowContext,
       artifactNames: {
         bundle: "docker-acceptance",
       },
@@ -115,11 +117,7 @@ test("appendDockerAcceptanceSummary writes a concise step summary block", () => 
         buildLogPath: ".generated/docker/docker-build.log",
         runLogPath: ".generated/docker/docker-run.log",
       },
-      workflowContext: createWorkflowContext({
-        runId: "789",
-        runAttempt: "4",
-        sha: "abc123",
-      }),
+      workflowContext: dockerWorkflowContext,
       artifactNames: {
         bundle: "docker-acceptance",
       },
