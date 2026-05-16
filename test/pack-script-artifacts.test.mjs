@@ -38,7 +38,6 @@ test("verify-pack writes a passing artifact and step summary when a real tarball
       GITHUB_RUN_ID: "234",
       GITHUB_RUN_ATTEMPT: "5",
       GITHUB_SHA: "123456abcdef",
-      GITHUB_SERVER_URL: "https://github.com",
     }),
   });
 
@@ -115,7 +114,6 @@ test("verify-pack writes a failure artifact when npm pack cannot run", () => {
     ...createWorkflowEnv({
       GITHUB_RUN_ID: "123",
       GITHUB_SHA: "abcdef123456",
-      GITHUB_SERVER_URL: "https://github.com",
     }),
   });
 
@@ -197,7 +195,6 @@ test("smoke-pack-install writes a failure artifact when the tarball path is miss
       GITHUB_RUN_ID: "456",
       GITHUB_RUN_ATTEMPT: "3",
       GITHUB_SHA: "fedcba654321",
-      GITHUB_SERVER_URL: "https://github.com",
     }),
   });
 

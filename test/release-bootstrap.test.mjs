@@ -133,7 +133,6 @@ test("run-release-bootstrap writes passing artifacts for synthetic success comma
     ...createWorkflowEnv({
       GITHUB_RUN_ID: "123",
       GITHUB_SHA: "abcdef123456",
-      GITHUB_SERVER_URL: "https://github.com",
     }),
   });
 

@@ -154,7 +154,6 @@ test("run-release-preflight writes passing artifacts for synthetic success comma
       GITHUB_RUN_ID: "456",
       GITHUB_RUN_ATTEMPT: "3",
       GITHUB_SHA: "fedcba654321",
-      GITHUB_SERVER_URL: "https://github.com",
     }),
   });
 
