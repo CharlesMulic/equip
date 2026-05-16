@@ -7,20 +7,24 @@ import { spawnSync } from "node:child_process";
 import { createWorkflowEnv } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
-const verifyPackSuccessWorkflowEnv = createWorkflowEnv({
+const packWorkflowEnv = createWorkflowEnv();
+const verifyPackSuccessWorkflowEnv = {
+  ...packWorkflowEnv,
   GITHUB_RUN_ID: "234",
   GITHUB_RUN_ATTEMPT: "5",
   GITHUB_SHA: "123456abcdef",
-});
-const verifyPackFailureWorkflowEnv = createWorkflowEnv({
+};
+const verifyPackFailureWorkflowEnv = {
+  ...packWorkflowEnv,
   GITHUB_RUN_ID: "123",
   GITHUB_SHA: "abcdef123456",
-});
-const smokePackInstallWorkflowEnv = createWorkflowEnv({
+};
+const smokePackInstallWorkflowEnv = {
+  ...packWorkflowEnv,
   GITHUB_RUN_ID: "456",
   GITHUB_RUN_ATTEMPT: "3",
   GITHUB_SHA: "fedcba654321",
-});
+};
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(
