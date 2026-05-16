@@ -28,17 +28,13 @@ test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
 });
 
 test("normalizeWorkflowContext trims trailing serverUrl slashes and derives links", () => {
-  const workflowContext = normalizeWorkflowContext({
-    repository: "CharlesMulic/equip",
-    workflow: "Release",
+  const workflowContext = normalizeWorkflowContext(createWorkflowContext({
     runId: "123",
     runAttempt: "4",
-    ref: "refs/heads/main",
     sha: "abcdef123456",
-    eventName: "push",
     serverUrl: "https://github.com///",
     apiUrl: "https://api.github.com/",
-  });
+  }));
 
   assert.equal(workflowContext.repository, "CharlesMulic/equip");
   assert.equal(workflowContext.workflow, "Release");
@@ -124,14 +120,13 @@ test("appendGitHubWorkflowContextSection renders server and api URLs from normal
 });
 
 test("normalizeWorkflowContext preserves explicit run and commit URLs", () => {
-  const workflowContext = normalizeWorkflowContext({
-    repository: "CharlesMulic/equip",
+  const workflowContext = normalizeWorkflowContext(createWorkflowContext({
     runId: "123",
     sha: "abcdef123456",
     serverUrl: "https://github.com///",
     runUrl: "https://ci.example.test/runs/123",
     commitUrl: "https://git.example.test/commit/abcdef123456",
-  });
+  }));
 
   assert.equal(workflowContext.serverUrl, "https://github.com");
   assert.equal(workflowContext.runUrl, "https://ci.example.test/runs/123");
