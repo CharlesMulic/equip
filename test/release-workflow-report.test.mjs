@@ -855,7 +855,7 @@ test("assert-release-workflow-report writes a failure artifact when the report i
     RELEASE_WORKFLOW_SUMMARY_ARTIFACT_NAME: "release-workflow-summary",
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
-    ...createWorkflowEnv(),
+    ...releaseWorkflowEnv,
   });
 
   assert.notEqual(result.status, 0);
