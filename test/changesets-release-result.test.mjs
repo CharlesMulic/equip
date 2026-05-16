@@ -16,6 +16,8 @@ import {
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const changesetsWorkflowContext = createWorkflowContext();
+const changesetsWorkflowEnv = createWorkflowEnv();
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(
@@ -44,7 +46,7 @@ test("buildChangesetsReleaseResult captures published packages from changesets o
       result: "changesets-release-result",
       releaseVerification: "release-verification-report",
     },
-    workflowContext: createWorkflowContext(),
+    workflowContext: changesetsWorkflowContext,
   });
 
   assert.equal(result.kind, "equip-changesets-release-result");
@@ -134,7 +136,7 @@ test("write-changesets-release-result writes an artifact and appends summary out
     ]),
     CHANGESETS_RELEASE_RESULT_ARTIFACT_NAME: "changesets-release-result",
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
-    ...createWorkflowEnv(),
+    ...changesetsWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -229,7 +231,7 @@ test("buildChangesetsReleaseSummaryMarkdown renders published packages cleanly",
         result: "changesets-release-result",
         releaseVerification: "release-verification-report",
       },
-      workflowContext: createWorkflowContext(),
+      workflowContext: changesetsWorkflowContext,
     }),
     artifactNames: {
       result: "changesets-release-result",
@@ -467,7 +469,7 @@ test("write-changesets-release-summary writes a markdown artifact and appends su
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
     GITHUB_STEP_SUMMARY: stepSummaryPath,
-    ...createWorkflowEnv(),
+    ...changesetsWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -614,7 +616,7 @@ test("write-changesets-release-report writes a machine-readable rollup artifact"
     CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
-    ...createWorkflowEnv(),
+    ...changesetsWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -820,7 +822,7 @@ test("assert-changesets-release-result writes a passing assertion artifact", () 
     CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
-    ...createWorkflowEnv(),
+    ...changesetsWorkflowEnv,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -898,7 +900,7 @@ test("assert-changesets-release-result preserves self-contained evidence pointer
     CHANGESETS_RELEASE_ASSERTION_ARTIFACT_NAME: "changesets-release-assertion",
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
-    ...createWorkflowEnv(),
+    ...changesetsWorkflowEnv,
   });
 
   assert.notEqual(result.status, 0);
@@ -1024,7 +1026,7 @@ test("assert-changesets-release-result writes a failure artifact when the result
     CHANGESETS_RELEASE_SUMMARY_ARTIFACT_NAME: "changesets-release-summary",
     CHANGESETS_RELEASE_REPORT_ARTIFACT_NAME: "changesets-release-report",
     RELEASE_VERIFICATION_REPORT_ARTIFACT_NAME: "release-verification-report",
-    ...createWorkflowEnv(),
+    ...changesetsWorkflowEnv,
   });
 
   assert.notEqual(result.status, 0);
