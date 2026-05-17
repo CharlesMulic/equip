@@ -5,13 +5,14 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
-  createWorkflowContext,
-  createWorkflowEnv,
+  createWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
-const releaseVerificationWorkflowContext = createWorkflowContext();
-const releaseVerificationWorkflowEnv = createWorkflowEnv();
+const {
+  workflowContext: releaseVerificationWorkflowContext,
+  workflowEnv: releaseVerificationWorkflowEnv,
+} = createWorkflowFixture();
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(
