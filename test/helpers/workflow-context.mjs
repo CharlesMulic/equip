@@ -37,10 +37,13 @@ export function createWorkflowFixture({ env = {}, context = {} } = {}) {
   };
 }
 
-export function createAlignedWorkflowFixture(envOverrides = {}) {
-  const workflowEnv = createWorkflowEnv(envOverrides);
+export function createAlignedWorkflowFixture({ env = {}, context = {} } = {}) {
+  const workflowEnv = createWorkflowEnv(env);
   return {
     workflowEnv,
-    workflowContext: readGitHubWorkflowContext(workflowEnv),
+    workflowContext: {
+      ...readGitHubWorkflowContext(workflowEnv),
+      ...context,
+    },
   };
 }

@@ -62,13 +62,15 @@ test("createWorkflowFixture keeps default env and context fixtures aligned", () 
 
 test("createAlignedWorkflowFixture derives context from env overrides", () => {
   const { workflowEnv, workflowContext } = createAlignedWorkflowFixture({
-    GITHUB_RUN_ID: "321",
-    GITHUB_RUN_ATTEMPT: "9",
-    GITHUB_REF: "refs/tags/v9.9.9",
-    GITHUB_SHA: "9999abcdef",
-    GITHUB_EVENT_NAME: "workflow_dispatch",
-    GITHUB_SERVER_URL: "https://github.example.test/",
-    GITHUB_API_URL: "https://api.example.test/",
+    env: {
+      GITHUB_RUN_ID: "321",
+      GITHUB_RUN_ATTEMPT: "9",
+      GITHUB_REF: "refs/tags/v9.9.9",
+      GITHUB_SHA: "9999abcdef",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_SERVER_URL: "https://github.example.test/",
+      GITHUB_API_URL: "https://api.example.test/",
+    },
   });
 
   assert.equal(workflowEnv.GITHUB_RUN_ID, "321");
@@ -93,12 +95,14 @@ test("createAlignedWorkflowFixture derives context from env overrides", () => {
 
 test("createAlignedWorkflowFixture leaves derived links blank when required env is missing", () => {
   const { workflowContext } = createAlignedWorkflowFixture({
-    GITHUB_REPOSITORY: "",
-    GITHUB_RUN_ID: "",
-    GITHUB_SHA: "",
-    GITHUB_RUN_ATTEMPT: "11",
-    GITHUB_SERVER_URL: "https://github.example.test/",
-    GITHUB_API_URL: "https://api.example.test/",
+    env: {
+      GITHUB_REPOSITORY: "",
+      GITHUB_RUN_ID: "",
+      GITHUB_SHA: "",
+      GITHUB_RUN_ATTEMPT: "11",
+      GITHUB_SERVER_URL: "https://github.example.test/",
+      GITHUB_API_URL: "https://api.example.test/",
+    },
   });
 
   assert.equal(workflowContext.repository, "");
@@ -112,6 +116,27 @@ test("createAlignedWorkflowFixture leaves derived links blank when required env 
   assert.equal(workflowContext.apiUrl, "https://api.example.test");
   assert.equal(workflowContext.runUrl, "");
   assert.equal(workflowContext.commitUrl, "");
+});
+
+test("createAlignedWorkflowFixture allows explicit context overrides after derivation", () => {
+  const { workflowContext } = createAlignedWorkflowFixture({
+    env: {
+      GITHUB_RUN_ID: "654",
+      GITHUB_SHA: "abcdef654321",
+    },
+    context: {
+      runUrl: "https://ci.example.test/custom-run/654",
+      commitUrl: "https://git.example.test/custom-commit/abcdef654321",
+    },
+  });
+
+  assert.equal(workflowContext.runId, "654");
+  assert.equal(workflowContext.sha, "abcdef654321");
+  assert.equal(workflowContext.runUrl, "https://ci.example.test/custom-run/654");
+  assert.equal(
+    workflowContext.commitUrl,
+    "https://git.example.test/custom-commit/abcdef654321",
+  );
 });
 
 test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
