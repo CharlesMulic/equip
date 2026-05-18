@@ -139,6 +139,34 @@ test("createAlignedWorkflowFixture allows explicit context overrides after deriv
   );
 });
 
+test("createAlignedWorkflowFixture lets explicit context overrides replace derived fields", () => {
+  const { workflowContext } = createAlignedWorkflowFixture({
+    env: {
+      GITHUB_REPOSITORY: "CharlesMulic/equip",
+      GITHUB_WORKFLOW: "Release",
+      GITHUB_RUN_ID: "777",
+      GITHUB_RUN_ATTEMPT: "4",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_SHA: "abcdef777777",
+      GITHUB_EVENT_NAME: "push",
+    },
+    context: {
+      repository: "custom/repo",
+      workflow: "Custom Workflow",
+      runAttempt: "12",
+      eventName: "release",
+    },
+  });
+
+  assert.equal(workflowContext.repository, "custom/repo");
+  assert.equal(workflowContext.workflow, "Custom Workflow");
+  assert.equal(workflowContext.runId, "777");
+  assert.equal(workflowContext.runAttempt, "12");
+  assert.equal(workflowContext.ref, "refs/heads/main");
+  assert.equal(workflowContext.sha, "abcdef777777");
+  assert.equal(workflowContext.eventName, "release");
+});
+
 test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
   assert.deepEqual(normalizeWorkflowContext(null), {
     repository: "",
