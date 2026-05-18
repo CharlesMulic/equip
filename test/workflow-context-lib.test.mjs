@@ -37,6 +37,28 @@ test("createWorkflowFixture returns matching env and context fixtures with indep
   assert.equal(workflowContext.serverUrl, "https://git.example.test");
 });
 
+test("createWorkflowFixture keeps default env and context fixtures aligned", () => {
+  const workflowContextFromEnv = readGitHubWorkflowContext(workflowEnvFixture);
+
+  assert.equal(workflowContextFromEnv.repository, workflowContextFixture.repository);
+  assert.equal(workflowContextFromEnv.workflow, workflowContextFixture.workflow);
+  assert.equal(workflowContextFromEnv.runId, workflowContextFixture.runId);
+  assert.equal(workflowContextFromEnv.runAttempt, workflowContextFixture.runAttempt);
+  assert.equal(workflowContextFromEnv.ref, workflowContextFixture.ref);
+  assert.equal(workflowContextFromEnv.sha, workflowContextFixture.sha);
+  assert.equal(workflowContextFromEnv.eventName, workflowContextFixture.eventName);
+  assert.equal(workflowContextFromEnv.serverUrl, workflowContextFixture.serverUrl);
+  assert.equal(workflowContextFromEnv.apiUrl, workflowContextFixture.apiUrl);
+  assert.equal(
+    workflowContextFromEnv.runUrl,
+    "https://github.com/CharlesMulic/equip/actions/runs/1234567890",
+  );
+  assert.equal(
+    workflowContextFromEnv.commitUrl,
+    "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
+});
+
 test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
   assert.deepEqual(normalizeWorkflowContext(null), {
     repository: "",
