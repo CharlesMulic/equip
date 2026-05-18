@@ -11,13 +11,14 @@ import {
   writeChangesetsReleaseAssertionArtifact,
 } from "../scripts/ci/changesets-release-result-lib.mjs";
 import {
-  createWorkflowContext,
-  createWorkflowEnv,
+  createWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
-const changesetsWorkflowContext = createWorkflowContext();
-const changesetsWorkflowEnv = createWorkflowEnv();
+const {
+  workflowContext: changesetsWorkflowContext,
+  workflowEnv: changesetsWorkflowEnv,
+} = createWorkflowFixture();
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(
