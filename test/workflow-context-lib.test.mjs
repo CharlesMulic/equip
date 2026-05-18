@@ -91,6 +91,29 @@ test("createAlignedWorkflowFixture derives context from env overrides", () => {
   );
 });
 
+test("createAlignedWorkflowFixture leaves derived links blank when required env is missing", () => {
+  const { workflowContext } = createAlignedWorkflowFixture({
+    GITHUB_REPOSITORY: "",
+    GITHUB_RUN_ID: "",
+    GITHUB_SHA: "",
+    GITHUB_RUN_ATTEMPT: "11",
+    GITHUB_SERVER_URL: "https://github.example.test/",
+    GITHUB_API_URL: "https://api.example.test/",
+  });
+
+  assert.equal(workflowContext.repository, "");
+  assert.equal(workflowContext.workflow, "Release");
+  assert.equal(workflowContext.runId, "");
+  assert.equal(workflowContext.runAttempt, "11");
+  assert.equal(workflowContext.ref, "refs/heads/main");
+  assert.equal(workflowContext.sha, "");
+  assert.equal(workflowContext.eventName, "push");
+  assert.equal(workflowContext.serverUrl, "https://github.example.test");
+  assert.equal(workflowContext.apiUrl, "https://api.example.test");
+  assert.equal(workflowContext.runUrl, "");
+  assert.equal(workflowContext.commitUrl, "");
+});
+
 test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
   assert.deepEqual(normalizeWorkflowContext(null), {
     repository: "",
