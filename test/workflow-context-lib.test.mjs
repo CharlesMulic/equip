@@ -7,12 +7,13 @@ import {
   readGitHubWorkflowContext,
 } from "../scripts/ci/workflow-context-lib.mjs";
 import {
-  createWorkflowContext,
-  createWorkflowEnv,
+  createWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
-const workflowContextFixture = createWorkflowContext();
-const workflowEnvFixture = createWorkflowEnv();
+const {
+  workflowContext: workflowContextFixture,
+  workflowEnv: workflowEnvFixture,
+} = createWorkflowFixture();
 
 test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
   assert.deepEqual(normalizeWorkflowContext(null), {
