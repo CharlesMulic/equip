@@ -9,12 +9,16 @@ import {
   resolveDockerAcceptanceArtifacts,
   writeDockerAcceptanceArtifacts,
 } from "../scripts/ci/docker-acceptance-lib.mjs";
-import { createWorkflowContext } from "./helpers/workflow-context.mjs";
+import { createWorkflowFixture } from "./helpers/workflow-context.mjs";
 
-const dockerWorkflowContext = createWorkflowContext({
-  runId: "789",
-  runAttempt: "4",
-  sha: "abc123",
+const {
+  workflowContext: dockerWorkflowContext,
+} = createWorkflowFixture({
+  context: {
+    runId: "789",
+    runAttempt: "4",
+    sha: "abc123",
+  },
 });
 
 test("resolveDockerAcceptanceArtifacts derives default artifact paths from an output directory", () => {
