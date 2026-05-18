@@ -15,6 +15,28 @@ const {
   workflowEnv: workflowEnvFixture,
 } = createWorkflowFixture();
 
+test("createWorkflowFixture returns matching env and context fixtures with independent overrides", () => {
+  const { workflowEnv, workflowContext } = createWorkflowFixture({
+    env: {
+      GITHUB_RUN_ID: "987",
+      GITHUB_SERVER_URL: "https://github.example.test/",
+    },
+    context: {
+      runId: "654",
+      serverUrl: "https://git.example.test",
+    },
+  });
+
+  assert.equal(workflowEnv.GITHUB_REPOSITORY, "CharlesMulic/equip");
+  assert.equal(workflowEnv.GITHUB_WORKFLOW, "Release");
+  assert.equal(workflowEnv.GITHUB_RUN_ID, "987");
+  assert.equal(workflowEnv.GITHUB_SERVER_URL, "https://github.example.test/");
+  assert.equal(workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(workflowContext.workflow, "Release");
+  assert.equal(workflowContext.runId, "654");
+  assert.equal(workflowContext.serverUrl, "https://git.example.test");
+});
+
 test("normalizeWorkflowContext returns blank defaults for non-objects", () => {
   assert.deepEqual(normalizeWorkflowContext(null), {
     repository: "",
