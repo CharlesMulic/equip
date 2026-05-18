@@ -7,6 +7,7 @@ import {
   readGitHubWorkflowContext,
 } from "../scripts/ci/workflow-context-lib.mjs";
 import {
+  createAlignedWorkflowFixture,
   createWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
@@ -56,6 +57,37 @@ test("createWorkflowFixture keeps default env and context fixtures aligned", () 
   assert.equal(
     workflowContextFromEnv.commitUrl,
     "https://github.com/CharlesMulic/equip/commit/abcdef1234567890",
+  );
+});
+
+test("createAlignedWorkflowFixture derives context from env overrides", () => {
+  const { workflowEnv, workflowContext } = createAlignedWorkflowFixture({
+    GITHUB_RUN_ID: "321",
+    GITHUB_RUN_ATTEMPT: "9",
+    GITHUB_REF: "refs/tags/v9.9.9",
+    GITHUB_SHA: "9999abcdef",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    GITHUB_SERVER_URL: "https://github.example.test/",
+    GITHUB_API_URL: "https://api.example.test/",
+  });
+
+  assert.equal(workflowEnv.GITHUB_RUN_ID, "321");
+  assert.equal(workflowContext.repository, "CharlesMulic/equip");
+  assert.equal(workflowContext.workflow, "Release");
+  assert.equal(workflowContext.runId, "321");
+  assert.equal(workflowContext.runAttempt, "9");
+  assert.equal(workflowContext.ref, "refs/tags/v9.9.9");
+  assert.equal(workflowContext.sha, "9999abcdef");
+  assert.equal(workflowContext.eventName, "workflow_dispatch");
+  assert.equal(workflowContext.serverUrl, "https://github.example.test");
+  assert.equal(workflowContext.apiUrl, "https://api.example.test");
+  assert.equal(
+    workflowContext.runUrl,
+    "https://github.example.test/CharlesMulic/equip/actions/runs/321",
+  );
+  assert.equal(
+    workflowContext.commitUrl,
+    "https://github.example.test/CharlesMulic/equip/commit/9999abcdef",
   );
 });
 

@@ -1,3 +1,5 @@
+import { readGitHubWorkflowContext } from "../../scripts/ci/workflow-context-lib.mjs";
+
 export function createWorkflowEnv(overrides = {}) {
   return {
     GITHUB_REPOSITORY: "CharlesMulic/equip",
@@ -32,5 +34,13 @@ export function createWorkflowFixture({ env = {}, context = {} } = {}) {
   return {
     workflowEnv: createWorkflowEnv(env),
     workflowContext: createWorkflowContext(context),
+  };
+}
+
+export function createAlignedWorkflowFixture(envOverrides = {}) {
+  const workflowEnv = createWorkflowEnv(envOverrides);
+  return {
+    workflowEnv,
+    workflowContext: readGitHubWorkflowContext(workflowEnv),
   };
 }
