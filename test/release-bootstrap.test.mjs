@@ -9,18 +9,14 @@ import {
   buildReleaseBootstrapSummaryMarkdown,
 } from "../scripts/ci/release-bootstrap-lib.mjs";
 import {
-  createWorkflowFixture,
+  createAlignedWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 const {
   workflowContext: bootstrapWorkflowContext,
   workflowEnv: bootstrapWorkflowEnv,
-} = createWorkflowFixture({
-  context: {
-    runId: "123",
-    sha: "abcdef123456",
-  },
+} = createAlignedWorkflowFixture({
   env: {
     GITHUB_RUN_ID: "123",
     GITHUB_SHA: "abcdef123456",

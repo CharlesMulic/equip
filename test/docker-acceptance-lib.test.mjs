@@ -9,11 +9,16 @@ import {
   resolveDockerAcceptanceArtifacts,
   writeDockerAcceptanceArtifacts,
 } from "../scripts/ci/docker-acceptance-lib.mjs";
-import { createWorkflowFixture } from "./helpers/workflow-context.mjs";
+import { createAlignedWorkflowFixture } from "./helpers/workflow-context.mjs";
 
 const {
   workflowContext: dockerWorkflowContext,
-} = createWorkflowFixture({
+} = createAlignedWorkflowFixture({
+  env: {
+    GITHUB_RUN_ID: "789",
+    GITHUB_RUN_ATTEMPT: "4",
+    GITHUB_SHA: "abc123",
+  },
   context: {
     runId: "789",
     runAttempt: "4",

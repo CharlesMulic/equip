@@ -9,19 +9,14 @@ import {
   buildReleasePreflightSummaryMarkdown,
 } from "../scripts/ci/release-preflight-lib.mjs";
 import {
-  createWorkflowFixture,
+  createAlignedWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 const {
   workflowContext: preflightWorkflowContext,
   workflowEnv: preflightWorkflowEnv,
-} = createWorkflowFixture({
-  context: {
-    runId: "456",
-    runAttempt: "3",
-    sha: "fedcba654321",
-  },
+} = createAlignedWorkflowFixture({
   env: {
     GITHUB_RUN_ID: "456",
     GITHUB_RUN_ATTEMPT: "3",
