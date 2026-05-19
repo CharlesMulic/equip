@@ -9,11 +9,11 @@ import {
   buildReleaseVerificationReport,
   rebaseReleaseVerificationInputs,
 } from "../scripts/ci/release-verification-report-lib.mjs";
-import { createWorkflowFixture } from "./helpers/workflow-context.mjs";
+import { createAlignedWorkflowFixture } from "./helpers/workflow-context.mjs";
 
 const {
   workflowContext: releaseVerificationWorkflowContext,
-} = createWorkflowFixture();
+} = createAlignedWorkflowFixture();
 
 test("buildReleaseVerificationReport marks the rollup passed when all component gates pass", () => {
   const report = buildReleaseVerificationReport({
