@@ -4,10 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { createWorkflowFixture } from "./helpers/workflow-context.mjs";
+import { createAlignedWorkflowFixture } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
-const { workflowEnv: packWorkflowEnv } = createWorkflowFixture();
+const { workflowEnv: packWorkflowEnv } = createAlignedWorkflowFixture();
 const verifyPackSuccessWorkflowEnv = {
   ...packWorkflowEnv,
   GITHUB_RUN_ID: "234",
