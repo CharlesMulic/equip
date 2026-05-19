@@ -9,14 +9,14 @@ import {
   buildReleaseWorkflowSummaryMarkdown,
 } from "../scripts/ci/release-workflow-report-lib.mjs";
 import {
-  createWorkflowFixture,
+  createAlignedWorkflowFixture,
 } from "./helpers/workflow-context.mjs";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 const {
   workflowContext: releaseWorkflowContext,
   workflowEnv: releaseWorkflowEnv,
-} = createWorkflowFixture();
+} = createAlignedWorkflowFixture();
 
 function runScript(scriptRelativePath, env) {
   return spawnSync(process.execPath, [path.join(workspaceRoot, scriptRelativePath)], {
