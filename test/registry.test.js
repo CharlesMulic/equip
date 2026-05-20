@@ -10,7 +10,7 @@ const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
 
-const { registryDefToConfig } = require("../dist/lib/registry");
+const { registryDefToConfig, resolveRegistryInstallReviewGate } = require("../dist/lib/registry");
 const { Augment } = require("../dist/index");
 const {
   computeContentHashV2,
@@ -23,6 +23,7 @@ const HERMETIC_FIXTURE_NAME = "demo-direct-install";
 const AUTH_FIXTURE_NAME = "demo-direct-install-auth";
 const HASH_MATCH_FIXTURE_NAME = "demo-direct-install-hash-match";
 const HASH_ALGORITHM_MISMATCH_FIXTURE_NAME = "demo-direct-install-hash-algorithm-mismatch";
+const UNREVIEWED_FIXTURE_NAME = "demo-direct-install-unreviewed";
 
 function tmpPath(prefix = "reg-test") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -106,6 +107,12 @@ function startFixtureRegistry() {
             }),
             "sha256-v1",
           ),
+          [UNREVIEWED_FIXTURE_NAME]: buildFixture(origin, UNREVIEWED_FIXTURE_NAME, {
+            title: "Demo Direct Install Unreviewed",
+            status: "synced-unreviewed",
+            reviewStatus: "unreviewed",
+            trustTier: "unscanned",
+          }),
         };
 
         if (!fixtures[name]) {
@@ -374,6 +381,76 @@ describe("registryDefToConfig", () => {
     const def = { name: "test", title: "Test", description: "", installMode: "direct" };
     const config = registryDefToConfig(def, { logger });
     assert.equal(config.logger, logger);
+  });
+});
+
+describe("resolveRegistryInstallReviewGate", () => {
+  it("allows reviewed registry MCP definitions", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "reviewed",
+      title: "Reviewed",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustTier: "reviewed",
+    });
+
+    assert.equal(gate.allowed, true);
+    assert.equal(gate.code, "allowed");
+  });
+
+  it("does not gate rules-only definitions", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "rules-only",
+      title: "Rules Only",
+      description: "",
+      installMode: "direct",
+      trustTier: "unscanned",
+      rules: {
+        content: "<!-- rules:v1 -->\nRules\n<!-- /rules -->",
+        version: "1.0.0",
+        marker: "rules",
+      },
+    });
+
+    assert.equal(gate.allowed, true);
+    assert.equal(gate.code, "no-mcp");
+  });
+
+  it("requires an explicit override for visible unreviewed MCP definitions", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "unreviewed",
+      title: "Unreviewed",
+      description: "",
+      installMode: "direct",
+      stdioCommand: "node",
+      stdioArgs: ["server.js"],
+      status: "synced-unreviewed",
+      reviewStatus: "unreviewed",
+      trustTier: "unscanned",
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.equal(gate.code, "unreviewed");
+  });
+
+  it("hard-blocks rejected and needs-attention MCP definitions", () => {
+    for (const reviewStatus of ["rejected", "needs-attention", "pending-review"]) {
+      const gate = resolveRegistryInstallReviewGate({
+        name: reviewStatus,
+        title: reviewStatus,
+        description: "",
+        installMode: "direct",
+        transport: "http",
+        serverUrl: "https://example.com/mcp",
+        reviewStatus,
+      });
+
+      assert.equal(gate.allowed, false);
+      assert.equal(gate.bypassable, false);
+    }
   });
 });
 
@@ -685,6 +762,31 @@ describe("direct-mode CLI", () => {
     assert.ok(result.output.includes("equip update"), "Should show update header");
     assert.ok(result.output.includes("Demo Direct Install"), "Should fetch tool definition");
     assert.ok(result.output.includes("Done."), "Should complete");
+  });
+
+  it("blocks unreviewed registry MCP installs unless explicitly overridden", async () => {
+    const blocked = await runEquip([
+      UNREVIEWED_FIXTURE_NAME,
+      "--dry-run",
+      "--platform",
+      "claude-code",
+    ], cliEnv);
+
+    assert.equal(blocked.code, 1, blocked.output);
+    assert.match(blocked.output, /has not cleared CG3 review/);
+    assert.match(blocked.output, /--allow-unreviewed/);
+
+    const allowed = await runEquip([
+      UNREVIEWED_FIXTURE_NAME,
+      "--dry-run",
+      "--allow-unreviewed",
+      "--platform",
+      "claude-code",
+    ], cliEnv);
+
+    assert.equal(allowed.code, 0, allowed.output);
+    assert.match(allowed.output, /continuing with an unreviewed MCP augment/);
+    assert.match(allowed.output, /Done\./);
   });
 });
 

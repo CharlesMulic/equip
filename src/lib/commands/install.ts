@@ -5,7 +5,7 @@
 import * as os from "os";
 import { spawn } from "child_process";
 import { Augment, type AugmentConfig } from "../../index";
-import { registryDefToConfig, REGISTRY_API, type RegistryDef } from "../registry";
+import { registryDefToConfig, REGISTRY_API, resolveRegistryInstallReviewGate, type RegistryDef } from "../registry";
 import { createManualPlatform } from "../platforms";
 import { platformName, resolvePlatformId } from "../platforms";
 import { InstallReportBuilder } from "../types";
@@ -369,6 +369,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
 
   cli.log(`\n${cli.BOLD}equip${cli.RESET} v${equipVersion} — installing ${toolDef.title || toolDef.name}`);
   if (dryRun) cli.warn("DRY RUN — no changes will be made");
+  enforceRegistryInstallReviewGate(toolDef, parsedArgs);
 
   // ── Auth Resolution ──
   let apiKey: string | null = null;
@@ -526,6 +527,25 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
 }
 
 // ─── Post-Install Action Executor ───────────────────────────
+
+export function enforceRegistryInstallReviewGate(toolDef: RegistryDef, parsedArgs: ParsedArgs): void {
+  const gate = resolveRegistryInstallReviewGate(toolDef);
+  if (gate.allowed) return;
+
+  cli.warn(gate.title);
+  cli.log(`  ${cli.DIM}${gate.detail}${cli.RESET}`);
+
+  if (gate.bypassable && parsedArgs.allowUnreviewed) {
+    cli.warn("Explicit --allow-unreviewed supplied; continuing with an unreviewed MCP augment.");
+    return;
+  }
+
+  if (gate.bypassable) {
+    cli.log(`  ${cli.DIM}Install only if you personally trust the publisher and code. Re-run with --allow-unreviewed to proceed.${cli.RESET}`);
+  }
+
+  process.exit(1);
+}
 
 interface PostInstallContext {
   apiKey: string | null;

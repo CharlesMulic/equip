@@ -97,6 +97,14 @@ export interface RegistryDef {
 
   installMode: "direct" | "package";
   installCount?: number;
+  listed?: boolean;
+  status?: string;
+  registryStatus?: string;
+  reviewStatus?: string | null;
+  trustTier?: string | null;
+  trustLabel?: string | null;
+  trustSignals?: Array<{ id: string; label: string; status: string; detail?: string }>;
+  lastReviewedAt?: string | null;
 
   // Direct-mode fields
   transport?: string;
@@ -150,6 +158,102 @@ export interface RegistryDef {
   version?: number;
   contentHash?: string;
   hashAlgorithm?: string;
+}
+
+export type RegistryInstallReviewGateCode =
+  | "allowed"
+  | "no-mcp"
+  | "not-listed"
+  | "rejected"
+  | "needs-attention"
+  | "pending-review"
+  | "unreviewed";
+
+export interface RegistryInstallReviewGate {
+  allowed: boolean;
+  bypassable: boolean;
+  code: RegistryInstallReviewGateCode;
+  title: string;
+  detail: string;
+}
+
+const REVIEWED_TRUST_TIERS = new Set(["first-party", "verified", "reviewed"]);
+const LIMITED_TRUST_TIERS = new Set(["scanned", "unscanned"]);
+
+/**
+ * Registry MCP install safety gate.
+ *
+ * The registry can intentionally list MCP augments before full review so they
+ * remain discoverable by exact name. Low-friction install is a narrower bar:
+ * reviewed/trusted entries install normally; explicit unreviewed/limited-data
+ * entries need an override; rejected, pending, needs-attention, or hidden rows
+ * fail closed.
+ */
+export function resolveRegistryInstallReviewGate(def: RegistryDef): RegistryInstallReviewGate {
+  if (!registryDefHasMcp(def)) {
+    return allowGate("no-mcp", "No MCP install gate needed", "This augment has no MCP server entry.");
+  }
+
+  const status = normalizeReviewGateValue(def.registryStatus ?? def.status);
+  const reviewStatus = normalizeReviewGateValue(def.reviewStatus);
+  const trustTier = normalizeReviewGateValue(def.trustTier);
+
+  if (def.listed === false || status === "retracted" || status === "hidden") {
+    return blockGate("not-listed", "This augment is not listed for installation.", "The registry has hidden or retracted this augment.");
+  }
+  if (status === "rejected" || reviewStatus === "rejected") {
+    return blockGate("rejected", "This augment was rejected by review.", "Rejected MCP augments cannot be installed from the registry.");
+  }
+  if (status === "needs-attention" || reviewStatus === "needs-attention") {
+    return blockGate("needs-attention", "This augment needs publisher or operator attention.", "It has not cleared review for normal installation.");
+  }
+  if (status === "pending-review" || reviewStatus === "pending-review") {
+    return blockGate("pending-review", "This augment is still under review.", "Wait for review to finish before installing from the registry.");
+  }
+  if (status === "synced-unreviewed" || reviewStatus === "unreviewed" || LIMITED_TRUST_TIERS.has(trustTier)) {
+    return {
+      allowed: false,
+      bypassable: true,
+      code: "unreviewed",
+      title: "This MCP augment has not cleared CG3 review.",
+      detail: "It may run local code or connect to a remote server that has not been scanned or approved for normal installation.",
+    };
+  }
+  if (reviewStatus === "approved" || REVIEWED_TRUST_TIERS.has(trustTier)) {
+    return allowGate("allowed", "Review gate passed", "This registry MCP augment has reviewed or trusted status.");
+  }
+
+  return allowGate("allowed", "Review gate passed", "The registry did not mark this augment as unreviewed or blocked.");
+}
+
+function registryDefHasMcp(def: RegistryDef): boolean {
+  return !!(
+    def.serverUrl ||
+    def.stdioCommand ||
+    def.transport === "http" ||
+    def.transport === "stdio" ||
+    def.transport === "streamable-http"
+  );
+}
+
+function normalizeReviewGateValue(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function allowGate(
+  code: RegistryInstallReviewGateCode,
+  title: string,
+  detail: string,
+): RegistryInstallReviewGate {
+  return { allowed: true, bypassable: false, code, title, detail };
+}
+
+function blockGate(
+  code: RegistryInstallReviewGateCode,
+  title: string,
+  detail: string,
+): RegistryInstallReviewGate {
+  return { allowed: false, bypassable: false, code, title, detail };
 }
 
 export type RegistryValidationResult =

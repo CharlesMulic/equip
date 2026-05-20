@@ -18,7 +18,7 @@ import { validateCredential, readStoredCredential } from "../lib/auth-engine.js"
 import { runStatus } from "../lib/commands/status.js";
 import { runDoctor } from "../lib/commands/doctor.js";
 import { runUpdate } from "../lib/commands/update.js";
-import { runInstall } from "../lib/commands/install.js";
+import { enforceRegistryInstallReviewGate, runInstall } from "../lib/commands/install.js";
 import { runReauth } from "../lib/commands/reauth.js";
 import { runRefresh, autoRefreshExpired } from "../lib/commands/refresh.js";
 import { runSnapshot, runSnapshots, runSnapshotDiff, runRestore } from "../lib/commands/snapshot.js";
@@ -81,6 +81,7 @@ function cmdHelp(): void {
   console.log("  --api-key <key>        Provide API key directly (may expose it in shell history/process lists)");
   console.log("  --platform <p>   Target specific platform(s), comma-separated");
   console.log("  --dry-run        Preview without writing");
+  console.log("  --allow-unreviewed  Explicitly install a visible but unreviewed MCP augment");
   console.log("  --delete-added   Restore files that were absent in the snapshot by deleting them");
   console.log("  --preserve-added Restore files that were absent in the snapshot by preserving them");
   console.log("  --json           Emit machine-readable JSON where supported");
@@ -270,6 +271,7 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
   }
 
   if (toolDef && toolDef.installMode === "package") {
+    enforceRegistryInstallReviewGate(toolDef, parsedArgs);
     spawnPackage(toolDef.npmPackage!, toolDef.setupCommand || "setup", extraArgs, alias);
     return;
   }

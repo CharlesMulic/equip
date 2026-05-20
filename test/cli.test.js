@@ -26,6 +26,7 @@ describe("parseArgs", () => {
     assert.strictEqual(result.apiKey, null);
     assert.strictEqual(result.nonInteractive, false);
     assert.strictEqual(result.platform, null);
+    assert.strictEqual(result.allowUnreviewed, false);
   });
 
   it("collects positional args in _", () => {
@@ -42,6 +43,11 @@ describe("parseArgs", () => {
   it("parses --dry-run", () => {
     const result = parseArgs(["--dry-run"]);
     assert.strictEqual(result.dryRun, true);
+  });
+
+  it("parses --allow-unreviewed", () => {
+    const result = parseArgs(["--allow-unreviewed"]);
+    assert.strictEqual(result.allowUnreviewed, true);
   });
 
   it("parses --non-interactive", () => {

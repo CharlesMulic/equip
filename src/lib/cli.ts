@@ -138,6 +138,8 @@ export interface ParsedArgs {
   fixOrphanHooks: boolean;
   /** Generic --force flag for any command that opts in. */
   force: boolean;
+  /** Explicitly allow installing registry MCP content that is visible but not reviewed. */
+  allowUnreviewed: boolean;
   /** Restore snapshots by deleting files that did not exist at snapshot time. */
   deleteAdded: boolean;
   /** Restore snapshots by preserving files that did not exist at snapshot time. */
@@ -152,7 +154,7 @@ export interface ParsedArgs {
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, deleteAdded: false, preserveAdded: false, json: false, operationId: null, planHash: null };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, allowUnreviewed: false, deleteAdded: false, preserveAdded: false, json: false, operationId: null, planHash: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
@@ -162,6 +164,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === "--adopt") { args.adopt = true; }
     else if (a === "--fix-orphan-hooks") { args.fixOrphanHooks = true; }
     else if (a === "--force") { args.force = true; }
+    else if (a === "--allow-unreviewed") { args.allowUnreviewed = true; }
     else if (a === "--delete-added") { args.deleteAdded = true; }
     else if (a === "--preserve-added") { args.preserveAdded = true; }
     else if (a === "--json") { args.json = true; }
