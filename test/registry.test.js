@@ -59,6 +59,9 @@ function buildFixture(origin, name, overrides = {}) {
   return mergeFixture(FIXTURE_TEMPLATE, {
     name,
     serverUrl: `${origin}/mcp/${name}`,
+    status: "active",
+    reviewStatus: "approved",
+    trustTier: "reviewed",
     ...overrides,
   });
 }
@@ -429,6 +432,22 @@ describe("resolveRegistryInstallReviewGate", () => {
       status: "synced-unreviewed",
       reviewStatus: "unreviewed",
       trustTier: "unscanned",
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.equal(gate.code, "unreviewed");
+  });
+
+  it("requires an explicit override when MCP review metadata is missing", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "unknown-mcp",
+      title: "Unknown MCP",
+      description: "",
+      installMode: "direct",
+      transport: "stdio",
+      stdioCommand: "node",
+      stdioArgs: ["server.js"],
     });
 
     assert.equal(gate.allowed, false);

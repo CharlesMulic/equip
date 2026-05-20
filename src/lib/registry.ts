@@ -223,7 +223,13 @@ export function resolveRegistryInstallReviewGate(def: RegistryDef): RegistryInst
     return allowGate("allowed", "Review gate passed", "This registry MCP augment has reviewed or trusted status.");
   }
 
-  return allowGate("allowed", "Review gate passed", "The registry did not mark this augment as unreviewed or blocked.");
+  return {
+    allowed: false,
+    bypassable: true,
+    code: "unreviewed",
+    title: "This MCP augment has no registry review signal.",
+    detail: "The registry did not provide a reviewed/trusted state, so normal installation is blocked unless you explicitly accept the unreviewed MCP risk.",
+  };
 }
 
 function registryDefHasMcp(def: RegistryDef): boolean {
