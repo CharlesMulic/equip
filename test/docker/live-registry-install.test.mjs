@@ -87,6 +87,10 @@ function isRequiredWithoutDefault(input) {
 function buildEnvPlan(envVars, item) {
   const vars = Array.isArray(envVars) ? envVars : [];
   const secretVars = vars.filter(variable => variable.isSecret === true);
+  const omittedPlainVars = vars.filter(variable =>
+    variable.isSecret !== true &&
+    (variable.default !== undefined || variable.value !== undefined)
+  );
   const requiredPlainVars = vars.filter(variable =>
     variable.isSecret !== true &&
     variable.isRequired === true &&
@@ -101,6 +105,11 @@ function buildEnvPlan(envVars, item) {
       detail: `Required non-secret env vars are not representable in Equip RegistryDef today: ${requiredPlainVars.map(v => v.name).join(", ")}`,
     };
   }
+
+  const warnings = omittedPlainVars.map(variable => ({
+    code: "static-env-omitted",
+    detail: `Static/default env var ${variable.name} is present in registry metadata but cannot be represented by today's one-envKey RegistryDef shape.`,
+  }));
 
   if (secretVars.length > 1) {
     return {
@@ -122,6 +131,7 @@ function buildEnvPlan(envVars, item) {
     return {
       supported: true,
       keyEnvVar,
+      warnings,
       auth: {
         type: "api_key",
         keyEnvVar,
@@ -130,7 +140,7 @@ function buildEnvPlan(envVars, item) {
     };
   }
 
-  return { supported: true };
+  return { supported: true, warnings };
 }
 
 function appendSimpleArguments(args, packageArguments) {
@@ -281,6 +291,7 @@ function convertPackage(server, pkg, item) {
       stdioArgs: ["-y", packageSpec, ...packageArgs],
       envKey: envPlan.keyEnvVar,
       auth: envPlan.auth || { type: "none" },
+      warnings: envPlan.warnings,
       selectedTarget: {
         kind: "package",
         registryType: pkg.registryType,
@@ -302,6 +313,7 @@ function convertPackage(server, pkg, item) {
       stdioArgs: [packageSpec, ...packageArgs],
       envKey: envPlan.keyEnvVar,
       auth: envPlan.auth || { type: "none" },
+      warnings: envPlan.warnings,
       selectedTarget: {
         kind: "package",
         registryType: pkg.registryType,
@@ -331,6 +343,7 @@ function convertPackage(server, pkg, item) {
       stdioArgs: dockerArgs,
       envKey: keyEnvVar,
       auth,
+      warnings: envPlan.warnings,
       selectedTarget: {
         kind: "package",
         registryType: pkg.registryType,
@@ -392,6 +405,7 @@ function supported(item, server, fields) {
     def,
     selectedTarget: fields.selectedTarget,
     credential: item.credential || null,
+    warnings: fields.warnings || [],
   };
 }
 
@@ -557,7 +571,100 @@ function parseTomlFixtureValue(rawValue) {
 function expectedCredentialForEnvKey(envKey) {
   if (envKey === "CONTEXT7_API_KEY") return "test-context7-token";
   if (envKey === "GITHUB_PERSONAL_ACCESS_TOKEN") return "test-github-token";
+  if (envKey === "ARMOR_API_KEY") return "test-armor-token";
+  if (envKey === "FODDA_API_KEY") return "test-fodda-token";
   throw new Error(`No fixture credential expectation for ${envKey}`);
+}
+
+function runProbe(command, args, timeoutMs = 10_000) {
+  return new Promise((resolve) => {
+    const useWindowsShimShell = process.platform === "win32" && ["docker", "npx", "uvx"].includes(command);
+    const child = spawn(command, args, {
+      cwd: repoRoot,
+      env: process.env,
+      shell: useWindowsShimShell,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      resolve({
+        command,
+        args,
+        ok: false,
+        timedOut: true,
+        stdout,
+        stderr,
+        error: `Timed out after ${timeoutMs}ms`,
+      });
+    }, timeoutMs);
+
+    child.stdout.on("data", chunk => { stdout += chunk; });
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    child.on("error", error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({
+        command,
+        args,
+        ok: false,
+        stdout,
+        stderr,
+        error: error.message,
+      });
+    });
+    child.on("close", code => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({
+        command,
+        args,
+        ok: code === 0,
+        code,
+        stdout,
+        stderr,
+      });
+    });
+  });
+}
+
+function runtimeVersionArgs(command) {
+  if (command === "docker" || command === "npx" || command === "uvx") return ["--version"];
+  return ["--version"];
+}
+
+async function assessRuntimeReadiness(supported) {
+  const commands = [...new Set(
+    supported
+      .filter(item => item.def.transport === "stdio")
+      .map(item => item.def.stdioCommand)
+      .filter(Boolean),
+  )].sort();
+
+  const entries = [];
+  for (const command of commands) {
+    const versionProbe = await runProbe(command, runtimeVersionArgs(command));
+    const entry = {
+      command,
+      available: versionProbe.ok,
+      versionOutput: (versionProbe.stdout || versionProbe.stderr || "").trim().split(/\r?\n/)[0] || null,
+      error: versionProbe.ok ? null : versionProbe.error || versionProbe.stderr.trim() || `exit ${versionProbe.code}`,
+    };
+    if (command === "docker" && versionProbe.ok) {
+      const daemonProbe = await runProbe("docker", ["info"], 8_000);
+      entry.daemonReachable = daemonProbe.ok;
+      entry.daemonError = daemonProbe.ok ? null : daemonProbe.error || daemonProbe.stderr.trim() || `exit ${daemonProbe.code}`;
+    }
+    entries.push(entry);
+  }
+  return entries;
 }
 
 test("live MCP registry cases can be projected and installed into fake platform homes", async (t) => {
@@ -579,6 +686,16 @@ test("live MCP registry cases can be projected and installed into fake platform 
 
   const supported = fetched.filter(item => item.support === "install");
   assert.ok(supported.length >= 5, "spike should exercise several installable live registry cases");
+  const runtimeReadiness = await assessRuntimeReadiness(supported);
+  if (process.env.EQUIP_MCP_REGISTRY_REQUIRE_RUNTIME_PREFLIGHT === "1") {
+    for (const readiness of runtimeReadiness) {
+      assert.equal(
+        readiness.available,
+        true,
+        `runtime command ${readiness.command} should be available in the Docker canary image: ${readiness.error || ""}`,
+      );
+    }
+  }
 
   const defs = new Map(supported.map(item => [item.installName, item.def]));
   const server = http.createServer((req, res) => {
@@ -664,6 +781,7 @@ test("live MCP registry cases can be projected and installed into fake platform 
       stdioArgs: item.def.stdioArgs,
       serverUrl: item.def.serverUrl,
       envKey: item.def.envKey,
+      warnings: item.warnings,
     })),
     unsupported: fetched.filter(item => item.support === "unsupported").map(item => ({
       id: item.id,
@@ -672,6 +790,7 @@ test("live MCP registry cases can be projected and installed into fake platform 
       reason: item.reason,
       detail: item.detail,
     })),
+    runtimeReadiness,
   };
 
   if (process.env.EQUIP_MCP_REGISTRY_SPIKE_RESULTS) {

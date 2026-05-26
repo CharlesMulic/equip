@@ -71,8 +71,14 @@ The retained live case list lives at `test/docker/fixtures/live-mcp-registry-cas
 - streamable HTTP remote MCP with `Authorization`
 - npm stdio package
 - npm stdio package with one secret env var
+- npm stdio package with literal package arguments
+- npm stdio package with one secret env var plus optional/default env metadata
 - PyPI stdio package via `uvx`
+- PyPI stdio package with one secret env var
 - OCI stdio package via `docker run`
-- known unsupported shapes: SSE remotes, package-launched HTTP servers, and required non-secret env input
+- OCI stdio package with literal package arguments
+- known unsupported shapes: SSE remotes, remote URL variables, non-Authorization remote headers, package-launched HTTP servers, and required non-secret env input
 
-The spike intentionally installs only platform config entries; it does not launch arbitrary third-party MCP server code. Its purpose is compatibility discovery for "can an MCP registry entry become an Equip-installed augment?", not security review or functional MCP execution.
+The Docker image includes `npx`, `uvx`, and the Docker CLI, and the test reports runtime-command readiness for generated stdio configs. It intentionally does not launch arbitrary third-party MCP server code. OCI stdio configs still require Docker daemon/socket access wherever the platform runs; the default canary verifies the CLI is present but does not mount a daemon.
+
+Its purpose is compatibility discovery for "can an MCP registry entry become an Equip-installed augment?", not security review or functional MCP execution.

@@ -85,6 +85,54 @@
       }
     },
     {
+      "id": "stdio-pypi-secret-env",
+      "installName": "mcp-anomalyarmor-pypi",
+      "serverName": "ai.anomalyarmor/armor-mcp",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "pypi",
+        "transport": "stdio"
+      },
+      "credential": {
+        "apiKey": "test-armor-token"
+      },
+      "expected": {
+        "support": "install"
+      }
+    },
+    {
+      "id": "stdio-npm-package-args",
+      "installName": "mcp-telbase-deploy",
+      "serverName": "ai.telbase/deploy",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "npm",
+        "transport": "stdio"
+      },
+      "expected": {
+        "support": "install"
+      }
+    },
+    {
+      "id": "stdio-npm-secret-plus-default-env",
+      "installName": "mcp-fodda-stdio",
+      "serverName": "ai.fodda/mcp-server",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "npm",
+        "transport": "stdio"
+      },
+      "credential": {
+        "apiKey": "test-fodda-token"
+      },
+      "expected": {
+        "support": "install"
+      }
+    },
+    {
       "id": "stdio-oci-secret-env",
       "installName": "mcp-github-oci",
       "serverName": "io.github.github/github-mcp-server",
@@ -96,6 +144,20 @@
       },
       "credential": {
         "apiKey": "test-github-token"
+      },
+      "expected": {
+        "support": "install"
+      }
+    },
+    {
+      "id": "stdio-oci-package-args",
+      "installName": "mcp-haymon-database-oci",
+      "serverName": "ai.haymon/database",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "oci",
+        "transport": "stdio"
       },
       "expected": {
         "support": "install"
@@ -128,6 +190,71 @@
       "expected": {
         "support": "unsupported",
         "reason": "remote-sse"
+      }
+    },
+    {
+      "id": "remote-sse-headers",
+      "installName": "mcp-fodda-sse",
+      "serverName": "ai.fodda/mcp-server",
+      "version": "latest",
+      "target": {
+        "kind": "remote",
+        "transport": "sse"
+      },
+      "credential": {
+        "apiKey": "test-fodda-token"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "remote-sse"
+      }
+    },
+    {
+      "id": "remote-streamable-url-vars",
+      "installName": "mcp-autorfp-region",
+      "serverName": "ai.autorfp/mcp",
+      "version": "latest",
+      "target": {
+        "kind": "remote",
+        "transport": "streamable-http"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "remote-url-variables"
+      }
+    },
+    {
+      "id": "remote-streamable-secret-url-var",
+      "installName": "mcp-cardog-url-key",
+      "serverName": "app.cardog/mcp",
+      "version": "latest",
+      "target": {
+        "kind": "remote",
+        "transport": "streamable-http"
+      },
+      "credential": {
+        "apiKey": "test-cardog-token"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "remote-url-variables"
+      }
+    },
+    {
+      "id": "remote-streamable-custom-header",
+      "installName": "mcp-reka-custom-header",
+      "serverName": "ai.reka/mcp",
+      "version": "latest",
+      "target": {
+        "kind": "remote",
+        "transport": "streamable-http"
+      },
+      "credential": {
+        "apiKey": "test-reka-token"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "remote-custom-headers"
       }
     },
     {

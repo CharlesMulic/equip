@@ -21,8 +21,31 @@ The harness:
 3. Starts a local registry stub.
 4. Runs `bin/equip.js` against fake platform homes in Docker.
 5. Verifies config files for Claude Code, Codex, Cursor, VS Code, and Roo Code.
+6. Probes the Docker image for runtime executables referenced by stdio configs.
 
 Retained live cases live in `test/docker/fixtures/live-mcp-registry-cases.json`. The fixture intentionally uses `latest` registry versions so it acts as a live canary/discovery harness. It is not deterministic regression evidence; when upstream metadata changes, the case list or support expectations should be reviewed intentionally.
+
+The Docker image includes Node/npm, `uvx`, and the Docker CLI. It does not mount a Docker daemon/socket by default, so OCI stdio entries are config-ready and CLI-ready, but not daemon-ready inside the canary container unless the caller supplies Docker access deliberately.
+
+## Registry Shape Sample
+
+On 2026-05-26, an 800-row live API sample across latest registry versions found these representative shapes:
+
+| Shape | Count in sample | Example |
+|---|---:|---|
+| remote `streamable-http` with headers | 263 | `ai.adadvisor/mcp-server` |
+| remote `streamable-http` | 166 | `ac.inference.sh/mcp` |
+| remote `sse` | 24 | `ai.agentrapay/agentra` |
+| npm stdio with env vars | 18 | `ai.agenttrust/mcp-server` |
+| npm stdio | 15 | `ai.adeu/adeu` |
+| PyPI stdio with env vars | 7 | `ai.anomalyarmor/armor-mcp` |
+| remote `streamable-http` with URL variables | 3 | `ai.autorfp/mcp` |
+| remote `sse` with headers | 3 | `ai.fodda/mcp-server` |
+| PyPI stdio | 3 | `ai.mcpcap/mcpcap` |
+| OCI stdio with package args | 2 | `ai.haymon/database` |
+| package-launched streamable HTTP | 4 | `ai.haymon/database`, `ai.com.mcp/hapi-mcp` |
+
+The registry API is live and slow enough that full scans should use the ingestion reconciler rather than the canary test. This harness keeps a representative retained set instead.
 
 ## Current Results
 
@@ -35,7 +58,11 @@ Installed successfully:
 | `stdio-npm-public` | `io.github.ChromeDevTools/chrome-devtools-mcp` | npm stdio | `npx -y chrome-devtools-mcp@1.1.0` |
 | `stdio-npm-secret-env` | `io.github.upstash/context7` | npm stdio with secret env | `npx -y @upstash/context7-mcp@1.0.31`, `CONTEXT7_API_KEY` |
 | `stdio-pypi-public` | `com.mcparmory/github` | PyPI stdio | `uvx mcparmory-github==1.0.6` |
+| `stdio-pypi-secret-env` | `ai.anomalyarmor/armor-mcp` | PyPI stdio with secret env | `uvx armor-mcp==0.6.1`, `ARMOR_API_KEY` |
+| `stdio-npm-package-args` | `ai.telbase/deploy` | npm stdio with package args | `npx -y telbase@0.14.0-beta.2 mcp serve` |
+| `stdio-npm-secret-plus-default-env` | `ai.fodda/mcp-server` | npm stdio with secret env and optional default env | `npx -y fodda-mcp@1.3.0`, `FODDA_API_KEY`; warns that `FODDA_API_URL` default is omitted |
 | `stdio-oci-secret-env` | `io.github.github/github-mcp-server` | OCI stdio | `docker run --rm -i -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server:1.0.4` |
+| `stdio-oci-package-args` | `ai.haymon/database` | OCI stdio with package args | `docker run --rm -i ghcr.io/haymon-ai/database:0.7.0 stdio` |
 
 Classified unsupported:
 
@@ -43,7 +70,19 @@ Classified unsupported:
 |---|---|---|
 | `stdio-npm-required-non-secret-env` | `io.github.Digital-Defiance/mcp-filesystem` | Required non-secret env/config input cannot be represented by current `RegistryDef`/CLI prompt model. |
 | `remote-sse` | `ai.waystation/postgres` | SSE cannot be encoded distinctly by direct-mode install today. |
+| `remote-sse-headers` | `ai.fodda/mcp-server` | SSE with auth headers is still blocked by lack of SSE support. |
+| `remote-streamable-url-vars` | `ai.autorfp/mcp` | URL template variables need a value collection/substitution flow. |
+| `remote-streamable-secret-url-var` | `app.cardog/mcp` | Secret URL variables need secure collection and substitution; current auth model only handles headers/env. |
+| `remote-streamable-custom-header` | `ai.reka/mcp` | Non-Authorization headers need first-class header-name/value support. |
 | `package-streamable-http` | `ai.com.mcp/hapi-mcp` | Package-launched HTTP servers need lifecycle/port/runtime management, not just an MCP config entry. |
+
+Runtime preflight from the Docker canary:
+
+| Command | Available in canary image | Notes |
+|---|---|---|
+| `npx` | yes | npm stdio configs should be spawnable by a platform in the container. |
+| `uvx` | yes | PyPI stdio configs should be spawnable by a platform in the container. |
+| `docker` | yes | OCI stdio configs need Docker daemon/socket access to actually start the nested server; the default canary intentionally does not mount it. |
 
 ## Findings
 
@@ -52,8 +91,10 @@ Classified unsupported:
 - Simple npm stdio packages are installable.
 - PyPI stdio can be projected to `uvx`, but this is a convention in the spike, not a productized runtime capability with dependency checks.
 - OCI stdio can be projected to `docker run`, including the common "secret env var is forwarded with `-e NAME`" shape.
+- Package arguments with literal/default values can be projected into stdio args.
+- Optional/default environment variables are currently only reported as warnings because the direct registry shape can carry one credential env key but not a general env map.
 - Current production `RegistryDef` is too narrow for arbitrary official registry inputs because it only has one `envKey` and no general variable/value collection model.
-- The spike installs and verifies exact platform config projections only. It does not prove that the platform can spawn the process successfully, that `npx`/`uvx`/`docker` exists on the user machine, or that the MCP server functions.
+- The spike installs and verifies exact platform config projections and Docker-image runtime executables. It does not execute third-party MCP code or prove that the MCP server initializes/functions, and OCI stdio still requires a Docker daemon/socket where the platform runs.
 
 ## Recommendation
 

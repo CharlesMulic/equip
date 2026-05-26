@@ -59,4 +59,13 @@ function runOrThrow(cmd, args, options = {}) {
 const dockerBin = resolveDockerBin();
 
 runOrThrow(dockerBin, ["build", "--file", dockerfile, "--tag", imageTag, "."]);
-runOrThrow(dockerBin, ["run", "--rm", imageTag, "npm", "run", "test:docker:mcp-registry-live:internal"]);
+runOrThrow(dockerBin, [
+  "run",
+  "--rm",
+  "-e",
+  "EQUIP_MCP_REGISTRY_REQUIRE_RUNTIME_PREFLIGHT=1",
+  imageTag,
+  "npm",
+  "run",
+  "test:docker:mcp-registry-live:internal",
+]);
