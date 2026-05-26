@@ -62,6 +62,9 @@ export interface ResolvedAugment {
   transport?: "http" | "stdio";
   serverUrl?: string;
   stdio?: { command: string; args: string[]; envKey?: string };
+  npmPackage?: string;
+  setupCommand?: string;
+  installTargets?: unknown;
   requiresAuth: boolean;
   auth?: Record<string, unknown>;
   rules?: { content: string; version: string; marker: string };
@@ -263,6 +266,9 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
     transport: content.transport,
     serverUrl: content.serverUrl,
     stdio: content.stdio,
+    npmPackage: content.npmPackage,
+    setupCommand: content.setupCommand,
+    installTargets: content.installTargets,
     requiresAuth: content.requiresAuth ?? false,
     auth: content.auth,
     rules,

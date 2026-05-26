@@ -117,6 +117,7 @@ export interface RegistryDef {
   // Package-mode fields
   npmPackage?: string;
   setupCommand?: string;
+  installTargets?: unknown;
 
   // Behavioral artifacts
   rules?: {

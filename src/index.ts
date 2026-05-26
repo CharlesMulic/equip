@@ -575,3 +575,36 @@ export {
   COUNTER_LABELS,
 } from "./lib/telemetry";
 export type { Counter } from "./lib/telemetry";
+
+export {
+  assessMcpInstallability,
+  assessMcpReadiness,
+  assessMcpRuntimeReadiness,
+  deriveMcpRuntimeRequirements,
+  mcpDefinitionToMcpInstallTargets,
+  registryDefToMcpInstallTargets,
+  summarizeMcpInstallTarget,
+} from "./lib/mcp-readiness";
+export type {
+  McpInstallabilityReport,
+  McpInstallabilityStatus,
+  McpInstallTarget,
+  McpInstallTargetKind,
+  McpInputKind,
+  McpInputRequirement,
+  McpProbeReadinessReport,
+  McpProbeStatus,
+  McpReadinessFinding,
+  McpReadinessReport,
+  McpReadinessTargetSummary,
+  McpRemoteInstallTarget,
+  McpRuntimeCheckStatus,
+  McpRuntimeReadinessReport,
+  McpRuntimeReadinessStatus,
+  McpRuntimeRequirement,
+  McpRuntimeRequirementKind,
+  McpStdioInstallTarget,
+  McpTargetSource,
+  McpTransport,
+  McpUnsupportedInstallTarget,
+} from "./lib/mcp-readiness";

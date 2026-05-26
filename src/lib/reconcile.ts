@@ -93,6 +93,9 @@ function registryDefToContent(def: RegistryDef): AugmentContent {
     stdio: def.stdioCommand
       ? { command: def.stdioCommand, args: def.stdioArgs || [], ...(def.envKey ? { envKey: def.envKey } : {}) }
       : undefined,
+    npmPackage: def.npmPackage,
+    setupCommand: def.setupCommand,
+    installTargets: def.installTargets,
     requiresAuth: def.requiresAuth || false,
     auth: def.auth as Record<string, unknown> | undefined,
     subtitle: def.subtitle,

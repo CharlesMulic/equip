@@ -59,6 +59,11 @@ export interface AugmentContent {
    *  name the platform should populate with the user's credential when
    *  invoking the command — publisher-declared, immutable per version. */
   stdio?: { command: string; args: string[]; envKey?: string };
+  /** Package registry facts used to derive install/runtime readiness. */
+  npmPackage?: string;
+  setupCommand?: string;
+  /** Canonical MCP registry install targets, when available. */
+  installTargets?: unknown;
   /** Whether this augment requires user-provided auth. */
   requiresAuth?: boolean;
   /**

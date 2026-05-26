@@ -6,6 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  assessMcpRuntimeReadiness,
+  registryDefToMcpInstallTargets,
+} from "../../dist/lib/mcp-readiness.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -636,32 +640,44 @@ function runProbe(command, args, timeoutMs = 10_000) {
   });
 }
 
-function runtimeVersionArgs(command) {
-  if (command === "docker" || command === "npx" || command === "uvx") return ["--version"];
-  return ["--version"];
-}
-
 async function assessRuntimeReadiness(supported) {
-  const commands = [...new Set(
-    supported
-      .filter(item => item.def.transport === "stdio")
-      .map(item => item.def.stdioCommand)
-      .filter(Boolean),
-  )].sort();
-
   const entries = [];
-  for (const command of commands) {
-    const versionProbe = await runProbe(command, runtimeVersionArgs(command));
+  for (const item of supported.filter(entry => entry.def.transport === "stdio")) {
+    const [target] = registryDefToMcpInstallTargets(item.def);
+    const report = await assessMcpRuntimeReadiness(target, {
+      allowDockerDaemonProbe: true,
+      runCommand: async (command, args, options) => {
+        const probe = await runProbe(command, args, options.timeoutMs);
+        return {
+          exitCode: probe.code ?? (probe.ok ? 0 : 1),
+          stdout: probe.stdout,
+          stderr: probe.stderr,
+          timedOut: probe.timedOut,
+          error: probe.error,
+        };
+      },
+    });
+    const commandChecks = report.checks.filter(check => !["credential", "input"].includes(check.requirement.kind));
+    const primaryCheck = commandChecks.find(check => check.requirement.command === item.def.stdioCommand) || commandChecks[0];
+    const dockerDaemon = commandChecks.find(check => check.requirement.kind === "docker-daemon");
     const entry = {
-      command,
-      available: versionProbe.ok,
-      versionOutput: (versionProbe.stdout || versionProbe.stderr || "").trim().split(/\r?\n/)[0] || null,
-      error: versionProbe.ok ? null : versionProbe.error || versionProbe.stderr.trim() || `exit ${versionProbe.code}`,
+      installName: item.installName,
+      targetKey: target.targetKey,
+      command: item.def.stdioCommand,
+      status: report.status,
+      available: commandChecks.length === 0 || commandChecks.every(check => check.status !== "missing" && check.status !== "unknown"),
+      versionOutput: String(primaryCheck?.evidence?.version || "").trim() || null,
+      error: primaryCheck?.status === "ready" ? null : primaryCheck?.detail || report.summary,
+      checks: report.checks.map(check => ({
+        key: check.requirement.key,
+        kind: check.requirement.kind,
+        status: check.status,
+        detail: check.detail,
+      })),
     };
-    if (command === "docker" && versionProbe.ok) {
-      const daemonProbe = await runProbe("docker", ["info"], 8_000);
-      entry.daemonReachable = daemonProbe.ok;
-      entry.daemonError = daemonProbe.ok ? null : daemonProbe.error || daemonProbe.stderr.trim() || `exit ${daemonProbe.code}`;
+    if (dockerDaemon) {
+      entry.daemonReachable = dockerDaemon.status === "ready";
+      entry.daemonError = dockerDaemon.status === "ready" ? null : dockerDaemon.detail;
     }
     entries.push(entry);
   }
