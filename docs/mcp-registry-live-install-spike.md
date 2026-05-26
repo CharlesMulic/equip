@@ -29,20 +29,22 @@ The Docker image includes Node/npm, `uvx`, and the Docker CLI. It does not mount
 
 ## Registry Shape Sample
 
-On 2026-05-26, an 800-row live API sample across latest registry versions found these representative shapes:
+On 2026-05-26, a 1,200-row live API sample across latest registry versions found these representative shapes:
 
 | Shape | Count in sample | Example |
 |---|---:|---|
-| remote `streamable-http` with headers | 263 | `ai.adadvisor/mcp-server` |
-| remote `streamable-http` | 166 | `ac.inference.sh/mcp` |
-| remote `sse` | 24 | `ai.agentrapay/agentra` |
-| npm stdio with env vars | 18 | `ai.agenttrust/mcp-server` |
-| npm stdio | 15 | `ai.adeu/adeu` |
-| PyPI stdio with env vars | 7 | `ai.anomalyarmor/armor-mcp` |
-| remote `streamable-http` with URL variables | 3 | `ai.autorfp/mcp` |
+| remote `streamable-http` with `Authorization` | 267 | `ai.adadvisor/mcp-server` |
+| remote `streamable-http` without headers | 257 | `ac.inference.sh/mcp` |
+| remote `sse` | 39 | `ai.agentrapay/agentra` |
+| npm stdio without env vars | 22 | `ai.adeu/adeu` |
+| npm stdio with one secret env var | 10 | `io.github.upstash/context7` |
+| npm stdio with secret plus plain/default env vars | 11 | `ai.fodda/mcp-server`, `ai.ponlo/server` |
+| PyPI stdio without env vars | 5 | `ai.mcpcap/mcpcap` |
+| PyPI stdio with one secret env var | 8 | `ai.anomalyarmor/armor-mcp`, `ai.linkguard/linkguard-mcp` |
+| remote `streamable-http` with non-Authorization or multiple headers | 12+ | `ai.reka/mcp`, `ai.com.mcp/contabo` |
+| remote `streamable-http` with variables | 1+ | `co.heista/api` |
 | remote `sse` with headers | 3 | `ai.fodda/mcp-server` |
-| PyPI stdio | 3 | `ai.mcpcap/mcpcap` |
-| OCI stdio with package args | 2 | `ai.haymon/database` |
+| OCI stdio with env vars or package args | 4 | `io.github.github/github-mcp-server`, `ai.haymon/database` |
 | package-launched streamable HTTP | 4 | `ai.haymon/database`, `ai.com.mcp/hapi-mcp` |
 
 The registry API is live and slow enough that full scans should use the ingestion reconciler rather than the canary test. This harness keeps a representative retained set instead.
@@ -61,6 +63,8 @@ Installed successfully:
 | `stdio-pypi-secret-env` | `ai.anomalyarmor/armor-mcp` | PyPI stdio with secret env | `uvx armor-mcp==0.6.1`, `ARMOR_API_KEY` |
 | `stdio-npm-package-args` | `ai.telbase/deploy` | npm stdio with package args | `npx -y telbase@0.14.0-beta.2 mcp serve` |
 | `stdio-npm-secret-plus-default-env` | `ai.fodda/mcp-server` | npm stdio with secret env and optional default env | `npx -y fodda-mcp@1.3.0`, `FODDA_API_KEY`; warns that `FODDA_API_URL` default is omitted |
+| `stdio-npm-default-env-only` | `ai.autonomad/travel` | npm stdio with optional/default env metadata | `npx -y autonomad-travel@1.4.0`; warns that default env metadata is omitted |
+| `stdio-pypi-secret-plus-plain-env` | `ai.linkguard/linkguard-mcp` | PyPI stdio with one secret env plus extra plain env metadata | `uvx linkguard-mcp==0.1.0`, `LINKGUARD_API_KEY` |
 | `stdio-oci-secret-env` | `io.github.github/github-mcp-server` | OCI stdio | `docker run --rm -i -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server:1.0.4` |
 | `stdio-oci-package-args` | `ai.haymon/database` | OCI stdio with package args | `docker run --rm -i ghcr.io/haymon-ai/database:0.7.0 stdio` |
 
@@ -74,6 +78,13 @@ Classified unsupported:
 | `remote-streamable-url-vars` | `ai.autorfp/mcp` | URL template variables need a value collection/substitution flow. |
 | `remote-streamable-secret-url-var` | `app.cardog/mcp` | Secret URL variables need secure collection and substitution; current auth model only handles headers/env. |
 | `remote-streamable-custom-header` | `ai.reka/mcp` | Non-Authorization headers need first-class header-name/value support. |
+| `remote-streamable-multiple-headers` | `ai.com.mcp/contabo` | Multiple headers need structured header collection, including non-secret header values. |
+| `remote-streamable-empty-header-name` | `app.aspirelearning/mcp` | Malformed or templated header metadata cannot be represented safely without validation and variable collection. |
+| `remote-streamable-header-variable` | `co.heista/api` | Header value variables are currently classified with remote variables and need secure variable substitution. |
+| `stdio-npm-secret-required-plain-env` | `ai.ponlo/server` | Required plain env plus secret env needs a multi-input collection model. |
+| `stdio-npm-multiple-secret-env` | `ai.wild-card/deepcontext` | Multiple secret env vars need a multi-credential config surface. |
+| `stdio-pypi-multiple-secret-env` | `ai.dynsoft/sac` | Multiple secret env vars need a multi-credential config surface. |
+| `stdio-pypi-package-argument-variable` | `aws.api.us-east-1.ecs-mcp/server` | Package arguments with variables need user value collection/substitution. |
 | `package-streamable-http` | `ai.com.mcp/hapi-mcp` | Package-launched HTTP servers need lifecycle/port/runtime management, not just an MCP config entry. |
 
 Runtime preflight from the Docker canary:
@@ -95,6 +106,8 @@ Runtime preflight from the Docker canary:
 - Optional/default environment variables are currently only reported as warnings because the direct registry shape can carry one credential env key but not a general env map.
 - Current production `RegistryDef` is too narrow for arbitrary official registry inputs because it only has one `envKey` and no general variable/value collection model.
 - The spike installs and verifies exact platform config projections and Docker-image runtime executables. It does not execute third-party MCP code or prove that the MCP server initializes/functions, and OCI stdio still requires a Docker daemon/socket where the platform runs.
+- The desktop app uses the same core registry-to-platform writer for install config, but its current registry install UX does not provide a first-class API-key entry flow for arbitrary registry `api_key` installs. API-key installs work cleanly through the CLI and can work in the app when a credential is already available, but productized app support needs explicit credential collection rather than falling back to terminal-style prompting.
+- The app-side registry journal now preserves stdio `envKey` in persisted content, matching the CLI content model.
 
 ## Recommendation
 

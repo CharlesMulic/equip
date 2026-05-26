@@ -573,6 +573,7 @@ function expectedCredentialForEnvKey(envKey) {
   if (envKey === "GITHUB_PERSONAL_ACCESS_TOKEN") return "test-github-token";
   if (envKey === "ARMOR_API_KEY") return "test-armor-token";
   if (envKey === "FODDA_API_KEY") return "test-fodda-token";
+  if (envKey === "LINKGUARD_API_KEY") return "test-linkguard-token";
   throw new Error(`No fixture credential expectation for ${envKey}`);
 }
 

@@ -133,6 +133,37 @@
       }
     },
     {
+      "id": "stdio-npm-default-env-only",
+      "installName": "mcp-autonomad-travel-stdio",
+      "serverName": "ai.autonomad/travel",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "npm",
+        "transport": "stdio"
+      },
+      "expected": {
+        "support": "install"
+      }
+    },
+    {
+      "id": "stdio-pypi-secret-plus-plain-env",
+      "installName": "mcp-linkguard-pypi",
+      "serverName": "ai.linkguard/linkguard-mcp",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "pypi",
+        "transport": "stdio"
+      },
+      "credential": {
+        "apiKey": "test-linkguard-token"
+      },
+      "expected": {
+        "support": "install"
+      }
+    },
+    {
       "id": "stdio-oci-secret-env",
       "installName": "mcp-github-oci",
       "serverName": "io.github.github/github-mcp-server",
@@ -176,6 +207,66 @@
       "expected": {
         "support": "unsupported",
         "reason": "required-env-without-auth-value"
+      }
+    },
+    {
+      "id": "stdio-npm-secret-required-plain-env",
+      "installName": "mcp-ponlo-stdio",
+      "serverName": "ai.ponlo/server",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "npm",
+        "transport": "stdio"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "required-env-without-auth-value"
+      }
+    },
+    {
+      "id": "stdio-npm-multiple-secret-env",
+      "installName": "mcp-deepcontext-stdio",
+      "serverName": "ai.wild-card/deepcontext",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "npm",
+        "transport": "stdio"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "multiple-secret-env-values"
+      }
+    },
+    {
+      "id": "stdio-pypi-multiple-secret-env",
+      "installName": "mcp-sac-pypi",
+      "serverName": "ai.dynsoft/sac",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "pypi",
+        "transport": "stdio"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "multiple-secret-env-values"
+      }
+    },
+    {
+      "id": "stdio-pypi-package-argument-variable",
+      "installName": "mcp-aws-ecs-pypi",
+      "serverName": "aws.api.us-east-1.ecs-mcp/server",
+      "version": "latest",
+      "target": {
+        "kind": "package",
+        "registryType": "pypi",
+        "transport": "stdio"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "package-argument-variable"
       }
     },
     {
@@ -255,6 +346,57 @@
       "expected": {
         "support": "unsupported",
         "reason": "remote-custom-headers"
+      }
+    },
+    {
+      "id": "remote-streamable-multiple-headers",
+      "installName": "mcp-contabo-custom-headers",
+      "serverName": "ai.com.mcp/contabo",
+      "version": "latest",
+      "target": {
+        "kind": "remote",
+        "transport": "streamable-http"
+      },
+      "credential": {
+        "apiKey": "test-contabo-token"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "remote-custom-headers"
+      }
+    },
+    {
+      "id": "remote-streamable-empty-header-name",
+      "installName": "mcp-aspirelearning-empty-header",
+      "serverName": "app.aspirelearning/mcp",
+      "version": "latest",
+      "target": {
+        "kind": "remote",
+        "transport": "streamable-http"
+      },
+      "credential": {
+        "apiKey": "test-aspire-token"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "remote-custom-headers"
+      }
+    },
+    {
+      "id": "remote-streamable-header-variable",
+      "installName": "mcp-heista-header-variable",
+      "serverName": "co.heista/api",
+      "version": "latest",
+      "target": {
+        "kind": "remote",
+        "transport": "streamable-http"
+      },
+      "credential": {
+        "apiKey": "test-heista-token"
+      },
+      "expected": {
+        "support": "unsupported",
+        "reason": "remote-url-variables"
       }
     },
     {
