@@ -48,3 +48,31 @@ After the first direct-install lane is stable, the next useful additions are:
 - package-mode dispatch path
 - cached install fallback after an initial live fetch
 - later, a flow where the registry creates or serves an augment definition and `equip` installs it inside a specialized stack
+
+## Live MCP Registry Install Spike
+
+There is also a deliberately separate live-registry spike/canary lane:
+
+```bash
+npm run test:docker:mcp-registry-live
+```
+
+This lane is not part of the normal CI acceptance path. It fetches retained server names from the official MCP registry using `latest`, projects supported targets into Equip's current direct-mode registry shape, starts a local registry stub, then runs the real `equip` CLI inside Docker against fake platform homes for:
+
+- Claude Code
+- Codex
+- Cursor
+- VS Code
+- Roo Code
+
+The retained live case list lives at `test/docker/fixtures/live-mcp-registry-cases.json`. This is a canary/discovery set, not deterministic regression evidence: upstream `latest` metadata can change and should be reviewed intentionally when it does. The current representative set covers:
+
+- streamable HTTP remote MCP
+- streamable HTTP remote MCP with `Authorization`
+- npm stdio package
+- npm stdio package with one secret env var
+- PyPI stdio package via `uvx`
+- OCI stdio package via `docker run`
+- known unsupported shapes: SSE remotes, package-launched HTTP servers, and required non-secret env input
+
+The spike intentionally installs only platform config entries; it does not launch arbitrary third-party MCP server code. Its purpose is compatibility discovery for "can an MCP registry entry become an Equip-installed augment?", not security review or functional MCP execution.
