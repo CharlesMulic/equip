@@ -355,7 +355,7 @@ export function buildMcpConfigForInstallTarget(
       );
     }
 
-    const credential = credentialForTarget(target, inputs, options.apiKey);
+    const credential = credentialForTarget(target, inputs);
     const entry = credential
       ? buildHttpConfigWithAuth(target.url, credential, platformId)
       : buildHttpConfig(target.url, platformId);
@@ -415,12 +415,13 @@ function resolveTargetInputs(
   const inputs = { ...(options.inputs ?? {}) };
   const apiKey = options.apiKey ?? undefined;
   if (!apiKey) return inputs;
+  const requiredSecretInputs = target.inputs.filter((input) => input.required && input.secret);
 
-  if (target.kind === "stdio" && target.envKey && !inputProvided(target.envKey, inputs)) {
+  if (target.kind === "stdio" && target.envKey && requiredSecretInputs.length <= 1 && !inputProvided(target.envKey, inputs)) {
     inputs[target.envKey] = apiKey;
   }
 
-  const secretInput = target.inputs.find((input) => input.required && input.secret);
+  const secretInput = requiredSecretInputs.length === 1 ? requiredSecretInputs[0] : undefined;
   if (secretInput && !inputProvided(secretInput.key, inputs)) {
     inputs[secretInput.key] = apiKey;
   }
@@ -431,10 +432,9 @@ function resolveTargetInputs(
 function credentialForTarget(
   target: McpInstallTarget,
   inputs: Record<string, string | undefined>,
-  apiKey: string | null | undefined,
 ): string | undefined {
-  if (apiKey) return apiKey;
-  const secretInput = target.inputs.find((input) => input.required && input.secret);
+  const requiredSecrets = target.inputs.filter((input) => input.required && input.secret);
+  const secretInput = requiredSecrets.length === 1 ? requiredSecrets[0] : undefined;
   if (!secretInput) return undefined;
   return valueForInput(secretInput.key, inputs);
 }
@@ -446,22 +446,22 @@ function buildStdioTargetEnv(
 ): Record<string, string> {
   const env: Record<string, string> = { ...(target.env ?? {}) };
   for (const input of target.inputs) {
-    const value = valueForInput(input.key, inputs);
+    const value = valueForInput(input.key, inputs) ?? input.defaultValue;
     if (value) env[input.key] = value;
   }
-  if (target.envKey && apiKey) {
+  if (target.envKey && apiKey && !valueForInput(target.envKey, inputs)) {
     env[target.envKey] = apiKey;
   }
   return env;
 }
 
 function inputProvided(key: string, inputs: Record<string, string | undefined>): boolean {
-  return typeof inputs[key] === "string" && inputs[key]!.length > 0;
+  return typeof inputs[key] === "string" && inputs[key]!.trim().length > 0;
 }
 
 function valueForInput(key: string, inputs: Record<string, string | undefined>): string | undefined {
   const value = inputs[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 // ─── Install ─────────────────────────────────────────────────

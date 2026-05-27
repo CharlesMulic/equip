@@ -515,22 +515,31 @@ function extractStrongEtag(headerValue: string | null): string | undefined {
 
 /**
  * Convert a RegistryDef (from API/cache) to an AugmentConfig (for the Augment class).
- * Only meaningful for direct-mode augments. Package-mode augments are dispatched via npx.
+ * Direct-mode definitions and structured MCP installTargets become platform config
+ * entries. Legacy package-mode augments without installTargets still dispatch via
+ * package setup outside this adapter.
  */
-export function registryDefToConfig(def: RegistryDef, options?: { logger?: EquipLogger }): AugmentConfig {
+export function registryDefToConfig(
+  def: RegistryDef,
+  options?: { logger?: EquipLogger; mcpInstallInputs?: Record<string, string | undefined>; apiKey?: string | null },
+): AugmentConfig {
   const config: AugmentConfig = {
     name: def.name,
     logger: options?.logger,
     augmentVersion: def.version,
     source: "registry",
     package: def.npmPackage,
+    mcpInstallInputs: options?.mcpInstallInputs,
   };
 
   if (def.serverUrl) {
     config.serverUrl = def.serverUrl;
   }
 
-  const target = registryDefToPreferredMcpInstallTarget(def as unknown as McpDefinitionInput);
+  const target = registryDefToPreferredMcpInstallTarget(def as unknown as McpDefinitionInput, {
+    inputs: options?.mcpInstallInputs,
+    apiKey: options?.apiKey,
+  });
   if (target) {
     config.mcpInstallTarget = target;
     if (target.kind === "remote") {

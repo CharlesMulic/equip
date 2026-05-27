@@ -390,6 +390,37 @@ describe("registryDefToConfig", () => {
     assert.equal(mcpConfig.env.EXAMPLE_TOKEN, "secret");
   });
 
+  it("carries caller-provided MCP install inputs into Augment config output", () => {
+    const def = {
+      name: "package-stdio-inputs",
+      title: "Package Stdio Inputs",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/package-stdio",
+        environmentVariables: [
+          { name: "TENANT_ID", isRequired: true, isSecret: false },
+          { name: "API_TOKEN", isRequired: true, isSecret: true },
+        ],
+      }],
+    };
+
+    const config = registryDefToConfig(def, {
+      mcpInstallInputs: {
+        TENANT_ID: "tenant-1",
+        API_TOKEN: "secret",
+      },
+    });
+    const augment = new Augment(config);
+    const mcpConfig = augment.buildConfig("claude-code", null, "stdio");
+
+    assert.equal(mcpConfig.env.TENANT_ID, "tenant-1");
+    assert.equal(mcpConfig.env.API_TOKEN, "secret");
+  });
+
   it("keeps unsupported installTargets visible to install errors", () => {
     const def = {
       name: "sse-registry",

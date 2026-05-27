@@ -50,6 +50,8 @@ export interface McpInputRequirement {
   required: boolean;
   secret: boolean;
   description?: string;
+  defaultValue?: string;
+  substitutionUnsupported?: boolean;
 }
 
 interface McpInstallTargetBase {
@@ -223,12 +225,16 @@ export function registryDefToMcpInstallTargets(def: McpDefinitionInput): McpInst
 
 export function selectPreferredMcpInstallTarget(
   targets: McpInstallTarget[],
-  options: { inputs?: Record<string, string | undefined> } = {},
+  options: { inputs?: Record<string, string | undefined>; apiKey?: string | null } = {},
 ): McpInstallTarget | null {
   if (targets.length === 0) return null;
   return [...targets].sort((a, b) => {
-    const aReport = assessMcpInstallability(a, options);
-    const bReport = assessMcpInstallability(b, options);
+    const aReport = assessMcpInstallability(a, {
+      inputs: withLegacyCredentialFallback(a, options.inputs, options.apiKey),
+    });
+    const bReport = assessMcpInstallability(b, {
+      inputs: withLegacyCredentialFallback(b, options.inputs, options.apiKey),
+    });
     const statusDelta = installabilityRank(aReport.status) - installabilityRank(bReport.status);
     if (statusDelta !== 0) return statusDelta;
 
@@ -241,7 +247,7 @@ export function selectPreferredMcpInstallTarget(
 
 export function registryDefToPreferredMcpInstallTarget(
   def: McpDefinitionInput,
-  options: { inputs?: Record<string, string | undefined> } = {},
+  options: { inputs?: Record<string, string | undefined>; apiKey?: string | null } = {},
 ): McpInstallTarget | null {
   return selectPreferredMcpInstallTarget(registryDefToMcpInstallTargets(def), options);
 }
@@ -378,9 +384,25 @@ export function assessMcpInstallability(
         "Use an HTTPS endpoint or localhost loopback URL.",
       ));
     }
+    const unsupportedInputShape = unsupportedRemoteInputShape(target.inputs);
+    if (unsupportedInputShape) {
+      findings.push(blocked(
+        "remote-input-shape-unsupported",
+        unsupportedInputShape,
+        "Expose no inputs for public remotes, or one required credential input for Authorization.",
+      ));
+    }
   }
 
   if (target.kind === "stdio") {
+    const commandValidation = validateRuntimeCommand(target.command);
+    if (!commandValidation.ok) {
+      findings.push(blocked(
+        "stdio-command-unsafe",
+        commandValidation.detail,
+        "Publish a command name/path without shell metacharacters or line breaks.",
+      ));
+    }
     const variableArgs = target.args.filter(hasArgumentVariables);
     if (variableArgs.length > 0) {
       findings.push(blocked(
@@ -389,20 +411,29 @@ export function assessMcpInstallability(
         "Publish concrete args or expose structured inputs for the variable values.",
       ));
     }
+    const unsafeArg = target.args.find((arg) => !validateRuntimeArgument(arg).ok);
+    if (unsafeArg !== undefined) {
+      const validation = validateRuntimeArgument(unsafeArg);
+      findings.push(blocked(
+        "stdio-arg-unsafe",
+        validation.ok ? "The stdio command arguments contain characters that are not allowed." : validation.detail,
+        "Publish argument values without shell metacharacters or line breaks.",
+      ));
+    }
   }
 
-  const secretInputs = target.inputs.filter((input) => input.required && input.secret);
-  if (secretInputs.length > 1) {
+  const unsupportedInputs = target.inputs.filter((input) => input.substitutionUnsupported);
+  if (unsupportedInputs.length > 0) {
     findings.push(blocked(
-      "multiple-secrets-unsupported",
-      "This target requires multiple secret values; Equip currently supports one required secret in the standard install flow.",
-      "Use one credential input or defer to a custom setup flow.",
+      "input-variables-unsupported",
+      `Input defaults or variable declarations need structured substitution before install: ${unsupportedInputs.map((input) => input.key).join(", ")}.`,
+      "Publish concrete defaults or required inputs without embedded variables.",
     ));
   }
 
   const missingInputs = target.inputs
     .filter((input) => input.required)
-    .filter((input) => !inputProvided(input.key, options.inputs));
+    .filter((input) => !inputProvided(input.key, options.inputs) && !input.defaultValue);
 
   if (missingInputs.length > 0) {
     findings.push({
@@ -457,6 +488,7 @@ export function deriveMcpRuntimeRequirements(target: McpInstallTarget): McpRunti
 
   for (const input of target.inputs) {
     if (!input.required) continue;
+    if (input.defaultValue && !input.substitutionUnsupported) continue;
     add({
       key: `input:${input.key}`,
       kind: input.secret ? "credential" : "input",
@@ -691,6 +723,10 @@ function parseExplicitTarget(
   }
 
   if (rawKind === "stdio" || transport === "stdio") {
+    const argumentIssue = packageArgumentIssue(record);
+    if (argumentIssue) {
+      return unsupportedTarget(def, source, index, argumentIssue.reasonCode, argumentIssue.detail, raw);
+    }
     const projected = projectPackageTarget(record);
     const command = readString(record.command) ?? readString(record.stdioCommand) ?? projected?.command;
     const args = stringArray(record.args) ?? stringArray(record.stdioArgs) ?? projected?.args ?? [];
@@ -761,12 +797,66 @@ function projectPackageTarget(record: Record<string, unknown>): { command: strin
   const registryType = (readString(record.registryType) ?? readString(record.packageRegistry) ?? "").toLowerCase();
   const identifier = readString(record.identifier) ?? readString(record.packageName);
   const runtimeHint = readString(record.runtimeHint);
-  if (runtimeHint) return { command: runtimeHint, args: stringArray(record.args) ?? (identifier ? [identifier] : []) };
+  const packageArgs = argumentValuesFromRaw(record.packageArguments);
+  const runtimeArgs = argumentValuesFromRaw(record.runtimeArguments);
+  if (runtimeHint) return { command: runtimeHint, args: stringArray(record.args) ?? [...runtimeArgs, ...(identifier ? [packageSpec(registryType, identifier, readString(record.version))] : []), ...packageArgs] };
   if (!identifier) return null;
-  if (registryType === "npm") return { command: "npx", args: ["-y", identifier] };
-  if (registryType === "pypi") return { command: "uvx", args: [identifier] };
-  if (registryType === "oci" || registryType === "docker") return { command: "docker", args: ["run", "--rm", "-i", identifier] };
+  const version = readString(record.version);
+  if (registryType === "npm") return { command: "npx", args: ["-y", packageSpec(registryType, identifier, version), ...packageArgs] };
+  if (registryType === "pypi") return { command: "uvx", args: [packageSpec(registryType, identifier, version), ...packageArgs] };
+  if (registryType === "oci" || registryType === "docker") return { command: "docker", args: ["run", "--rm", "-i", ...runtimeArgs, identifier, ...packageArgs] };
   return null;
+}
+
+function packageSpec(registryType: string, identifier: string, version: string | undefined): string {
+  if (!version) return identifier;
+  if (registryType === "npm") return `${identifier}@${version}`;
+  if (registryType === "pypi") return `${identifier}==${version}`;
+  return identifier;
+}
+
+function packageArgumentIssue(record: Record<string, unknown>): { reasonCode: string; detail: string } | null {
+  const args = [
+    ...argumentArray(record.packageArguments),
+    ...argumentArray(record.runtimeArguments),
+  ];
+  for (const raw of args) {
+    const arg = asRecord(raw);
+    if (!arg) continue;
+    const value = readString(arg.value);
+    const defaultValue = readString(arg.default);
+    if (hasDeclaredVariables(arg) || hasArgumentVariables(value ?? "") || hasArgumentVariables(defaultValue ?? "")) {
+      return {
+        reasonCode: "arg-variables-unsupported",
+        detail: "Package/runtime argument variables need structured input substitution before this target can be installed.",
+      };
+    }
+    if ((readBoolean(arg.required) ?? readBoolean(arg.isRequired)) === true && !value && !defaultValue) {
+      return {
+        reasonCode: "required-argument-unsupported",
+        detail: "Package/runtime arguments include a required value without a default.",
+      };
+    }
+  }
+  return null;
+}
+
+function argumentValuesFromRaw(value: unknown): string[] {
+  const out: string[] = [];
+  for (const raw of argumentArray(value)) {
+    const arg = asRecord(raw);
+    if (!arg) continue;
+    const literal = readString(arg.value) ?? readString(arg.default);
+    if (literal === undefined) continue;
+    const name = readString(arg.name);
+    if (readString(arg.type) === "named" && name) out.push(name);
+    out.push(literal);
+  }
+  return out;
+}
+
+function argumentArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function normalizeRemoteTransport(transport: string | null | undefined): "streamable-http" | "sse" {
@@ -823,31 +913,35 @@ function inputRequirementsFromRawTarget(record: Record<string, unknown>): McpInp
   const out: McpInputRequirement[] = [];
   const inputs = Array.isArray(record.inputs) ? record.inputs : [];
   for (const raw of inputs) {
-    const input = inputRequirementFromRaw(raw);
+    const input = inputRequirementFromRaw(raw, "plain");
     if (input) out.push(input);
   }
   const envVars = Array.isArray(record.environmentVariables) ? record.environmentVariables : [];
   for (const raw of envVars) {
-    const input = inputRequirementFromRaw(raw);
+    const input = inputRequirementFromRaw(raw, "env");
     if (input) out.push(input);
   }
   return out;
 }
 
-function inputRequirementFromRaw(raw: unknown): McpInputRequirement | null {
+function inputRequirementFromRaw(raw: unknown, defaultKind: McpInputKind): McpInputRequirement | null {
   const record = asRecord(raw);
   if (!record) return null;
   const key = readString(record.key) ?? readString(record.name);
   if (!key) return null;
   const isSecret = readBoolean(record.secret) ?? readBoolean(record.isSecret) ?? /token|key|secret|password/i.test(key);
   const kind = readString(record.kind) as McpInputKind | undefined;
+  const rawDefaultValue = readString(record.value) ?? readString(record.default);
+  const substitutionUnsupported = hasDeclaredVariables(record) || hasArgumentVariables(rawDefaultValue ?? "");
   return {
     key,
-    kind: kind ?? (isSecret ? "credential" : "plain"),
+    kind: kind ?? (isSecret ? "credential" : defaultKind),
     label: readString(record.label) ?? key,
     required: readBoolean(record.required) ?? readBoolean(record.isRequired) ?? true,
     secret: isSecret,
     description: readString(record.description),
+    defaultValue: isSecret || substitutionUnsupported ? undefined : rawDefaultValue,
+    substitutionUnsupported,
   };
 }
 
@@ -878,6 +972,8 @@ function mergeInputRequirements(inputs: McpInputRequirement[]): McpInputRequirem
           required: existing.required || input.required,
           secret: existing.secret || input.secret,
           kind: existing.kind === "credential" || input.kind === "credential" ? "credential" : existing.kind,
+          defaultValue: existing.defaultValue ?? input.defaultValue,
+          substitutionUnsupported: existing.substitutionUnsupported || input.substitutionUnsupported,
         }
       : input);
   }
@@ -1091,13 +1187,46 @@ function findExecutableOnPath(command: string, env: Record<string, string | unde
 
 function validateRuntimeCommand(command: string): { ok: true } | { ok: false; detail: string } {
   if (!command.trim()) return { ok: false, detail: "Runtime command is empty." };
-  if (/[\r\n;&|`$<>]/.test(command)) {
+  if (/[\r\n;&|`$<>^%!"()]/.test(command)) {
     return {
       ok: false,
       detail: "Runtime command contains characters that are not allowed in passive readiness checks.",
     };
   }
   return { ok: true };
+}
+
+function validateRuntimeArgument(arg: string): { ok: true } | { ok: false; detail: string } {
+  if (/[\r\n;&|`<>^%!"()]/.test(arg)) {
+    return {
+      ok: false,
+      detail: "Runtime argument contains characters that are not allowed in generated MCP config.",
+    };
+  }
+  return { ok: true };
+}
+
+function unsupportedRemoteInputShape(inputs: McpInputRequirement[]): string | null {
+  if (inputs.length === 0) return null;
+  if (inputs.length === 1) {
+    const input = inputs[0];
+    if (input.required && input.secret && input.kind === "credential") return null;
+  }
+  return "Remote MCP targets can only project public remotes or one required Authorization credential today.";
+}
+
+function withLegacyCredentialFallback(
+  target: McpInstallTarget,
+  inputs: Record<string, string | undefined> | undefined,
+  apiKey: string | null | undefined,
+): Record<string, string | undefined> | undefined {
+  if (!apiKey) return inputs;
+  const effective = { ...(inputs ?? {}) };
+  const requiredSecrets = target.inputs.filter((input) => input.required && input.secret);
+  if (requiredSecrets.length !== 1) return effective;
+  const secret = requiredSecrets[0];
+  if (!inputProvided(secret.key, effective)) effective[secret.key] = apiKey;
+  return effective;
 }
 
 function isPathLike(command: string): boolean {
@@ -1214,6 +1343,11 @@ function hasArgumentVariables(arg: string): boolean {
   return /\{[^}]+\}|\$\{[^}]+\}|\$[A-Z_][A-Z0-9_]*/i.test(arg);
 }
 
+function hasDeclaredVariables(value: Record<string, unknown>): boolean {
+  const variables = asRecord(value.variables);
+  return !!variables && Object.keys(variables).length > 0;
+}
+
 function findHeaderValue(headers: Record<string, string> | undefined, needle: string): string | undefined {
   if (!headers) return undefined;
   const lowerNeedle = needle.toLowerCase();
@@ -1235,12 +1369,12 @@ function isInsecureRemoteUrl(url: string): boolean {
 
 function inputProvided(key: string, inputs: Record<string, string | undefined> | undefined): boolean {
   const value = inputs?.[key];
-  return typeof value === "string" && value.length > 0;
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function envValuePresent(key: string, env: Record<string, string | undefined>): boolean {
   const value = env[key];
-  return typeof value === "string" && value.length > 0;
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function normalizeCommandName(command: string): string {

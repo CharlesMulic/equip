@@ -20,6 +20,7 @@ import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
 import type { SkillManifestOwnerSource } from "../skill-manifest";
 import type { SkillConfig } from "../skills";
 import type { HookDefinition } from "../hooks";
+import { assessMcpInstallability, type McpInstallTarget } from "../mcp-readiness";
 
 /**
  * The minimal augment-shaped input writeAugmentDefAndApply consumes.
@@ -366,6 +367,69 @@ export function writeAugmentDefAndApply(
 /**
  * Run a direct-mode install for an augment fetched from the registry.
  */
+async function resolveRequiredMcpInstallInputs(
+  toolName: string,
+  target: McpInstallTarget,
+  parsedArgs: ParsedArgs,
+  providedInputs: Record<string, string | undefined>,
+  apiKey: string | null,
+): Promise<Record<string, string | undefined>> {
+  const inputs = { ...providedInputs };
+  const effectiveInputs = effectiveMcpInputsForInstall(target, inputs, apiKey);
+  const report = assessMcpInstallability(target, { inputs: effectiveInputs });
+
+  if (report.status === "unsupported") {
+    cli.fail(report.findings.find((finding) => finding.severity === "blocked")?.message || report.summary);
+    for (const finding of report.findings.filter((entry) => entry.remediation)) {
+      cli.log(`  ${cli.DIM}${finding.remediation}${cli.RESET}`);
+    }
+    process.exit(1);
+  }
+
+  const missing = report.requiredInputs.filter((input) => !effectiveInputs[input.key]?.trim());
+  if (missing.length === 0) return inputs;
+
+  if (parsedArgs.nonInteractive || !process.stdin.isTTY) {
+    cli.fail(`${toolName} requires MCP install input${missing.length === 1 ? "" : "s"}: ${missing.map((input) => input.key).join(", ")}`);
+    cli.log(`  ${cli.DIM}Use --mcp-input KEY=VALUE for non-secret values or --mcp-input-file KEY=path for secrets.${cli.RESET}`);
+    process.exit(1);
+  }
+
+  for (const input of missing) {
+    const label = input.label || input.key;
+    const value = input.secret
+      ? await cli.promptSecret(`  ${label}: `)
+      : await cli.prompt(`  ${label}: `);
+    if (!value.trim()) {
+      cli.fail(`${label} is required to install ${toolName}`);
+      process.exit(1);
+    }
+    inputs[input.key] = value.trim();
+  }
+
+  cli.ok(`Collected ${missing.length} MCP install value${missing.length === 1 ? "" : "s"}`);
+  return inputs;
+}
+
+function effectiveMcpInputsForInstall(
+  target: McpInstallTarget,
+  inputs: Record<string, string | undefined>,
+  apiKey: string | null,
+): Record<string, string | undefined> {
+  const effective = { ...inputs };
+  if (!apiKey) return effective;
+
+  const requiredSecrets = target.inputs.filter((input) => input.required && input.secret);
+  if (requiredSecrets.length !== 1) return effective;
+
+  const secret = requiredSecrets[0];
+  if (!effective[secret.key]?.trim()) effective[secret.key] = apiKey;
+  if (target.kind === "stdio" && target.envKey && !effective[target.envKey]?.trim()) {
+    effective[target.envKey] = apiKey;
+  }
+  return effective;
+}
+
 export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, equipVersion: string): Promise<void> {
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
   const dryRun = parsedArgs.dryRun;
@@ -423,7 +487,18 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   }
 
   // ── Platform Detection ──
-  const config = registryDefToConfig(toolDef, { logger });
+  let mcpInstallInputs: Record<string, string | undefined> = { ...parsedArgs.mcpInputs };
+  let config = registryDefToConfig(toolDef, { logger, mcpInstallInputs, apiKey });
+  if (config.mcpInstallTarget) {
+    mcpInstallInputs = await resolveRequiredMcpInstallInputs(
+      toolDef.name,
+      config.mcpInstallTarget,
+      parsedArgs,
+      mcpInstallInputs,
+      apiKey,
+    );
+    config = registryDefToConfig(toolDef, { logger, mcpInstallInputs, apiKey });
+  }
   config.equipVersion = equipVersion;
   const equip = new Augment(config);
   let platforms = equip.detect();

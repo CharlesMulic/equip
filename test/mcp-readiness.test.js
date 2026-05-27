@@ -76,6 +76,109 @@ describe("registryDefToMcpInstallTargets", () => {
     assert.equal(assessMcpInstallability(target).status, "needs-input");
   });
 
+  it("treats required plain env and multiple secrets as structured inputs", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "multi-input-demo",
+      title: "Multi Input Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        environmentVariables: [
+          { name: "TENANT_ID", isRequired: true, isSecret: false },
+          { name: "API_TOKEN", isRequired: true, isSecret: true },
+          { name: "SECOND_TOKEN", isRequired: true, isSecret: true },
+          { name: "REGION", isRequired: false, isSecret: false, default: "us" },
+        ],
+      }],
+    });
+
+    assert.equal(assessMcpInstallability(target).status, "needs-input");
+    assert.deepEqual(
+      assessMcpInstallability(target).requiredInputs.map((input) => input.key),
+      ["TENANT_ID", "API_TOKEN", "SECOND_TOKEN"],
+    );
+    assert.equal(assessMcpInstallability(target, {
+      inputs: {
+        TENANT_ID: "tenant-1",
+        API_TOKEN: "secret-1",
+        SECOND_TOKEN: "secret-2",
+      },
+    }).status, "installable");
+  });
+
+  it("adds literal package arguments and version pins to package projections", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "package-args-demo",
+      title: "Package Args Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        version: "1.2.3",
+        packageArguments: [
+          { type: "named", name: "--mode", default: "readonly" },
+        ],
+      }],
+    });
+
+    assert.equal(target.kind, "stdio");
+    assert.deepEqual(target.args, ["-y", "@example/mcp-server@1.2.3", "--mode", "readonly"]);
+  });
+
+  it("keeps package argument variables unsupported until substitution lands", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "package-arg-var-demo",
+      title: "Package Arg Var Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        packageArguments: [
+          { type: "named", name: "--workspace", value: "{WORKSPACE_ID}", variables: { WORKSPACE_ID: { isRequired: true } } },
+        ],
+      }],
+    });
+
+    assert.equal(target.kind, "unsupported");
+    assert.equal(target.reasonCode, "arg-variables-unsupported");
+  });
+
+  it("blocks unsafe literal package arguments before config output", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "unsafe-package-arg-demo",
+      title: "Unsafe Package Arg Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        packageArguments: [
+          { type: "named", name: "--mode", value: "safe & echo unsafe" },
+        ],
+      }],
+    });
+
+    const report = assessMcpInstallability(target);
+    const result = buildMcpConfigForInstallTarget(target, "claude-code");
+
+    assert.equal(report.status, "unsupported");
+    assert.equal(report.findings.some((finding) => finding.code === "stdio-arg-unsafe"), true);
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "stdio-arg-unsafe");
+  });
+
   it("reports package-launched HTTP as unsupported", () => {
     const [target] = registryDefToMcpInstallTargets({
       name: "http-package",
@@ -145,6 +248,59 @@ describe("registryDefToMcpInstallTargets", () => {
     assert.equal(report.findings.some((finding) => finding.code === "static-authorization-header-unsupported"), true);
   });
 
+  it("keeps remote targets with unprojectable inputs unsupported even when values are supplied", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "remote-multi-input-demo",
+      title: "Remote Multi Input Demo",
+      description: "",
+      installMode: "direct",
+      installTargets: [{
+        targetKind: "remote",
+        transport: "streamable-http",
+        url: "https://example.com/mcp",
+        inputs: [
+          { key: "TENANT_ID", required: true, secret: false },
+          { key: "API_TOKEN", required: true, secret: true },
+        ],
+      }],
+    });
+
+    const report = assessMcpInstallability(target, {
+      inputs: { TENANT_ID: "tenant-1", API_TOKEN: "secret" },
+    });
+    const result = buildMcpConfigForInstallTarget(target, "codex", {
+      inputs: { TENANT_ID: "tenant-1", API_TOKEN: "secret" },
+    });
+
+    assert.equal(report.status, "unsupported");
+    assert.equal(report.findings.some((finding) => finding.code === "remote-input-shape-unsupported"), true);
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "remote-input-shape-unsupported");
+  });
+
+  it("blocks templated input defaults until substitution lands", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "templated-default-demo",
+      title: "Templated Default Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        environmentVariables: [
+          { name: "TENANT_URL", isRequired: true, isSecret: false, default: "https://${TENANT}.example.com", variables: { TENANT: { required: true } } },
+        ],
+      }],
+    });
+
+    const report = assessMcpInstallability(target);
+
+    assert.equal(report.status, "unsupported");
+    assert.equal(report.findings.some((finding) => finding.code === "input-variables-unsupported"), true);
+  });
+
   it("blocks credentialed non-local HTTP remote targets", () => {
     const [target] = registryDefToMcpInstallTargets({
       name: "insecure-auth-demo",
@@ -200,6 +356,32 @@ describe("selectPreferredMcpInstallTarget", () => {
     assert.equal(selected.kind, "stdio");
     assert.equal(assessMcpInstallability(selected).status, "needs-input");
   });
+
+  it("considers legacy apiKey fallback while selecting a preferred target", () => {
+    const selected = registryDefToPreferredMcpInstallTarget({
+      name: "auth-remote-plus-stdio",
+      title: "Auth Remote Plus Stdio",
+      description: "",
+      installMode: "direct",
+      installTargets: [
+        {
+          targetKind: "remote",
+          transport: "streamable-http",
+          url: "https://example.com/mcp",
+          inputs: [{ key: "API_TOKEN", kind: "credential", required: true, secret: true }],
+        },
+        {
+          targetKind: "stdio",
+          transport: { type: "stdio" },
+          command: "npx",
+          args: ["-y", "@example/mcp-server"],
+        },
+      ],
+    }, { apiKey: "legacy-key" });
+
+    assert.equal(selected.kind, "remote");
+    assert.equal(selected.transport, "streamable-http");
+  });
 });
 
 describe("buildMcpConfigForInstallTarget", () => {
@@ -218,6 +400,29 @@ describe("buildMcpConfigForInstallTarget", () => {
     assert.equal(result.success, true);
     assert.equal(result.entry.url, "https://example.com/mcp");
     assert.equal(result.entry.http_headers.Authorization, "Bearer ask_test");
+  });
+
+  it("prefers explicit structured remote credential over legacy apiKey fallback", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "remote-auth",
+      title: "Remote Auth",
+      description: "",
+      installMode: "direct",
+      installTargets: [{
+        targetKind: "remote",
+        transport: "streamable-http",
+        url: "https://example.com/mcp",
+        inputs: [{ key: "API_TOKEN", kind: "credential", required: true, secret: true }],
+      }],
+    });
+
+    const result = buildMcpConfigForInstallTarget(target, "codex", {
+      apiKey: "legacy-token",
+      inputs: { API_TOKEN: "explicit-token" },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.entry.http_headers.Authorization, "Bearer explicit-token");
   });
 
   it("returns structured unsupported output for SSE targets", () => {
@@ -321,6 +526,59 @@ describe("buildMcpConfigForInstallTarget", () => {
     assert.equal(result.status, "needs-input");
     assert.equal(result.requiredInputs[0].key, "EXAMPLE_TOKEN");
   });
+
+  it("writes all provided stdio env inputs and non-secret defaults", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "multi-input-demo",
+      title: "Multi Input Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        environmentVariables: [
+          { name: "TENANT_ID", isRequired: true, isSecret: false },
+          { name: "API_TOKEN", isRequired: true, isSecret: true },
+          { name: "SECOND_TOKEN", isRequired: true, isSecret: true },
+          { name: "REGION", isRequired: false, isSecret: false, default: "us" },
+        ],
+      }],
+    });
+
+    const result = buildMcpConfigForInstallTarget(target, "claude-code", {
+      inputs: {
+        TENANT_ID: "tenant-1",
+        API_TOKEN: "secret-1",
+        SECOND_TOKEN: "secret-2",
+      },
+      apiKey: "legacy-single-key",
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.entry.env.TENANT_ID, "tenant-1");
+    assert.equal(result.entry.env.API_TOKEN, "secret-1");
+    assert.equal(result.entry.env.SECOND_TOKEN, "secret-2");
+    assert.equal(result.entry.env.REGION, "us");
+  });
+
+  it("rejects unsafe stdio commands before writing config", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "unsafe-command-demo",
+      title: "Unsafe Command Demo",
+      description: "",
+      installMode: "direct",
+      transport: "stdio",
+      stdioCommand: "node & echo unsafe",
+      stdioArgs: ["server.js"],
+    });
+
+    const result = buildMcpConfigForInstallTarget(target, "claude-code");
+
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "stdio-command-unsafe");
+  });
 });
 
 describe("deriveMcpRuntimeRequirements", () => {
@@ -357,6 +615,28 @@ describe("deriveMcpRuntimeRequirements", () => {
     const requirements = deriveMcpRuntimeRequirements(target);
 
     assert.deepEqual(requirements.map((req) => req.key), ["docker-cli", "docker-daemon"]);
+  });
+
+  it("does not require caller input for defaulted non-secret env values", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "default-env-demo",
+      title: "Default Env Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        environmentVariables: [
+          { name: "REGION", isRequired: true, isSecret: false, default: "us" },
+        ],
+      }],
+    });
+
+    const requirements = deriveMcpRuntimeRequirements(target);
+
+    assert.equal(requirements.some((req) => req.key === "input:REGION"), false);
   });
 });
 

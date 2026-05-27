@@ -24,6 +24,7 @@ describe("parseArgs", () => {
     assert.strictEqual(result.verbose, false);
     assert.strictEqual(result.dryRun, false);
     assert.strictEqual(result.apiKey, null);
+    assert.deepStrictEqual(result.mcpInputs, {});
     assert.strictEqual(result.nonInteractive, false);
     assert.strictEqual(result.platform, null);
     assert.strictEqual(result.allowUnreviewed, false);
@@ -88,6 +89,23 @@ describe("parseArgs", () => {
     try {
       const result = parseArgs(["--api-key-file", tmpFile]);
       assert.strictEqual(result.apiKey, "sk-from-file-abc");
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
+
+  it("parses repeatable MCP install inputs", () => {
+    const tmpFile = path.join(os.tmpdir(), `equip-test-mcp-input-${Date.now()}.txt`);
+    fs.writeFileSync(tmpFile, "  secret-from-file  \n");
+    try {
+      const result = parseArgs([
+        "--mcp-input", "PLAIN=value",
+        "--mcp-input-file", `SECRET=${tmpFile}`,
+      ]);
+      assert.deepStrictEqual(result.mcpInputs, {
+        PLAIN: "value",
+        SECRET: "secret-from-file",
+      });
     } finally {
       fs.unlinkSync(tmpFile);
     }
@@ -220,6 +238,8 @@ describe("equip CLI", () => {
     assert.match(output, /<augment>/);
     assert.match(output, /--verbose/);
     assert.match(output, /--api-key-file <path>/);
+    assert.match(output, /--mcp-input KEY=VALUE/);
+    assert.match(output, /--mcp-input-file KEY=path/);
     assert.match(output, /shell history\/process lists/);
     assert.match(output, /loadout/);
     assert.match(output, /Telemetry/);

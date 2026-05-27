@@ -79,6 +79,8 @@ function cmdHelp(): void {
   console.log("  --verbose        Show detailed logging");
   console.log("  --api-key-file <path>  Read API key from a file (recommended for CI and shell safety)");
   console.log("  --api-key <key>        Provide API key directly (may expose it in shell history/process lists)");
+  console.log("  --mcp-input KEY=VALUE       Provide a declared MCP install value");
+  console.log("  --mcp-input-file KEY=path   Read a declared MCP install value from a file (recommended for secrets)");
   console.log("  --platform <p>   Target specific platform(s), comma-separated");
   console.log("  --dry-run        Preview without writing");
   console.log("  --allow-unreviewed  Explicitly install a visible but unreviewed MCP augment");

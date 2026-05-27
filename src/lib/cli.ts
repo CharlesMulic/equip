@@ -128,6 +128,8 @@ export interface ParsedArgs {
   verbose: boolean;
   dryRun: boolean;
   apiKey: string | null;
+  /** Caller-provided MCP install target inputs, keyed by declared input/env/header name. */
+  mcpInputs: Record<string, string>;
   nonInteractive: boolean;
   platform: string | null;
   /** Cross-augment skill collision: overwrite an existing skill owned by another augment. */
@@ -154,7 +156,7 @@ export interface ParsedArgs {
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, allowUnreviewed: false, deleteAdded: false, preserveAdded: false, json: false, operationId: null, planHash: null };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, mcpInputs: {}, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, allowUnreviewed: false, deleteAdded: false, preserveAdded: false, json: false, operationId: null, planHash: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
@@ -175,10 +177,34 @@ export function parseArgs(argv: string[]): ParsedArgs {
       try { args.apiKey = fs.readFileSync(argv[++i], "utf-8").trim(); }
       catch (e) { process.stderr.write(`Error reading API key file: ${(e as Error).message}\n`); process.exit(1); }
     }
+    else if (a === "--mcp-input" && i + 1 < argv.length) {
+      const parsed = parseKeyValue(argv[++i], "--mcp-input");
+      args.mcpInputs[parsed.key] = parsed.value;
+    }
+    else if (a === "--mcp-input-file" && i + 1 < argv.length) {
+      const parsed = parseKeyValue(argv[++i], "--mcp-input-file");
+      try { args.mcpInputs[parsed.key] = fs.readFileSync(parsed.value, "utf-8").trim(); }
+      catch (e) { process.stderr.write(`Error reading MCP input file for ${parsed.key}: ${(e as Error).message}\n`); process.exit(1); }
+    }
     else if (a === "--platform" && i + 1 < argv.length) { args.platform = argv[++i]; }
     else { args._.push(a); }
   }
   return args;
+}
+
+function parseKeyValue(spec: string, flag: string): { key: string; value: string } {
+  const index = spec.indexOf("=");
+  if (index <= 0) {
+    process.stderr.write(`Error: ${flag} expects KEY=VALUE\n`);
+    process.exit(1);
+  }
+  const key = spec.slice(0, index).trim();
+  const value = spec.slice(index + 1);
+  if (!key || /[\r\n]/.test(key)) {
+    process.stderr.write(`Error: ${flag} has an invalid key\n`);
+    process.exit(1);
+  }
+  return { key, value };
 }
 
 /** Check if argument looks like a local file/directory path rather than a registry name. */
