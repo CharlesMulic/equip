@@ -20,7 +20,13 @@ import { validateUrlScheme, isTrustedCredentialHost } from "../validation";
 import type { SkillManifestOwnerSource } from "../skill-manifest";
 import type { SkillConfig } from "../skills";
 import type { HookDefinition } from "../hooks";
-import { assessMcpInstallability, type McpInstallTarget } from "../mcp-readiness";
+import {
+  assessMcpInstallability,
+  assessMcpRuntimeReadiness,
+  type McpInstallTarget,
+  type McpRuntimeReadinessCheck,
+  type McpRuntimeReadinessReport,
+} from "../mcp-readiness";
 
 /**
  * The minimal augment-shaped input writeAugmentDefAndApply consumes.
@@ -430,6 +436,69 @@ function effectiveMcpInputsForInstall(
   return effective;
 }
 
+async function enforceMcpRuntimePreflight(
+  toolName: string,
+  target: McpInstallTarget,
+  parsedArgs: ParsedArgs,
+  inputs: Record<string, string | undefined>,
+  apiKey: string | null,
+): Promise<void> {
+  const effectiveInputs = effectiveMcpInputsForInstall(target, inputs, apiKey);
+  const report = await assessMcpRuntimeReadiness(target, {
+    inputs: effectiveInputs,
+    allowDockerDaemonProbe: true,
+  });
+
+  if (report.status === "not-needed") return;
+  if (report.status === "ready") {
+    cli.ok(`Local runtime ready for ${toolName}`);
+    return;
+  }
+
+  if (report.status === "not-checked") {
+    cli.warn(report.summary);
+    logRuntimeReadinessDetails(report);
+    return;
+  }
+
+  if (parsedArgs.dryRun) {
+    cli.warn(`${toolName} runtime is not ready: ${report.summary}`);
+    logRuntimeReadinessDetails(report);
+    return;
+  }
+
+  if (parsedArgs.force) {
+    cli.warn(`${toolName} runtime is not ready; continuing because --force was supplied.`);
+    logRuntimeReadinessDetails(report);
+    return;
+  }
+
+  cli.fail(`${toolName} runtime is not ready: ${report.summary}`);
+  logRuntimeReadinessDetails(report);
+  cli.log(`  ${cli.DIM}Install the missing runtime or re-run with --force to write config anyway.${cli.RESET}`);
+  process.exit(1);
+}
+
+function logRuntimeReadinessDetails(report: McpRuntimeReadinessReport): void {
+  const actionable = report.checks.filter((check) =>
+    check.status !== "ready" && check.status !== "not-applicable"
+  );
+  const checks = actionable.length > 0 ? actionable : report.checks;
+  for (const check of checks) {
+    const prefix = runtimeCheckPrefix(check);
+    cli.log(`  ${prefix}${check.requirement.label}: ${check.detail}${cli.RESET}`);
+    if (check.remediation) {
+      cli.log(`  ${cli.DIM}${check.remediation}${cli.RESET}`);
+    }
+  }
+}
+
+function runtimeCheckPrefix(check: McpRuntimeReadinessCheck): string {
+  if (check.status === "ready") return cli.GREEN;
+  if (check.status === "missing" || check.status === "unreachable" || check.status === "needs-input") return cli.RED;
+  return cli.YELLOW;
+}
+
 export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, equipVersion: string): Promise<void> {
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
   const dryRun = parsedArgs.dryRun;
@@ -498,6 +567,15 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
       apiKey,
     );
     config = registryDefToConfig(toolDef, { logger, mcpInstallInputs, apiKey });
+    if (config.mcpInstallTarget) {
+      await enforceMcpRuntimePreflight(
+        toolDef.name,
+        config.mcpInstallTarget,
+        parsedArgs,
+        mcpInstallInputs,
+        apiKey,
+      );
+    }
   }
   config.equipVersion = equipVersion;
   const equip = new Augment(config);

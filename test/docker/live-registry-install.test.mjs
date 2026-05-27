@@ -704,6 +704,7 @@ test("live MCP registry cases can be projected and installed into fake platform 
   const supported = fetched.filter(item => item.support === "install");
   assert.ok(supported.length >= 5, "spike should exercise several installable live registry cases");
   const runtimeReadiness = await assessRuntimeReadiness(supported);
+  const runtimeReadinessByInstallName = new Map(runtimeReadiness.map(item => [item.installName, item]));
   if (process.env.EQUIP_MCP_REGISTRY_REQUIRE_RUNTIME_PREFLIGHT === "1") {
     for (const readiness of runtimeReadiness) {
       assert.equal(
@@ -764,6 +765,11 @@ test("live MCP registry cases can be projected and installed into fake platform 
       platforms.join(","),
       "--non-interactive",
     ];
+    const readiness = runtimeReadinessByInstallName.get(item.installName);
+    const forceDockerConfigOnly = item.def.stdioCommand === "docker" && readiness?.daemonReachable === false;
+    if (forceDockerConfigOnly) {
+      args.push("--force");
+    }
     let apiKeyFile = null;
     if (item.credential?.apiKey) {
       apiKeyFile = path.join(workspaceRoot, `${item.id}.key`);
@@ -774,6 +780,10 @@ test("live MCP registry cases can be projected and installed into fake platform 
     const result = await runCli(args, env);
     assert.equal(result.code, 0, `${item.id} failed:\n${result.output}`);
     assert.match(result.output, /Done\./, `${item.id} should complete`);
+    if (forceDockerConfigOnly) {
+      assert.match(result.output, /runtime is not ready/i, `${item.id} should explain the Docker daemon preflight override`);
+      assert.match(result.output, /--force/i, `${item.id} should make the forced runtime override visible`);
+    }
     if (item.credential?.apiKey) {
       assert.doesNotMatch(result.output, new RegExp(item.credential.apiKey), `${item.id} must not echo fixture credentials`);
       assert.ok(apiKeyFile, `${item.id} should use an api key file`);

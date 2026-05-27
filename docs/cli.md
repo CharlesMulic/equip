@@ -39,6 +39,8 @@ Disabled platforms are automatically skipped.
 
 Some MCP augments declare structured install inputs such as environment variables or remote credentials. Use repeatable `--mcp-input KEY=VALUE` for non-secret values and `--mcp-input-file KEY=path` for secrets. Values are applied to the generated platform MCP config; secrets are not written to Equip's registry cache.
 
+Before writing config for stdio MCP servers, Equip checks the local runtime it can infer from the selected target. Remote MCP servers do not need a local runtime. Stdio targets may require `npx`, `uvx`, Docker, or a direct executable on `PATH`. A missing required runtime blocks a normal install with remediation text; `--dry-run` reports the issue without writing, and `--force` writes the config anyway when you deliberately want to configure first and install the runtime later. Equip does not run arbitrary third-party MCP server code during install.
+
 If the API is unreachable, equip falls back to a registry-scoped local cache under `~/.equip/cache/registries/`.
 
 ### `equip` (no arguments)
@@ -195,7 +197,10 @@ Run the built-in interactive demo that walks through building an augment.
 | `--dry-run` | Preview what would happen without writing any files |
 | `--api-key-file <path>` | Read API key from a file. Recommended for CI and safer than putting secrets in shell history. |
 | `--api-key <key>` | Provide API key directly. Convenient, but may expose the key in shell history or process lists. |
+| `--mcp-input KEY=VALUE` | Provide a declared MCP install value such as a required non-secret env var. Repeatable. |
+| `--mcp-input-file KEY=path` | Read a declared MCP install value from a file. Recommended for MCP secrets. Repeatable. |
 | `--platform <name>` | Target specific platform(s), comma-separated (e.g., `claude,cursor`) |
+| `--force` | Allow supported commands to continue past a blocking safety or readiness gate when the command explicitly documents that behavior. For MCP stdio runtime preflight, this writes config even if the runtime is missing. |
 | `--delete-added` | Snapshot restore policy: remove regular files that did not exist in the target snapshot |
 | `--preserve-added` | Snapshot restore policy: preserve files that did not exist in the target snapshot (default) |
 | `--json` | Emit machine-readable JSON for commands that support it |

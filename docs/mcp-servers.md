@@ -165,6 +165,19 @@ Remote targets use `targetKind: "remote"`, `transport: "streamable-http"`, and `
 
 Values for required inputs come from prompts, `--mcp-input KEY=VALUE`, `--mcp-input-file KEY=path`, or a caller-provided `mcpInstallInputs` map. Definition files should describe required values, not contain raw user secrets.
 
+## Runtime Preflight
+
+Equip separates "can this target be represented in platform config?" from "can this machine run the local process later?"
+
+Remote MCP targets normally need no local runtime, so install can proceed once URL/auth config is representable. Stdio MCP targets run as local subprocesses managed by the agent platform, so Equip checks the inferred runtime before writing config:
+
+- npm stdio: Node plus `npx`
+- PyPI stdio: `uvx`
+- OCI/Docker stdio: Docker CLI plus Docker daemon reachability when the check is explicitly requested
+- direct command stdio: the command must be visible on `PATH`
+
+Runtime checks are preflight checks only. They do not initialize the MCP server, call tools, read resources, or execute arbitrary package code. The CLI blocks normal installs when required runtimes are missing, allows `--dry-run` reporting, and allows a deliberate `--force` install. Desktop callers should run the readiness API before install and pass collected values through `mcpInstallInputs`; the sidecar also rejects installs when the selected stdio runtime is not ready.
+
 ## How `installMcp` Works
 
 ### Atomic Writes

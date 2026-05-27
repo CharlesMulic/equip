@@ -24,6 +24,7 @@ const AUTH_FIXTURE_NAME = "demo-direct-install-auth";
 const HASH_MATCH_FIXTURE_NAME = "demo-direct-install-hash-match";
 const HASH_ALGORITHM_MISMATCH_FIXTURE_NAME = "demo-direct-install-hash-algorithm-mismatch";
 const UNREVIEWED_FIXTURE_NAME = "demo-direct-install-unreviewed";
+const STDIO_MISSING_RUNTIME_FIXTURE_NAME = "demo-stdio-missing-runtime";
 
 function tmpPath(prefix = "reg-test") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -115,6 +116,19 @@ function startFixtureRegistry() {
             status: "synced-unreviewed",
             reviewStatus: "unreviewed",
             trustTier: "unscanned",
+          }),
+          [STDIO_MISSING_RUNTIME_FIXTURE_NAME]: buildFixture(origin, STDIO_MISSING_RUNTIME_FIXTURE_NAME, {
+            title: "Demo Stdio Missing Runtime",
+            transport: "stdio",
+            serverUrl: undefined,
+            installTargets: [{
+              targetKind: "stdio",
+              transport: "stdio",
+              command: "missing-equip-runtime-test",
+              args: ["server"],
+            }],
+            rules: undefined,
+            skills: [],
           }),
         };
 
@@ -912,6 +926,20 @@ describe("direct-mode CLI", () => {
     assert.equal(allowed.code, 0, allowed.output);
     assert.match(allowed.output, /continuing with an unreviewed MCP augment/);
     assert.match(allowed.output, /Done\./);
+  });
+
+  it("blocks stdio installs when the local runtime is missing", async () => {
+    const result = await runEquip([
+      STDIO_MISSING_RUNTIME_FIXTURE_NAME,
+      "--platform",
+      "codex",
+    ], cliEnv);
+
+    assert.equal(result.code, 1, result.output);
+    assert.match(result.output, /runtime is not ready/);
+    assert.match(result.output, /missing-equip-runtime-test/);
+    assert.match(result.output, /--force/);
+    assert.equal(fs.existsSync(path.join(codexHome, "config.toml")), false, "Runtime failure should not write Codex config");
   });
 });
 

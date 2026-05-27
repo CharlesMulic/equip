@@ -25,7 +25,7 @@ The harness:
 
 Retained live cases live in `test/docker/fixtures/live-mcp-registry-cases.json`. The fixture intentionally uses `latest` registry versions so it acts as a live canary/discovery harness. It is not deterministic regression evidence; when upstream metadata changes, the case list or support expectations should be reviewed intentionally.
 
-The Docker image includes Node/npm, `uvx`, and the Docker CLI. It does not mount a Docker daemon/socket by default, so OCI stdio entries are config-ready and CLI-ready, but not daemon-ready inside the canary container unless the caller supplies Docker access deliberately.
+The Docker image includes Node/npm, `uvx`, and the Docker CLI. It does not mount a Docker daemon/socket by default, so OCI stdio entries are config-ready and CLI-ready, but not daemon-ready inside the canary container unless the caller supplies Docker access deliberately. OCI cases use the CLI's documented `--force` path in this canary so the test can still prove platform config projection without running third-party containers.
 
 ## Registry Shape Sample
 
