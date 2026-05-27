@@ -110,6 +110,52 @@ On Windows, stdio commands are automatically wrapped with `cmd /c`:
 }
 ```
 
+## Structured Install Targets
+
+Registry definitions can provide `installTargets` when one augment has richer MCP install metadata than the legacy flat fields can express. Equip prefers `installTargets` when present and falls back to `serverUrl`, `stdioCommand`, `stdioArgs`, and `envKey` for older definitions.
+
+```json
+{
+  "name": "example-mcp",
+  "installTargets": [
+    {
+      "targetKey": "npm-stdio",
+      "targetKind": "stdio",
+      "transport": "stdio",
+      "registryType": "npm",
+      "identifier": "@example/my-mcp",
+      "version": "1.2.3",
+      "environmentVariables": [
+        { "key": "MY_API_KEY", "name": "MY_API_KEY", "kind": "env", "required": true, "secret": true },
+        { "key": "REGION", "name": "REGION", "kind": "env", "required": false, "secret": false, "default": "us" }
+      ]
+    }
+  ]
+}
+```
+
+For package stdio targets, Equip can project:
+
+- `registryType: "npm"` to `npx -y <identifier>@<version>`
+- `registryType: "pypi"` to `uvx <identifier>==<version>`
+- `registryType: "oci"` or `"docker"` to `docker run --rm -i <identifier>`
+
+Remote targets use `targetKind: "remote"`, `transport: "streamable-http"`, and `url`. A single required secret credential input is supported for standard Authorization bearer configuration:
+
+```json
+{
+  "targetKey": "remote-auth",
+  "targetKind": "remote",
+  "transport": "streamable-http",
+  "url": "https://api.example.com/mcp",
+  "inputs": [
+    { "key": "Authorization", "kind": "credential", "label": "API token", "required": true, "secret": true }
+  ]
+}
+```
+
+Values for required inputs come from prompts, `--mcp-input KEY=VALUE`, `--mcp-input-file KEY=path`, or a caller-provided `mcpInstallInputs` map. Definition files should describe required values, not contain raw user secrets.
+
 ## How `installMcp` Works
 
 ### Atomic Writes

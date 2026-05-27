@@ -26,6 +26,8 @@ equip demo-fetch                   # Install demo-fetch augment
 equip prior --platform claude      # Install on Claude Code only
 equip prior --api-key-file ./.prior.key  # Read API key from a file (recommended)
 equip prior --api-key ask_xxx      # Provide API key directly (may expose it locally)
+equip prior --mcp-input REGION=us  # Provide a declared MCP install value
+equip prior --mcp-input-file API_KEY=./secret.txt  # Read a declared MCP value from a file
 equip prior --dry-run              # Preview without writing
 equip prior --verbose              # Show detailed logging
 equip prior --non-interactive      # No prompts (fail if info missing)
@@ -34,6 +36,8 @@ equip prior --non-interactive      # No prompts (fail if info missing)
 Equip fetches the augment definition from the registry API (`api.cg3.io/equip`), records the install in local state, and installs MCP config, rules, and skills across all detected enabled platforms.
 
 Disabled platforms are automatically skipped.
+
+Some MCP augments declare structured install inputs such as environment variables or remote credentials. Use repeatable `--mcp-input KEY=VALUE` for non-secret values and `--mcp-input-file KEY=path` for secrets. Values are applied to the generated platform MCP config; secrets are not written to Equip's registry cache.
 
 If the API is unreachable, equip falls back to a registry-scoped local cache under `~/.equip/cache/registries/`.
 
