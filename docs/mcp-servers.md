@@ -125,6 +125,13 @@ Registry definitions can provide `installTargets` when one augment has richer MC
       "registryType": "npm",
       "identifier": "@example/my-mcp",
       "version": "1.2.3",
+      "runtimeHint": "npx",
+      "runtimeArguments": [
+        { "type": "positional", "value": "--quiet" }
+      ],
+      "packageArguments": [
+        { "type": "positional", "value": "serve" }
+      ],
       "environmentVariables": [
         { "key": "MY_API_KEY", "name": "MY_API_KEY", "kind": "env", "required": true, "secret": true },
         { "key": "REGION", "name": "REGION", "kind": "env", "required": false, "secret": false, "default": "us" }
@@ -139,6 +146,8 @@ For package stdio targets, Equip can project:
 - `registryType: "npm"` to `npx -y <identifier>@<version>`
 - `registryType: "pypi"` to `uvx <identifier>==<version>`
 - `registryType: "oci"` or `"docker"` to `docker run --rm -i <identifier>`
+
+Use `runtimeArguments` for arguments to the runtime command and `packageArguments` for arguments to the MCP server package/binary. Literal `value` and non-secret `default` values are projected into the generated command. Arguments with variables or required values without defaults are recognized but blocked until structured substitution is available.
 
 Remote targets use `targetKind: "remote"`, `transport: "streamable-http"`, and `url`. A single required secret credential input is supported for standard Authorization bearer configuration:
 
