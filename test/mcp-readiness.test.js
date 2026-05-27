@@ -9,8 +9,13 @@ const {
   assessMcpRuntimeReadiness,
   deriveMcpRuntimeRequirements,
   registryDefToMcpInstallTargets,
+  registryDefToPreferredMcpInstallTarget,
+  selectPreferredMcpInstallTarget,
   summarizeMcpInstallTarget,
 } = require("../dist/lib/mcp-readiness");
+const {
+  buildMcpConfigForInstallTarget,
+} = require("../dist/lib/mcp");
 
 describe("registryDefToMcpInstallTargets", () => {
   it("normalizes flat remote HTTP definitions to streamable HTTP targets", () => {
@@ -118,6 +123,28 @@ describe("registryDefToMcpInstallTargets", () => {
     );
   });
 
+  it("blocks static Authorization headers from registry metadata", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "static-auth-demo",
+      title: "Static Auth Demo",
+      description: "",
+      installMode: "direct",
+      installTargets: [{
+        targetKind: "remote",
+        transport: "streamable-http",
+        url: "https://example.com/mcp",
+        headers: {
+          Authorization: "Bearer registry-secret",
+        },
+      }],
+    });
+
+    const report = assessMcpInstallability(target);
+
+    assert.equal(report.status, "unsupported");
+    assert.equal(report.findings.some((finding) => finding.code === "static-authorization-header-unsupported"), true);
+  });
+
   it("blocks credentialed non-local HTTP remote targets", () => {
     const [target] = registryDefToMcpInstallTargets({
       name: "insecure-auth-demo",
@@ -133,6 +160,166 @@ describe("registryDefToMcpInstallTargets", () => {
 
     assert.equal(report.status, "unsupported");
     assert.equal(report.findings.some((finding) => finding.code === "insecure-auth-url-unsupported"), true);
+  });
+});
+
+describe("selectPreferredMcpInstallTarget", () => {
+  it("prefers installable streamable HTTP over unsupported SSE", () => {
+    const targets = registryDefToMcpInstallTargets({
+      name: "multi-target",
+      title: "Multi Target",
+      description: "",
+      installMode: "direct",
+      installTargets: [
+        { targetKind: "remote", transport: "sse", url: "https://example.com/sse" },
+        { targetKind: "remote", transport: "streamable-http", url: "https://example.com/mcp" },
+      ],
+    });
+
+    const selected = selectPreferredMcpInstallTarget(targets);
+
+    assert.equal(selected.kind, "remote");
+    assert.equal(selected.transport, "streamable-http");
+  });
+
+  it("returns needs-input targets when they are the best supported option", () => {
+    const selected = registryDefToPreferredMcpInstallTarget({
+      name: "npm-auth-demo",
+      title: "npm Auth Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        environmentVariables: [{ name: "EXAMPLE_TOKEN", isRequired: true, isSecret: true }],
+      }],
+    });
+
+    assert.equal(selected.kind, "stdio");
+    assert.equal(assessMcpInstallability(selected).status, "needs-input");
+  });
+});
+
+describe("buildMcpConfigForInstallTarget", () => {
+  it("writes streamable HTTP config with platform auth shape", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "remote-auth",
+      title: "Remote Auth",
+      description: "",
+      installMode: "direct",
+      serverUrl: "https://example.com/mcp",
+      requiresAuth: true,
+    });
+
+    const result = buildMcpConfigForInstallTarget(target, "codex", { apiKey: "ask_test" });
+
+    assert.equal(result.success, true);
+    assert.equal(result.entry.url, "https://example.com/mcp");
+    assert.equal(result.entry.http_headers.Authorization, "Bearer ask_test");
+  });
+
+  it("returns structured unsupported output for SSE targets", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "sse-demo",
+      title: "SSE Demo",
+      description: "",
+      installMode: "direct",
+      transport: "sse",
+      serverUrl: "https://example.com/sse",
+    });
+
+    const result = buildMcpConfigForInstallTarget(target, "claude-code");
+
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, "remote-sse-unsupported");
+  });
+
+  it("writes npm stdio targets with provided env input", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "npm-auth-demo",
+      title: "npm Auth Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+        environmentVariables: [{ name: "EXAMPLE_TOKEN", isRequired: true, isSecret: true }],
+      }],
+    });
+
+    const result = buildMcpConfigForInstallTarget(target, "claude-code", {
+      inputs: { EXAMPLE_TOKEN: "secret" },
+    });
+
+    assert.equal(result.success, true);
+    if (process.platform === "win32") {
+      assert.equal(result.entry.command, "cmd");
+      assert.deepEqual(result.entry.args.slice(0, 4), ["/c", "npx", "-y", "@example/mcp-server"]);
+    } else {
+      assert.equal(result.entry.command, "npx");
+      assert.deepEqual(result.entry.args, ["-y", "@example/mcp-server"]);
+    }
+    assert.equal(result.entry.env.EXAMPLE_TOKEN, "secret");
+  });
+
+  it("writes PyPI and OCI stdio projections", () => {
+    const [pypi] = registryDefToMcpInstallTargets({
+      name: "pypi-demo",
+      title: "PyPI Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "pypi",
+        identifier: "example-mcp",
+      }],
+    });
+    const [oci] = registryDefToMcpInstallTargets({
+      name: "oci-demo",
+      title: "OCI Demo",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "oci",
+        identifier: "ghcr.io/example/mcp:1.0.0",
+      }],
+    });
+
+    const pypiResult = buildMcpConfigForInstallTarget(pypi, "claude-code");
+    const ociResult = buildMcpConfigForInstallTarget(oci, "claude-code");
+
+    assert.equal(pypiResult.success, true);
+    assert.equal(ociResult.success, true);
+    const pypiArgs = process.platform === "win32" ? pypiResult.entry.args.slice(1) : [pypiResult.entry.command, ...pypiResult.entry.args];
+    const ociArgs = process.platform === "win32" ? ociResult.entry.args.slice(1) : [ociResult.entry.command, ...ociResult.entry.args];
+    assert.deepEqual(pypiArgs, ["uvx", "example-mcp"]);
+    assert.deepEqual(ociArgs, ["docker", "run", "--rm", "-i", "ghcr.io/example/mcp:1.0.0"]);
+  });
+
+  it("reports missing input before writing stdio config", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "npm-auth-demo",
+      title: "npm Auth Demo",
+      description: "",
+      installMode: "direct",
+      transport: "stdio",
+      stdioCommand: "npx",
+      stdioArgs: ["-y", "@example/mcp-server"],
+      envKey: "EXAMPLE_TOKEN",
+    });
+
+    const result = buildMcpConfigForInstallTarget(target, "claude-code");
+
+    assert.equal(result.success, false);
+    assert.equal(result.status, "needs-input");
+    assert.equal(result.requiredInputs[0].key, "EXAMPLE_TOKEN");
   });
 });
 

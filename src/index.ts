@@ -5,7 +5,7 @@ import * as path from "path";
 import * as os from "os";
 
 import { detectPlatforms } from "./lib/detect";
-import { readMcpEntry, readMcpEntryDetailed, buildHttpConfig, buildHttpConfigWithAuth, buildStdioConfig, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
+import { readMcpEntry, readMcpEntryDetailed, buildHttpConfig, buildHttpConfigWithAuth, buildStdioConfig, buildMcpConfigForInstallTarget, installMcp, uninstallMcp, updateMcpKey } from "./lib/mcp";
 import { parseRulesVersion, installRules, uninstallRules, markerPatterns, wrapRulesContent, stripRulesMarkers, rulesContentHash } from "./lib/rules";
 import { validateToolName, validateRelativePath, validatePathWithinDir, validateHookDir, validateUrlScheme, isTrustedCredentialHost } from "./lib/validation";
 import { computeContentHash, extractManifest, type ContentManifest } from "./lib/content-hash";
@@ -24,6 +24,7 @@ import { readEquipMeta, writeEquipMeta, markEquipUpdated, markScanCompleted, upd
 import { createSnapshot, listSnapshots, readSnapshot, restoreSnapshot, deleteSnapshot, hasInitialSnapshot, ensureInitialSnapshots, pruneSnapshots, type Snapshot, type SnapshotSummary, type RestoreResult } from "./lib/snapshots";
 import { reconcileState } from "./lib/reconcile";
 import type { BrowserOpener } from "./lib/auth-engine";
+import type { McpInstallTarget } from "./lib/mcp-readiness";
 
 // ─── Equip Class ────────────────────────────────────────────
 
@@ -52,6 +53,10 @@ export interface AugmentConfig {
   source?: SkillManifestOwnerSource;
   /** npm package name (registry installs). */
   package?: string;
+  /** Normalized MCP registry install target selected for direct platform config output. */
+  mcpInstallTarget?: McpInstallTarget;
+  /** Caller-supplied non-auth target inputs for direct platform config output. */
+  mcpInstallInputs?: Record<string, string | undefined>;
   /** Equip CLI version recorded in per-skill manifests. Defaults to "unknown". */
   equipVersion?: string;
 }
@@ -71,6 +76,8 @@ class Augment {
   augmentVersion?: number;
   source: SkillManifestOwnerSource;
   package?: string;
+  mcpInstallTarget?: McpInstallTarget;
+  mcpInstallInputs: Record<string, string | undefined>;
   equipVersion?: string;
 
   constructor(config: AugmentConfig) {
@@ -87,6 +94,8 @@ class Augment {
     this.augmentVersion = config.augmentVersion;
     this.source = config.source || "local";
     this.package = config.package;
+    this.mcpInstallTarget = config.mcpInstallTarget;
+    this.mcpInstallInputs = config.mcpInstallInputs || {};
     this.equipVersion = config.equipVersion;
   }
 
@@ -95,6 +104,16 @@ class Augment {
   }
 
   buildConfig(platformId: string, apiKey: string | null, transport: string = "http"): Record<string, unknown> {
+    if (this.mcpInstallTarget) {
+      const result = buildMcpConfigForInstallTarget(this.mcpInstallTarget, platformId, {
+        apiKey,
+        inputs: this.mcpInstallInputs,
+      });
+      if (!result.success) {
+        throw new Error(`Equip: MCP target ${result.targetKey} is not installable: ${result.error}`);
+      }
+      return result.entry;
+    }
     if (transport === "stdio" && this.stdio) {
       const env: Record<string, string> = {};
       if (this.stdio.envKey && apiKey) env[this.stdio.envKey] = apiKey;

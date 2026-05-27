@@ -13,6 +13,7 @@ import { validateToolName, validateHookDir, validateUrlScheme } from "./validati
 import type { EquipLogger } from "./types";
 import { NOOP_LOGGER } from "./types";
 import type { AuthConfig } from "./auth-engine";
+import { registryDefToMcpInstallTargets, registryDefToPreferredMcpInstallTarget, type McpDefinitionInput } from "./mcp-readiness";
 
 // ─── API Configuration ─────────────────────────────────────
 
@@ -234,13 +235,7 @@ export function resolveRegistryInstallReviewGate(def: RegistryDef): RegistryInst
 }
 
 function registryDefHasMcp(def: RegistryDef): boolean {
-  return !!(
-    def.serverUrl ||
-    def.stdioCommand ||
-    def.transport === "http" ||
-    def.transport === "stdio" ||
-    def.transport === "streamable-http"
-  );
+  return registryDefToMcpInstallTargets(def as unknown as McpDefinitionInput).length > 0;
 }
 
 function normalizeReviewGateValue(value: string | null | undefined): string {
@@ -533,6 +528,20 @@ export function registryDefToConfig(def: RegistryDef, options?: { logger?: Equip
 
   if (def.serverUrl) {
     config.serverUrl = def.serverUrl;
+  }
+
+  const target = registryDefToPreferredMcpInstallTarget(def as unknown as McpDefinitionInput);
+  if (target) {
+    config.mcpInstallTarget = target;
+    if (target.kind === "remote") {
+      config.serverUrl = target.url;
+    } else if (target.kind === "stdio") {
+      config.stdio = {
+        command: target.command,
+        args: target.args,
+        envKey: target.envKey || "",
+      };
+    }
   }
 
   if (def.rules) {

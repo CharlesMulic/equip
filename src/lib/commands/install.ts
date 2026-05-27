@@ -36,6 +36,9 @@ export interface AugmentInput {
   serverUrl?: string;
   stdio?: { command: string; args: string[]; envKey?: string };
   envKey?: string;
+  installTargets?: unknown;
+  npmPackage?: string;
+  setupCommand?: string;
   requiresAuth?: boolean;
   rules?: { content: string; version: string; marker: string; fileName?: string };
   skills?: SkillConfig[];
@@ -128,7 +131,7 @@ export function apply(
   // is allowed to be rules-only or skills-only with no MCP server. Without
   // this gate, equip.installMcp → buildConfig() throws "serverUrl is required
   // for MCP installation" on the user-save propagation path.
-  const hasMcpServer = !!(equip.serverUrl || equip.stdio);
+  const hasMcpServer = !!(equip.serverUrl || equip.stdio || equip.mcpInstallTarget);
   const stepList: string[] = [];
   if (hasMcpServer) stepList.push("MCP Server");
   if (toolDef.rules) stepList.push("Behavioral Rules");

@@ -360,6 +360,60 @@ describe("registryDefToConfig", () => {
     assert.equal(config.stdio.envKey, "MY_API_KEY");
   });
 
+  it("selects package installTargets for Augment MCP config output", () => {
+    const def = {
+      name: "package-stdio",
+      title: "Package Stdio",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/package-stdio",
+        environmentVariables: [{ name: "EXAMPLE_TOKEN", isRequired: true, isSecret: true }],
+      }],
+    };
+
+    const config = registryDefToConfig(def);
+    const augment = new Augment(config);
+    const mcpConfig = augment.buildConfig("claude-code", "secret", "stdio");
+
+    assert.equal(config.mcpInstallTarget.kind, "stdio");
+    assert.equal(config.stdio.command, "npx");
+    if (process.platform === "win32") {
+      assert.deepEqual(mcpConfig.args.slice(0, 4), ["/c", "npx", "-y", "@example/package-stdio"]);
+    } else {
+      assert.equal(mcpConfig.command, "npx");
+      assert.deepEqual(mcpConfig.args, ["-y", "@example/package-stdio"]);
+    }
+    assert.equal(mcpConfig.env.EXAMPLE_TOKEN, "secret");
+  });
+
+  it("keeps unsupported installTargets visible to install errors", () => {
+    const def = {
+      name: "sse-registry",
+      title: "SSE Registry",
+      description: "",
+      installMode: "direct",
+      installTargets: [{
+        targetKind: "remote",
+        transport: "sse",
+        url: "https://example.com/sse",
+      }],
+    };
+
+    const config = registryDefToConfig(def);
+    const augment = new Augment(config);
+
+    assert.equal(config.mcpInstallTarget.kind, "remote");
+    assert.equal(config.mcpInstallTarget.transport, "sse");
+    assert.throws(
+      () => augment.buildConfig("claude-code", null),
+      /remote-sse-unsupported|SSE MCP transport/,
+    );
+  });
+
   it("converts tool with hooks", () => {
     const def = {
       name: "test",
@@ -432,6 +486,27 @@ describe("resolveRegistryInstallReviewGate", () => {
       status: "synced-unreviewed",
       reviewStatus: "unreviewed",
       trustTier: "unscanned",
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.equal(gate.code, "unreviewed");
+  });
+
+  it("gates registry package installTargets as MCP definitions", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "registry-package",
+      title: "Registry Package",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+      }],
+      trustTier: "unscanned",
+      reviewStatus: "unreviewed",
     });
 
     assert.equal(gate.allowed, false);

@@ -9,6 +9,13 @@ import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } fr
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
 import { JsonStore } from "./storage/datastore";
+import {
+  assessMcpInstallability,
+  type McpInstallTarget,
+  type McpInstallabilityStatus,
+  type McpInputRequirement,
+  type McpReadinessFinding,
+} from "./mcp-readiness";
 
 // ─── TOML Helpers (minimal, zero-dep) ───────────────────────
 
@@ -287,6 +294,174 @@ export function buildStdioConfig(command: string, args: string[], env: Record<st
     return { command: "cmd", args: ["/c", command, ...args], env };
   }
   return { command, args, env };
+}
+
+export interface BuildMcpConfigForInstallTargetOptions {
+  apiKey?: string | null;
+  inputs?: Record<string, string | undefined>;
+}
+
+export type BuildMcpConfigForInstallTargetResult =
+  | {
+      success: true;
+      platform: string;
+      targetKey: string;
+      transport: "streamable-http" | "stdio";
+      entry: Record<string, unknown>;
+      warnings: { code: string; message: string }[];
+    }
+  | {
+      success: false;
+      platform: string;
+      targetKey: string;
+      transport: string;
+      status: McpInstallabilityStatus;
+      errorCode: string;
+      error: string;
+      findings: McpReadinessFinding[];
+      requiredInputs: McpInputRequirement[];
+    };
+
+export function buildMcpConfigForInstallTarget(
+  target: McpInstallTarget,
+  platformId: string,
+  options: BuildMcpConfigForInstallTargetOptions = {},
+): BuildMcpConfigForInstallTargetResult {
+  const inputs = resolveTargetInputs(target, options);
+  const installability = assessMcpInstallability(target, { inputs });
+  if (installability.status !== "installable") {
+    const finding = installability.findings.find((entry) => entry.severity === "blocked")
+      ?? installability.findings[0];
+    return {
+      success: false,
+      platform: platformId,
+      targetKey: target.targetKey,
+      transport: target.transport,
+      status: installability.status,
+      errorCode: finding?.code ?? installability.status,
+      error: finding?.message ?? installability.summary,
+      findings: installability.findings,
+      requiredInputs: installability.requiredInputs,
+    };
+  }
+
+  if (target.kind === "remote") {
+    if (target.transport !== "streamable-http") {
+      return unsupportedTargetConfigResult(
+        target,
+        platformId,
+        "remote-transport-unsupported",
+        `Remote MCP transport "${target.transport}" cannot be written for ${platformId}.`,
+      );
+    }
+
+    const credential = credentialForTarget(target, inputs, options.apiKey);
+    const entry = credential
+      ? buildHttpConfigWithAuth(target.url, credential, platformId)
+      : buildHttpConfig(target.url, platformId);
+    return {
+      success: true,
+      platform: platformId,
+      targetKey: target.targetKey,
+      transport: "streamable-http",
+      entry,
+      warnings: [],
+    };
+  }
+
+  if (target.kind === "stdio") {
+    const env = buildStdioTargetEnv(target, inputs, options.apiKey);
+    return {
+      success: true,
+      platform: platformId,
+      targetKey: target.targetKey,
+      transport: "stdio",
+      entry: buildStdioConfig(target.command, target.args, env),
+      warnings: [],
+    };
+  }
+
+  return unsupportedTargetConfigResult(
+    target,
+    platformId,
+    target.reasonCode,
+    target.detail,
+  );
+}
+
+function unsupportedTargetConfigResult(
+  target: McpInstallTarget,
+  platformId: string,
+  errorCode: string,
+  error: string,
+): BuildMcpConfigForInstallTargetResult {
+  return {
+    success: false,
+    platform: platformId,
+    targetKey: target.targetKey,
+    transport: target.transport,
+    status: "unsupported",
+    errorCode,
+    error,
+    findings: [{ code: errorCode, severity: "blocked", message: error }],
+    requiredInputs: [],
+  };
+}
+
+function resolveTargetInputs(
+  target: McpInstallTarget,
+  options: BuildMcpConfigForInstallTargetOptions,
+): Record<string, string | undefined> {
+  const inputs = { ...(options.inputs ?? {}) };
+  const apiKey = options.apiKey ?? undefined;
+  if (!apiKey) return inputs;
+
+  if (target.kind === "stdio" && target.envKey && !inputProvided(target.envKey, inputs)) {
+    inputs[target.envKey] = apiKey;
+  }
+
+  const secretInput = target.inputs.find((input) => input.required && input.secret);
+  if (secretInput && !inputProvided(secretInput.key, inputs)) {
+    inputs[secretInput.key] = apiKey;
+  }
+
+  return inputs;
+}
+
+function credentialForTarget(
+  target: McpInstallTarget,
+  inputs: Record<string, string | undefined>,
+  apiKey: string | null | undefined,
+): string | undefined {
+  if (apiKey) return apiKey;
+  const secretInput = target.inputs.find((input) => input.required && input.secret);
+  if (!secretInput) return undefined;
+  return valueForInput(secretInput.key, inputs);
+}
+
+function buildStdioTargetEnv(
+  target: Extract<McpInstallTarget, { kind: "stdio" }>,
+  inputs: Record<string, string | undefined>,
+  apiKey: string | null | undefined,
+): Record<string, string> {
+  const env: Record<string, string> = { ...(target.env ?? {}) };
+  for (const input of target.inputs) {
+    const value = valueForInput(input.key, inputs);
+    if (value) env[input.key] = value;
+  }
+  if (target.envKey && apiKey) {
+    env[target.envKey] = apiKey;
+  }
+  return env;
+}
+
+function inputProvided(key: string, inputs: Record<string, string | undefined>): boolean {
+  return typeof inputs[key] === "string" && inputs[key]!.length > 0;
+}
+
+function valueForInput(key: string, inputs: Record<string, string | undefined>): string | undefined {
+  const value = inputs[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 // ─── Install ─────────────────────────────────────────────────

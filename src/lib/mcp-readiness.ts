@@ -221,6 +221,31 @@ export function registryDefToMcpInstallTargets(def: McpDefinitionInput): McpInst
   });
 }
 
+export function selectPreferredMcpInstallTarget(
+  targets: McpInstallTarget[],
+  options: { inputs?: Record<string, string | undefined> } = {},
+): McpInstallTarget | null {
+  if (targets.length === 0) return null;
+  return [...targets].sort((a, b) => {
+    const aReport = assessMcpInstallability(a, options);
+    const bReport = assessMcpInstallability(b, options);
+    const statusDelta = installabilityRank(aReport.status) - installabilityRank(bReport.status);
+    if (statusDelta !== 0) return statusDelta;
+
+    const kindDelta = targetKindRank(a.kind) - targetKindRank(b.kind);
+    if (kindDelta !== 0) return kindDelta;
+
+    return a.targetKey.localeCompare(b.targetKey);
+  })[0];
+}
+
+export function registryDefToPreferredMcpInstallTarget(
+  def: McpDefinitionInput,
+  options: { inputs?: Record<string, string | undefined> } = {},
+): McpInstallTarget | null {
+  return selectPreferredMcpInstallTarget(registryDefToMcpInstallTargets(def), options);
+}
+
 export function mcpDefinitionToMcpInstallTargets(
   def: McpDefinitionInput,
   source: McpTargetSource = { kind: "unknown", name: def.name, raw: def },
@@ -338,6 +363,12 @@ export function assessMcpInstallability(
         "authorization-header-variable-unsupported",
         "The Authorization header contains a variable that Equip cannot safely fill yet.",
         "Expose a structured credential input instead of embedding variables in headers.",
+      ));
+    } else if (authorization) {
+      findings.push(blocked(
+        "static-authorization-header-unsupported",
+        "Static Authorization headers in registry metadata are not installed into local MCP configs.",
+        "Expose a structured credential input so the user-provided secret can be injected locally.",
       ));
     }
     if (target.requiresAuth && isInsecureRemoteUrl(target.url)) {
@@ -851,6 +882,19 @@ function mergeInputRequirements(inputs: McpInputRequirement[]): McpInputRequirem
       : input);
   }
   return [...byKey.values()];
+}
+
+function installabilityRank(status: McpInstallabilityStatus): number {
+  if (status === "installable") return 0;
+  if (status === "needs-input") return 1;
+  if (status === "unknown") return 2;
+  return 3;
+}
+
+function targetKindRank(kind: McpInstallTargetKind): number {
+  if (kind === "remote") return 0;
+  if (kind === "stdio") return 1;
+  return 2;
 }
 
 function firstSecretInput(inputs: McpInputRequirement[]): McpInputRequirement | undefined {
