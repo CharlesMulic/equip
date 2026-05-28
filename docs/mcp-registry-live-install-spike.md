@@ -109,6 +109,7 @@ Runtime preflight from the Docker canary:
 - The spike installs and verifies exact platform config projections and Docker-image runtime executables. It does not execute third-party MCP code or prove that the MCP server initializes/functions, and OCI stdio still requires a Docker daemon/socket where the platform runs.
 - The desktop app uses the same core registry-to-platform writer for install config, but its current registry install UX does not provide a first-class API-key entry flow for arbitrary registry `api_key` installs. API-key installs work cleanly through the CLI and can work in the app when a credential is already available, but productized app support needs explicit credential collection rather than falling back to terminal-style prompting.
 - The app-side registry journal now preserves stdio `envKey` in persisted content, matching the CLI content model.
+- A separate Docker initialize smoke now proves the next runtime step for local allowlisted registry-shaped fixtures: one npm stdio target launched through `npx` and one PyPI stdio target launched through `uvx` both answer MCP `initialize` with redacted diagnostics and timeout coverage. This remains separate from the live registry canary because it executes code; the live canary still does not run arbitrary third-party registry packages.
 
 ## Recommendation
 

@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "description": "Pinned allowlist for the Docker MCP initialize smoke. These fixtures are local registry-shaped packages, not arbitrary live registry code.",
+  "cases": [
+    {
+      "id": "npm-stdio-local-package",
+      "reviewedBy": "Package 04 security gate",
+      "reviewNote": "Local no-dependency npm fixture that implements only MCP initialize over stdio and intentionally emits fake secret/path diagnostics for redaction checks.",
+      "installInputs": {
+        "EQUIP_SMOKE_TOKEN": "fixture-secret-token-123"
+      },
+      "definition": {
+        "name": "equip-smoke-npm",
+        "title": "Equip Smoke NPM",
+        "description": "Local npm stdio fixture for MCP initialize smoke.",
+        "installMode": "package",
+        "installTargets": [
+          {
+            "targetKey": "npm-stdio-local-package",
+            "targetKind": "stdio",
+            "transport": {
+              "type": "stdio"
+            },
+            "registryType": "npm",
+            "identifier": "equip-mcp-smoke-npm",
+            "runtimeHint": "npx",
+            "runtimeArguments": [
+              {
+                "type": "positional",
+                "value": "--yes"
+              },
+              {
+                "type": "positional",
+                "value": "--offline"
+              },
+              {
+                "type": "named",
+                "name": "--package",
+                "value": "/opt/equip-mcp-smoke/npm/equip-mcp-smoke-npm-0.1.0.tgz"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "name": "EQUIP_SMOKE_TOKEN",
+                "isRequired": true,
+                "isSecret": true
+              }
+            ]
+          }
+        ]
+      },
+      "expectedCommand": "npx",
+      "expectedArgs": [
+        "--yes",
+        "--offline",
+        "--package",
+        "/opt/equip-mcp-smoke/npm/equip-mcp-smoke-npm-0.1.0.tgz",
+        "equip-mcp-smoke-npm"
+      ],
+      "expectedServerName": "equip-mcp-smoke-npm",
+      "expectedServerVersion": "0.1.0"
+    },
+    {
+      "id": "pypi-stdio-local-package",
+      "reviewedBy": "Package 04 security gate",
+      "reviewNote": "Local pure-Python fixture launched through uvx from a local package path with network disabled.",
+      "installInputs": {},
+      "definition": {
+        "name": "equip-smoke-pypi",
+        "title": "Equip Smoke PyPI",
+        "description": "Local PyPI-shaped stdio fixture for MCP initialize smoke.",
+        "installMode": "package",
+        "installTargets": [
+          {
+            "targetKey": "pypi-stdio-local-package",
+            "targetKind": "stdio",
+            "transport": {
+              "type": "stdio"
+            },
+            "registryType": "pypi",
+            "identifier": "equip-mcp-smoke-pypi",
+            "version": "0.1.0",
+            "runtimeHint": "uvx",
+            "runtimeArguments": [
+              {
+                "type": "positional",
+                "value": "--offline"
+              },
+              {
+                "type": "positional",
+                "value": "--find-links"
+              },
+              {
+                "type": "positional",
+                "value": "/opt/equip-mcp-smoke/pypi"
+              }
+            ]
+          }
+        ]
+      },
+      "expectedCommand": "uvx",
+      "expectedArgs": [
+        "--offline",
+        "--find-links",
+        "/opt/equip-mcp-smoke/pypi",
+        "equip-mcp-smoke-pypi==0.1.0"
+      ],
+      "expectedServerName": "equip-mcp-smoke-pypi",
+      "expectedServerVersion": "0.1.0"
+    }
+  ]
+}

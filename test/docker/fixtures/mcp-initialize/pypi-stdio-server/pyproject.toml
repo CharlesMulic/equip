@@ -1,0 +1,12 @@
+[project]
+name = "equip-mcp-smoke-pypi"
+version = "0.1.0"
+description = "Local MCP stdio initialize smoke fixture."
+requires-python = ">=3.10"
+
+[project.scripts]
+equip-mcp-smoke-pypi = "equip_mcp_smoke_pypi.server:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

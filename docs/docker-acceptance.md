@@ -86,3 +86,27 @@ The retained live case list lives at `test/docker/fixtures/live-mcp-registry-cas
 The Docker image includes `npx`, `uvx`, and the Docker CLI, and the test reports runtime-command readiness for generated stdio configs. It intentionally does not launch arbitrary third-party MCP server code. OCI stdio configs still require Docker daemon/socket access wherever the platform runs; the default canary verifies the CLI is present but does not mount a daemon, so OCI cases use the documented `--force` path to prove config projection without pretending the daemon is reachable.
 
 Its purpose is compatibility discovery for "can an MCP registry entry become an Equip-installed augment?", not security review or functional MCP execution.
+
+## MCP Initialize Smoke
+
+Package-mode MCP install support also has a separate Docker smoke lane:
+
+```bash
+npm run test:docker:mcp-initialize-smoke
+```
+
+This lane proves the missing step after config projection: selected stdio MCP targets can be launched and can answer the MCP `initialize` request. It is intentionally narrower than the live registry canary.
+
+The smoke harness:
+
+- builds a dedicated Docker image with Node, `npx`, Python, and `uvx`
+- executes only local allowlisted registry-shaped fixtures from `test/docker/fixtures/mcp-initialize-cases.json`
+- covers one npm stdio package shape through `npx`
+- covers one PyPI stdio package shape through `uvx`
+- sends only MCP `initialize`, then kills the process group
+- runs `docker run` with no network, no Docker socket, no privileged flags, dropped capabilities, read-only root filesystem, CPU/memory/pid limits, and an isolated tmpfs for runtime caches
+- uses fresh temp `HOME`, npm cache, and uv cache directories per fixture
+- redacts fake secrets, bearer values, workspace paths, and temp paths before writing or printing diagnostics
+- includes a timeout regression test for stuck stdio servers
+
+The fixtures are local by design. This lane is functional evidence for Equip's package target plumbing and stdio handshake mechanics; it is not a security review of third-party packages and it does not execute arbitrary live MCP registry code. The broader live registry canary remains config-only.

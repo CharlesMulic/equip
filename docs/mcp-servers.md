@@ -183,6 +183,10 @@ Runtime checks are preflight checks only. They do not initialize the MCP server,
 
 On Windows, passive readiness checks resolve shim commands such as `npx.cmd`, `npm.cmd`, `uvx.cmd`, and `docker.cmd` to the exact PATH entry before running version checks, including when the resolved path contains spaces. This avoids accidentally executing a current-directory shadow command.
 
+## Functional Smoke Testing
+
+Equip keeps functional MCP execution separate from normal install. The Docker initialize smoke (`npm run test:docker:mcp-initialize-smoke`) launches only local allowlisted registry-shaped npm/PyPI fixtures, sends MCP `initialize`, redacts diagnostics, and kills the process group afterward. It proves that the package target plumbing can produce launchable stdio MCP configs, but it is not a publisher safety review and does not execute arbitrary live registry packages.
+
 ## How `installMcp` Works
 
 ### Atomic Writes

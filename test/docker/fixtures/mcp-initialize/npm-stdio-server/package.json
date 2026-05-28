@@ -1,0 +1,13 @@
+{
+  "name": "equip-mcp-smoke-npm",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local MCP stdio initialize smoke fixture.",
+  "bin": {
+    "equip-mcp-smoke-npm": "./server.mjs"
+  },
+  "files": [
+    "server.mjs"
+  ],
+  "license": "UNLICENSED"
+}

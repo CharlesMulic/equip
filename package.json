@@ -31,6 +31,8 @@
     "test:docker:acceptance:internal": "npm run build && node --test test/docker/acceptance.test.mjs",
     "test:docker:mcp-registry-live": "node scripts/spikes/run-live-mcp-registry-install-docker.mjs",
     "test:docker:mcp-registry-live:internal": "npm run build && node --test test/docker/live-registry-install.test.mjs",
+    "test:docker:mcp-initialize-smoke": "node scripts/spikes/run-mcp-initialize-smoke-docker.mjs",
+    "test:docker:mcp-initialize-smoke:internal": "node --test test/docker/mcp-initialize-smoke.test.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish",
