@@ -59,7 +59,7 @@ export interface ResolvedAugment {
   homepage?: string;
   repository?: string;
   license?: string;
-  transport?: "http" | "stdio";
+  transport?: "http" | "streamable-http" | "sse" | "stdio";
   serverUrl?: string;
   stdio?: { command: string; args: string[]; envKey?: string };
   npmPackage?: string;

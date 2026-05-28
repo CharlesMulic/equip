@@ -4,7 +4,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
+import {
+  PLATFORM_REGISTRY,
+  platformSupportsRemoteTransport,
+  remoteTypeFieldForPlatform,
+  type DetectedPlatform,
+  type PlatformRemoteTransport,
+} from "./platforms";
 import { atomicWriteFileSync, safeReadJsonSync, createBackup, cleanupBackup } from "./fs";
 import type { ArtifactResult, EquipLogger } from "./types";
 import { makeResult, NOOP_LOGGER } from "./types";
@@ -249,20 +255,34 @@ function _fileExists(p: string): boolean {
  * Build HTTP MCP config for a platform.
  * Uses the platform registry to determine field names.
  */
-export function buildHttpConfig(serverUrl: string, platform: string): Record<string, unknown> {
+export function buildHttpConfig(
+  serverUrl: string,
+  platform: string,
+  transport: PlatformRemoteTransport = "streamable-http",
+): Record<string, unknown> {
+  if (!platformSupportsRemoteTransport(platform, transport)) {
+    throw new Error(`Remote MCP transport "${transport}" cannot be written for ${platform}.`);
+  }
   const def = PLATFORM_REGISTRY.get(platform);
   if (!def) return { url: serverUrl };
 
   const result: Record<string, unknown> = { [def.httpShape.urlField]: serverUrl };
-  if (def.httpShape.typeField) result.type = def.httpShape.typeField;
+  const typeField = remoteTypeFieldForPlatform(platform, transport);
+  if (typeField) result.type = typeField;
   return result;
 }
 
 /**
  * Build HTTP MCP config with auth headers.
  */
-export function buildHttpConfigWithAuth(serverUrl: string, apiKey: string, platform: string, extraHeaders?: Record<string, string>): Record<string, unknown> {
-  const base = buildHttpConfig(serverUrl, platform);
+export function buildHttpConfigWithAuth(
+  serverUrl: string,
+  apiKey: string,
+  platform: string,
+  extraHeaders?: Record<string, string>,
+  transport: PlatformRemoteTransport = "streamable-http",
+): Record<string, unknown> {
+  const base = buildHttpConfig(serverUrl, platform, transport);
   const def = PLATFORM_REGISTRY.get(platform);
   const headersField = def?.httpShape.headersField ?? "headers";
   const headersWrapper = def?.httpShape.headersWrapper;
@@ -306,7 +326,7 @@ export type BuildMcpConfigForInstallTargetResult =
       success: true;
       platform: string;
       targetKey: string;
-      transport: "streamable-http" | "stdio";
+      transport: "streamable-http" | "sse" | "stdio";
       entry: Record<string, unknown>;
       warnings: { code: string; message: string }[];
     }
@@ -346,24 +366,24 @@ export function buildMcpConfigForInstallTarget(
   }
 
   if (target.kind === "remote") {
-    if (target.transport !== "streamable-http") {
+    if (!platformSupportsRemoteTransport(platformId, target.transport)) {
       return unsupportedTargetConfigResult(
         target,
         platformId,
-        "remote-transport-unsupported",
+        target.transport === "sse" ? "remote-sse-unsupported" : "remote-transport-unsupported",
         `Remote MCP transport "${target.transport}" cannot be written for ${platformId}.`,
       );
     }
 
     const credential = credentialForTarget(target, inputs);
     const entry = credential
-      ? buildHttpConfigWithAuth(target.url, credential, platformId)
-      : buildHttpConfig(target.url, platformId);
+      ? buildHttpConfigWithAuth(target.url, credential, platformId, undefined, target.transport)
+      : buildHttpConfig(target.url, platformId, target.transport);
     return {
       success: true,
       platform: platformId,
       targetKey: target.targetKey,
-      transport: "streamable-http",
+      transport: target.transport,
       entry,
       warnings: [],
     };

@@ -11,7 +11,7 @@
 // Zero dependencies.
 
 import * as fs from "fs";
-import { PLATFORM_REGISTRY, type DetectedPlatform } from "./platforms";
+import { PLATFORM_REGISTRY, remoteTypeFieldForPlatform, type DetectedPlatform, type PlatformRemoteTransport } from "./platforms";
 import { readMcpEntry, buildHttpConfig, buildHttpConfigWithAuth } from "./mcp";
 import { JsonStore } from "./storage/datastore";
 import { safeReadJsonSync, atomicWriteFileSync } from "./fs";
@@ -95,11 +95,13 @@ export function migrateConfigs(): MigrationResult[] {
 function detectIssues(entry: Record<string, unknown>, def: typeof PLATFORM_REGISTRY extends ReadonlyMap<string, infer V> ? V : never): string[] {
   const issues: string[] = [];
   const shape = def.httpShape;
+  const transport = inferRemoteTransport(entry);
+  const expectedType = remoteTypeFieldForPlatform(def.id, transport);
 
   // Check type field
-  if (shape.typeField) {
-    if (entry.type !== shape.typeField) {
-      issues.push(`type field should be "${shape.typeField}", got "${entry.type ?? "missing"}"`);
+  if (expectedType) {
+    if (entry.type !== expectedType) {
+      issues.push(`type field should be "${expectedType}", got "${entry.type ?? "missing"}"`);
     }
   } else {
     if (entry.type !== undefined) {
@@ -142,6 +144,7 @@ function rebuildEntry(
   def: typeof PLATFORM_REGISTRY extends ReadonlyMap<string, infer V> ? V : never,
 ): Record<string, unknown> {
   const shape = def.httpShape;
+  const transport = inferRemoteTransport(existing);
 
   // Extract the server URL from whichever field it's in
   const serverUrl = (existing[shape.urlField] || existing.url || existing.serverUrl || existing.httpUrl) as string | undefined;
@@ -161,7 +164,8 @@ function rebuildEntry(
 
   // Build new entry with current platform shape
   const result: Record<string, unknown> = { [shape.urlField]: serverUrl };
-  if (shape.typeField) result.type = shape.typeField;
+  const expectedType = remoteTypeFieldForPlatform(def.id, transport);
+  if (expectedType) result.type = expectedType;
 
   if (authHeaders) {
     if (shape.headersWrapper) {
@@ -180,6 +184,10 @@ function rebuildEntry(
   }
 
   return result;
+}
+
+function inferRemoteTransport(entry: Record<string, unknown>): PlatformRemoteTransport {
+  return entry.type === "sse" ? "sse" : "streamable-http";
 }
 
 // ─── Write ──────────────────────────────────────────────────

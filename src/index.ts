@@ -11,7 +11,7 @@ import { validateToolName, validateRelativePath, validatePathWithinDir, validate
 import { computeContentHash, extractManifest, type ContentManifest } from "./lib/content-hash";
 import * as fs from "fs";
 import { getHookCapabilities, installHooks, uninstallHooks, hasHooks, findOrphanHookEntries, type HookDefinition, type OrphanHookEntry } from "./lib/hooks";
-import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, getBrokerCapabilities, platformSupportsBroker, getBrokerStrategy, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities, type PlatformBrokerCapabilities, type PlatformBrokerStrategy, type BrokerConfigWriteResult, type BrokerEndpoint, type DiscoverySuppressionRules } from "./lib/platforms";
+import { createManualPlatform, platformName, resolvePlatformId, KNOWN_PLATFORMS, PLATFORM_REGISTRY, getPlatform, getBrokerCapabilities, platformSupportsBroker, getBrokerStrategy, platformSupportsRemoteTransport, remoteTypeFieldForPlatform, type DetectedPlatform, type PlatformDefinition, type PlatformHttpShape, type PlatformHookCapabilities, type PlatformBrokerCapabilities, type PlatformBrokerStrategy, type PlatformRemoteTransport, type BrokerConfigWriteResult, type BrokerEndpoint, type DiscoverySuppressionRules } from "./lib/platforms";
 import * as cli from "./lib/cli";
 import { installSkill, uninstallSkill, hasSkill, type SkillConfig, type SkillFile, type InstallSkillOptions, type UninstallSkillResult } from "./lib/skills";
 import type { SkillManifestOwnerSource } from "./lib/skill-manifest";
@@ -120,10 +120,14 @@ class Augment {
       return buildStdioConfig(this.stdio.command, this.stdio.args, env);
     }
     if (!this.serverUrl) throw new Error("Equip: serverUrl is required for MCP installation");
-    if (apiKey) {
-      return buildHttpConfigWithAuth(this.serverUrl, apiKey, platformId);
+    const remoteTransport = transport === "sse" ? "sse" : "streamable-http";
+    if (!platformSupportsRemoteTransport(platformId, remoteTransport)) {
+      throw new Error(`Equip: Remote MCP transport "${remoteTransport}" cannot be written for ${platformId}.`);
     }
-    return buildHttpConfig(this.serverUrl, platformId);
+    if (apiKey) {
+      return buildHttpConfigWithAuth(this.serverUrl, apiKey, platformId, undefined, remoteTransport);
+    }
+    return buildHttpConfig(this.serverUrl, platformId, remoteTransport);
   }
 
   installMcp(platform: DetectedPlatform, apiKey: string | null, options: { transport?: string; dryRun?: boolean } = {}): ArtifactResult {
@@ -434,6 +438,8 @@ export {
   KNOWN_PLATFORMS,
   PLATFORM_REGISTRY,
   getPlatform,
+  platformSupportsRemoteTransport,
+  remoteTypeFieldForPlatform,
   // Platform broker capability accessors
   getBrokerCapabilities,
   platformSupportsBroker,
@@ -527,6 +533,8 @@ export type {
 export type {
   DetectedPlatform,
   PlatformDefinition,
+  PlatformHttpShape,
+  PlatformRemoteTransport,
   HookDefinition,
   OrphanHookEntry,
   SkillConfig,

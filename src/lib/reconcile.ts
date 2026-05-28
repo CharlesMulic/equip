@@ -83,13 +83,17 @@ function collectDeclaredSkillNames(toolName: string, toolDef: RegistryDef | unde
  * content-addressed blob store.
  */
 function registryDefToContent(def: RegistryDef): AugmentContent {
-  const transport = (def.transport as "http" | "stdio") || (def.stdioCommand ? "stdio" : "http");
+  const rawTransport = def.transport || (def.stdioCommand ? "stdio" : "http");
+  const transport: AugmentContent["transport"] =
+    rawTransport === "stdio" || rawTransport === "sse" || rawTransport === "streamable-http"
+      ? rawTransport
+      : "http";
   return {
     name: def.name,
     title: def.title || def.name,
     description: def.description || "",
     transport,
-    serverUrl: transport === "http" ? def.serverUrl : undefined,
+    serverUrl: transport === "http" || transport === "streamable-http" || transport === "sse" ? def.serverUrl : undefined,
     stdio: def.stdioCommand
       ? { command: def.stdioCommand, args: def.stdioArgs || [], ...(def.envKey ? { envKey: def.envKey } : {}) }
       : undefined,

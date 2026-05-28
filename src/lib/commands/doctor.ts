@@ -110,7 +110,7 @@ export function runDoctor(options: DoctorOptions = {}): void {
           }
 
           // Check auth headers
-          if (augContent?.transport === "http") {
+          if (isRemoteTransport(augContent?.transport)) {
             checks++;
             const authResult = checkAuth(entry as Record<string, unknown>);
             if (authResult.status === "missing") {
@@ -295,4 +295,8 @@ export function runDoctor(options: DoctorOptions = {}): void {
 function sanitizePath(p: string): string {
   const home = require("os").homedir();
   return p.replace(home, "~");
+}
+
+function isRemoteTransport(transport: string | undefined): boolean {
+  return transport === "http" || transport === "streamable-http" || transport === "sse";
 }

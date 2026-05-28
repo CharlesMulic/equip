@@ -52,8 +52,8 @@ export interface AugmentContent {
   /** License identifier (SPDX or free-form). */
   license?: string;
   /** MCP transport. */
-  transport?: "http" | "stdio";
-  /** HTTP endpoint (if transport=http). */
+  transport?: "http" | "streamable-http" | "sse" | "stdio";
+  /** Remote endpoint (if transport is http/streamable-http/sse). */
   serverUrl?: string;
   /** stdio invocation (if transport=stdio). `envKey` is the env-var
    *  name the platform should populate with the user's credential when

@@ -25,6 +25,7 @@ const HASH_MATCH_FIXTURE_NAME = "demo-direct-install-hash-match";
 const HASH_ALGORITHM_MISMATCH_FIXTURE_NAME = "demo-direct-install-hash-algorithm-mismatch";
 const UNREVIEWED_FIXTURE_NAME = "demo-direct-install-unreviewed";
 const STDIO_MISSING_RUNTIME_FIXTURE_NAME = "demo-stdio-missing-runtime";
+const SSE_UNSUPPORTED_FIXTURE_NAME = "demo-remote-sse-unsupported-platform";
 
 function tmpPath(prefix = "reg-test") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -127,6 +128,13 @@ function startFixtureRegistry() {
               command: "missing-equip-runtime-test",
               args: ["server"],
             }],
+            rules: undefined,
+            skills: [],
+          }),
+          [SSE_UNSUPPORTED_FIXTURE_NAME]: buildFixture(origin, SSE_UNSUPPORTED_FIXTURE_NAME, {
+            title: "Demo Remote SSE Unsupported Platform",
+            transport: "sse",
+            serverUrl: `${origin}/mcp/${SSE_UNSUPPORTED_FIXTURE_NAME}/sse`,
             rules: undefined,
             skills: [],
           }),
@@ -435,7 +443,7 @@ describe("registryDefToConfig", () => {
     assert.equal(mcpConfig.env.API_TOKEN, "secret");
   });
 
-  it("keeps unsupported installTargets visible to install errors", () => {
+  it("keeps platform-dependent SSE installTargets visible to config output", () => {
     const def = {
       name: "sse-registry",
       title: "SSE Registry",
@@ -453,9 +461,10 @@ describe("registryDefToConfig", () => {
 
     assert.equal(config.mcpInstallTarget.kind, "remote");
     assert.equal(config.mcpInstallTarget.transport, "sse");
+    assert.equal(augment.buildConfig("claude-code", null).type, "sse");
     assert.throws(
-      () => augment.buildConfig("claude-code", null),
-      /remote-sse-unsupported|SSE MCP transport/,
+      () => augment.buildConfig("codex", null),
+      /remote-sse-unsupported|Remote MCP transport "sse"/,
     );
   });
 
@@ -940,6 +949,21 @@ describe("direct-mode CLI", () => {
     assert.match(result.output, /missing-equip-runtime-test/);
     assert.match(result.output, /--force/);
     assert.equal(fs.existsSync(path.join(codexHome, "config.toml")), false, "Runtime failure should not write Codex config");
+  });
+
+  it("blocks unsupported SSE platform sets before writing any platform config", async () => {
+    const result = await runEquip([
+      SSE_UNSUPPORTED_FIXTURE_NAME,
+      "--platform",
+      "claude-code,codex",
+    ], cliEnv);
+
+    assert.equal(result.code, 1, result.output);
+    assert.match(result.output, /MCP config cannot be written/);
+    assert.match(result.output, /Codex: Equip: MCP target/);
+    assert.match(result.output, /remote-sse-unsupported|Remote MCP transport "sse"/);
+    assert.equal(fs.existsSync(path.join(homeDir, ".claude.json")), false, "SSE preflight should not partially write Claude config");
+    assert.equal(fs.existsSync(path.join(codexHome, "config.toml")), false, "SSE preflight should not write Codex config");
   });
 });
 

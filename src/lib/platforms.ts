@@ -7,11 +7,17 @@ import * as os from "os";
 
 // ─── Types ───────────────────────────────────────────────────
 
+export type PlatformRemoteTransport = "streamable-http" | "sse";
+
 export interface PlatformHttpShape {
   /** Field name for the server URL */
   urlField: "url" | "serverUrl" | "httpUrl";
   /** Optional type field value (e.g., "http", "streamable-http") */
   typeField?: string;
+  /** Direct remote MCP transports this platform can represent. Defaults to streamable HTTP only. */
+  supportedRemoteTransports?: readonly PlatformRemoteTransport[];
+  /** Optional per-transport type values. null means omit the type field. */
+  typeByTransport?: Partial<Record<PlatformRemoteTransport, string | null>>;
   /** Key name for auth headers */
   headersField: "headers" | "http_headers";
   /** Optional wrapper key for headers (e.g., "requestInit" → { requestInit: { headers: {...} } }) */
@@ -327,7 +333,13 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     rulesPath: () => path.join(home(), ".claude", "CLAUDE.md"),
     rootKey: "mcpServers",
     configFormat: "json",
-    httpShape: { urlField: "url", typeField: "http", headersField: "headers" },
+    httpShape: {
+      urlField: "url",
+      typeField: "http",
+      supportedRemoteTransports: ["streamable-http", "sse"],
+      typeByTransport: { "streamable-http": "http", sse: "sse" },
+      headersField: "headers",
+    },
     detection: {
       cli: "claude",
       dirs: [() => path.join(home(), ".claude")],
@@ -465,7 +477,13 @@ export const PLATFORM_REGISTRY: ReadonlyMap<string, PlatformDefinition> = new Ma
     rulesPath: null,
     rootKey: "servers",
     configFormat: "json",
-    httpShape: { urlField: "url", typeField: "http", headersField: "headers" },
+    httpShape: {
+      urlField: "url",
+      typeField: "http",
+      supportedRemoteTransports: ["streamable-http", "sse"],
+      typeByTransport: { "streamable-http": "http", sse: "sse" },
+      headersField: "headers",
+    },
     detection: {
       cli: "code",
       dirs: [() => vsCodeUserDir()],
@@ -678,6 +696,21 @@ export const KNOWN_PLATFORMS: string[] = [...PLATFORM_REGISTRY.keys()];
 
 export function platformName(id: string): string {
   return PLATFORM_REGISTRY.get(id)?.name ?? id;
+}
+
+export function platformSupportsRemoteTransport(id: string, transport: PlatformRemoteTransport): boolean {
+  const def = PLATFORM_REGISTRY.get(id);
+  if (!def) return transport === "streamable-http";
+  return (def.httpShape.supportedRemoteTransports ?? ["streamable-http"]).includes(transport);
+}
+
+export function remoteTypeFieldForPlatform(id: string, transport: PlatformRemoteTransport): string | undefined {
+  const shape = PLATFORM_REGISTRY.get(id)?.httpShape;
+  if (!shape) return undefined;
+  const explicit = shape.typeByTransport?.[transport];
+  if (explicit === null) return undefined;
+  if (explicit !== undefined) return explicit;
+  return transport === "streamable-http" ? shape.typeField : undefined;
 }
 
 export function resolvePlatformId(input: string): string {

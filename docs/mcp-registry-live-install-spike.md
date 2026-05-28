@@ -20,7 +20,7 @@ The harness:
 2. Projects installable targets into a local CG3-style registry response.
 3. Starts a local registry stub.
 4. Runs `bin/equip.js` against fake platform homes in Docker.
-5. Verifies config files for Claude Code, Codex, Cursor, VS Code, and Roo Code.
+5. Verifies config files for Claude Code, Codex, Cursor, VS Code, and Roo Code. SSE cases are verified only on platforms with an explicit direct SSE shape: Claude Code and VS Code.
 6. Probes the Docker image for runtime executables referenced by stdio configs.
 
 Retained live cases live in `test/docker/fixtures/live-mcp-registry-cases.json`. The fixture intentionally uses `latest` registry versions so it acts as a live canary/discovery harness. It is not deterministic regression evidence; when upstream metadata changes, the case list or support expectations should be reviewed intentionally.
@@ -57,7 +57,9 @@ Installed successfully:
 |---|---|---|---|
 | `remote-streamable-public` | `ac.tandem/docs-mcp` | remote `streamable-http` | `serverUrl=https://tandem.ac/mcp` |
 | `remote-streamable-authorization` | `io.github.github/github-mcp-server` | remote `streamable-http` with `Authorization` | HTTP config with bearer auth |
-| `stdio-npm-public` | `io.github.ChromeDevTools/chrome-devtools-mcp` | npm stdio | `npx -y chrome-devtools-mcp@1.1.0` |
+| `remote-sse` | `ai.waystation/postgres` | remote `sse` | Claude Code / VS Code `type=sse` config |
+| `remote-sse-headers` | `ai.fodda/mcp-server` | remote `sse` with `Authorization` | Claude Code / VS Code `type=sse` config with bearer auth |
+| `stdio-npm-public` | `io.github.ChromeDevTools/chrome-devtools-mcp` | npm stdio | `npx -y chrome-devtools-mcp@1.1.1` |
 | `stdio-npm-secret-env` | `io.github.upstash/context7` | npm stdio with secret env | `npx -y @upstash/context7-mcp@1.0.31`, `CONTEXT7_API_KEY` |
 | `stdio-pypi-public` | `com.mcparmory/github` | PyPI stdio | `uvx mcparmory-github==1.0.6` |
 | `stdio-pypi-secret-env` | `ai.anomalyarmor/armor-mcp` | PyPI stdio with secret env | `uvx armor-mcp==0.6.1`, `ARMOR_API_KEY` |
@@ -73,8 +75,6 @@ Classified unsupported:
 | Case | Official server | Gap |
 |---|---|---|
 | `stdio-npm-required-non-secret-env` | `io.github.Digital-Defiance/mcp-filesystem` | Required non-secret env/config input cannot be represented by current `RegistryDef`/CLI prompt model. |
-| `remote-sse` | `ai.waystation/postgres` | SSE cannot be encoded distinctly by direct-mode install today. |
-| `remote-sse-headers` | `ai.fodda/mcp-server` | SSE with auth headers is still blocked by lack of SSE support. |
 | `remote-streamable-url-vars` | `ai.autorfp/mcp` | URL template variables need a value collection/substitution flow. |
 | `remote-streamable-secret-url-var` | `app.cardog/mcp` | Secret URL variables need secure collection and substitution; current auth model only handles headers/env. |
 | `remote-streamable-custom-header` | `ai.reka/mcp` | Non-Authorization headers need first-class header-name/value support. |
@@ -97,7 +97,8 @@ Runtime preflight from the Docker canary:
 
 ## Findings
 
-- Remote streamable HTTP is effectively handled by the current HTTP writer, although Equip collapses the official transport into legacy `http`.
+- Remote streamable HTTP is handled by the current HTTP writer while preserving the selected target internally. Legacy flat definitions still accept `transport: "http"` for compatibility.
+- Remote SSE is installable on platforms with an explicit SSE config shape. The retained canary verifies Claude Code and VS Code entries with `type: "sse"` and blocks other platforms rather than collapsing SSE into streamable HTTP.
 - Remote `Authorization` can be approximated with current API-key auth because the writer emits `Authorization: Bearer <key>`.
 - Simple npm stdio packages are installable.
 - PyPI stdio can be projected to `uvx`, but this is a convention in the spike, not a productized runtime capability with dependency checks.
@@ -117,7 +118,8 @@ The next production shape should add:
 
 - a normalized MCP install target model that preserves official registry source fields;
 - a variable collection model for required env vars, package arguments, runtime arguments, and custom headers;
-- explicit transport support for `streamable-http`, `sse`, `stdio`, and package-launched local HTTP as separate cases;
+- broader platform confirmation for direct SSE support beyond Claude Code and VS Code;
+- explicit transport support for package-launched local HTTP as a separate case;
 - runtime preflight for `npx`, `uvx`, `docker`, and eventually other registry types;
 - end-to-end "write config, spawn server, initialize MCP" smoke for safe selected fixtures.
 

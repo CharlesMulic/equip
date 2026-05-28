@@ -38,7 +38,7 @@ export interface PlatformsMeta {
 }
 
 export interface PlatformAugmentEntry {
-  transport: "http" | "stdio" | "unknown";
+  transport: "http" | "streamable-http" | "sse" | "stdio" | "unknown";
   url?: string;
   command?: string;
   args?: string[];
@@ -584,7 +584,7 @@ export function scanAllPlatforms(
 
 interface McpServerEntry {
   name: string;
-  transport: "http" | "stdio" | "unknown";
+  transport: "http" | "streamable-http" | "sse" | "stdio" | "unknown";
   url?: string;
   command?: string;
   args?: string[];
@@ -610,7 +610,7 @@ function readAllMcpServers(
     if (!entry || typeof entry !== "object") continue;
     const e = entry as Record<string, unknown>;
 
-    let transport: "http" | "stdio" | "unknown" = "unknown";
+    let transport: McpServerEntry["transport"] = "unknown";
     let url: string | undefined;
     let command: string | undefined;
 
@@ -621,7 +621,7 @@ function readAllMcpServers(
       command = String(e.command);
       if (Array.isArray(e.args)) args = e.args.map(String);
     } else if (e.url || e.serverUrl || e.httpUrl) {
-      transport = "http";
+      transport = e.type === "sse" ? "sse" : e.type === "streamable-http" ? "streamable-http" : "http";
       url = String(e.url || e.serverUrl || e.httpUrl);
     }
 

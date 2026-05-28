@@ -172,6 +172,21 @@ describe("Augment class", () => {
     assert.equal(config.url, "https://example.com/mcp");
   });
 
+  it("buildConfig returns SSE config for platforms with explicit SSE support", () => {
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/sse" });
+    const config = e.buildConfig("vscode", null, "sse");
+    assert.equal(config.type, "sse");
+    assert.equal(config.url, "https://example.com/sse");
+  });
+
+  it("buildConfig rejects SSE config for platforms without explicit SSE support", () => {
+    const e = new Augment({ name: "test", serverUrl: "https://example.com/sse" });
+    assert.throws(
+      () => e.buildConfig("codex", null, "sse"),
+      /Remote MCP transport "sse" cannot be written for codex/,
+    );
+  });
+
   it("buildConfig returns Windsurf config with serverUrl", () => {
     const e = new Augment({ name: "test", serverUrl: "https://example.com/mcp" });
     const config = e.buildConfig("windsurf", "key123");
@@ -341,6 +356,12 @@ describe("buildHttpConfig", () => {
     assert.equal(c.type, "http");
   });
 
+  it("returns type:sse for Claude Code SSE remotes", () => {
+    const c = buildHttpConfig("https://x.com/sse", "claude-code", "sse");
+    assert.equal(c.url, "https://x.com/sse");
+    assert.equal(c.type, "sse");
+  });
+
   it("returns serverUrl for windsurf", () => {
     const c = buildHttpConfig("https://x.com/mcp", "windsurf");
     assert.equal(c.serverUrl, "https://x.com/mcp");
@@ -351,6 +372,19 @@ describe("buildHttpConfig", () => {
     const c = buildHttpConfig("https://x.com/mcp", "vscode");
     assert.equal(c.type, "http");
     assert.equal(c.url, "https://x.com/mcp");
+  });
+
+  it("returns type:sse for VS Code SSE remotes", () => {
+    const c = buildHttpConfig("https://x.com/sse", "vscode", "sse");
+    assert.equal(c.type, "sse");
+    assert.equal(c.url, "https://x.com/sse");
+  });
+
+  it("rejects SSE remotes for platforms without explicit SSE support", () => {
+    assert.throws(
+      () => buildHttpConfig("https://x.com/sse", "codex", "sse"),
+      /Remote MCP transport "sse" cannot be written for codex/,
+    );
   });
 
   it("returns httpUrl for gemini-cli", () => {
@@ -2658,6 +2692,48 @@ describe("apply (commands/install)", () => {
     // Function.length excludes the trailing optional opts param (default value).
     // Required params: equip, toolDef, platforms, apiKey = 4.
     assert.equal(applyFn.length, 4, "apply expects (equip, toolDef, platforms, apiKey, opts?)");
+  });
+
+  it("blocks unsupported SSE platform output before writing partial configs", () => {
+    const claudeConfigPath = tmpPath("sse-claude-config") + ".json";
+    const codexConfigPath = tmpPath("sse-codex-config") + ".toml";
+    try {
+      const equip = new Augment({
+        name: "sse-platform-preflight",
+        serverUrl: "https://example.com/sse",
+      });
+      const toolDef = {
+        name: "sse-platform-preflight",
+        source: "registry",
+        transport: "sse",
+        serverUrl: "https://example.com/sse",
+        skills: [],
+        requiresAuth: false,
+      };
+      const platforms = [
+        mockPlatform({
+          platform: "claude-code",
+          configPath: claudeConfigPath,
+          rootKey: "mcpServers",
+          configFormat: "json",
+        }),
+        mockPlatform({
+          platform: "codex",
+          configPath: codexConfigPath,
+          rootKey: "mcp_servers",
+          configFormat: "toml",
+        }),
+      ];
+
+      const report = applyFn(equip, toolDef, platforms, null, { dryRun: false });
+
+      assert.equal(report.overallSuccess, false);
+      assert.equal(report.errorCount, 1);
+      assert.equal(fs.existsSync(claudeConfigPath), false, "supported platform should not be partially written");
+      assert.equal(fs.existsSync(codexConfigPath), false, "unsupported platform should not be written");
+    } finally {
+      cleanup(claudeConfigPath, codexConfigPath);
+    }
   });
 });
 

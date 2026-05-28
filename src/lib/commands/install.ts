@@ -8,7 +8,7 @@ import { Augment, type AugmentConfig } from "../../index";
 import { registryDefToConfig, REGISTRY_API, resolveRegistryInstallReviewGate, type RegistryDef } from "../registry";
 import { createManualPlatform } from "../platforms";
 import { platformName, resolvePlatformId } from "../platforms";
-import { InstallReportBuilder } from "../types";
+import { InstallReportBuilder, makeResult } from "../types";
 import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
@@ -39,7 +39,7 @@ export interface AugmentInput {
   source: SkillManifestOwnerSource;
   title?: string;
   description?: string;
-  transport?: "http" | "stdio";
+  transport?: "http" | "streamable-http" | "sse" | "stdio";
   serverUrl?: string;
   stdio?: { command: string; args: string[]; envKey?: string };
   envKey?: string;
@@ -102,6 +102,38 @@ export interface ApplyOptions {
   counter?: Counter;
 }
 
+interface McpConfigPreflightFailure {
+  platformId: string;
+  error: string;
+}
+
+function preflightMcpConfigCompatibility(
+  equip: Augment,
+  platforms: ReturnType<Augment["detect"]>,
+  apiKey: string | null,
+  transport: string,
+): McpConfigPreflightFailure[] {
+  const failures: McpConfigPreflightFailure[] = [];
+  for (const p of platforms) {
+    try {
+      equip.buildConfig(p.platform, apiKey, transport);
+    } catch (e: unknown) {
+      failures.push({
+        platformId: p.platform,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return failures;
+}
+
+function logMcpConfigPreflightFailures(failures: McpConfigPreflightFailure[]): void {
+  cli.fail("MCP config cannot be written for the selected platform set.");
+  for (const failure of failures) {
+    cli.log(`  ${platformName(failure.platformId)}: ${failure.error}`);
+  }
+}
+
 /**
  * Apply an augment def to the named platforms. Writes MCP server config,
  * behavioral rules, skills, runs verification, reconciles state, and
@@ -160,6 +192,19 @@ export function apply(
       if (hasMcpServer) {
         cli.step(++stepNum, totalSteps, "MCP Server");
         cli.log(`  Transport  ${transport}`);
+
+        const configFailures = preflightMcpConfigCompatibility(equip, platforms, apiKey, transport);
+        if (configFailures.length > 0) {
+          for (const failure of configFailures) {
+            report.addResult(failure.platformId, makeResult("mcp", {
+              errorCode: "MCP_TRANSPORT_UNSUPPORTED",
+              error: failure.error,
+            }));
+            cli.fail(`${platformName(failure.platformId)}   ${failure.error}`);
+          }
+          report.complete();
+          return report;
+        }
 
         for (const p of platforms) {
           const result = equip.installMcp(p, apiKey, { transport, dryRun });
@@ -607,6 +652,14 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
 
   const names = platforms.map(p => platformName(p.platform)).join(", ");
   cli.log(`\n  Detected   ${names}`);
+
+  if (equip.serverUrl || equip.stdio || equip.mcpInstallTarget) {
+    const configFailures = preflightMcpConfigCompatibility(equip, platforms, apiKey, toolDef.transport || "http");
+    if (configFailures.length > 0) {
+      logMcpConfigPreflightFailures(configFailures);
+      process.exit(1);
+    }
+  }
 
   // ── Capture initial snapshots before any modifications ──
   if (!dryRun) {

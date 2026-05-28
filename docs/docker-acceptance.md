@@ -69,6 +69,8 @@ The retained live case list lives at `test/docker/fixtures/live-mcp-registry-cas
 
 - streamable HTTP remote MCP
 - streamable HTTP remote MCP with `Authorization`
+- SSE remote MCP for platforms with direct SSE support (Claude Code and VS Code)
+- SSE remote MCP with `Authorization` for the same supported platforms
 - npm stdio package
 - npm stdio package with one secret env var
 - npm stdio package with literal package arguments
@@ -79,7 +81,7 @@ The retained live case list lives at `test/docker/fixtures/live-mcp-registry-cas
 - PyPI stdio package with one secret env var plus extra plain env metadata
 - OCI stdio package via `docker run`
 - OCI stdio package with literal package arguments
-- known unsupported shapes: SSE remotes, remote URL/header variables, non-Authorization or malformed remote headers, multiple secret env vars, package argument variables, package-launched HTTP servers, and required non-secret env input
+- known unsupported shapes: remote URL/header variables, non-Authorization or malformed remote headers, multiple secret env vars, package argument variables, package-launched HTTP servers, required non-secret env input, and SSE installs on platforms without a direct SSE config shape
 
 The Docker image includes `npx`, `uvx`, and the Docker CLI, and the test reports runtime-command readiness for generated stdio configs. It intentionally does not launch arbitrary third-party MCP server code. OCI stdio configs still require Docker daemon/socket access wherever the platform runs; the default canary verifies the CLI is present but does not mount a daemon, so OCI cases use the documented `--force` path to prove config projection without pretending the daemon is reachable.
 

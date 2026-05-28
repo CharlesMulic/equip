@@ -232,10 +232,7 @@ function convertRemote(server, remote, item) {
   if (!remote) {
     return unsupported(item, "target-not-found", `Remote ${item.target.transport} not found on ${item.serverName}.`);
   }
-  if (remote.type === "sse") {
-    return unsupported(item, "remote-sse", "Equip direct-mode registry installs do not currently encode SSE as distinct from streamable HTTP.");
-  }
-  if (remote.type !== "streamable-http") {
+  if (remote.type !== "streamable-http" && remote.type !== "sse") {
     return unsupported(item, "remote-transport", `Unsupported remote transport ${remote.type}.`);
   }
   if (remote.variables && Object.keys(remote.variables).length > 0) {
@@ -260,9 +257,10 @@ function convertRemote(server, remote, item) {
   }
 
   return supported(item, server, {
-    transport: "http",
+    transport: remote.type === "sse" ? "sse" : "http",
     serverUrl: remote.url,
     auth,
+    platforms: remote.type === "sse" ? ["claude-code", "vscode"] : undefined,
     selectedTarget: {
       kind: "remote",
       type: remote.type,
@@ -407,6 +405,7 @@ function supported(item, server, fields) {
     version: server.version,
     support: "install",
     def,
+    platforms: fields.platforms || null,
     selectedTarget: fields.selectedTarget,
     credential: item.credential || null,
     warnings: fields.warnings || [],
@@ -452,7 +451,7 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf-8"));
 }
 
-function assertPlatformEntry(homeDir, codexHome, codeUserDir, platform, installName, def) {
+function assertPlatformEntry(homeDir, codexHome, codeUserDir, platform, installName, def, item) {
   if (platform === "codex") {
     const toml = fs.readFileSync(path.join(codexHome, "config.toml"), "utf-8");
     assert.match(toml, new RegExp(`\\[mcp_servers\\.${installName}\\]`));
@@ -467,7 +466,7 @@ function assertPlatformEntry(homeDir, codexHome, codeUserDir, platform, installN
       assert.equal(entry.url, def.serverUrl, `${platform} remote URL`);
       if (def.auth?.type === "api_key") {
         assert.match(toml, new RegExp(`\\[mcp_servers\\.${installName}\\.http_headers\\]`));
-        assert.equal(entry.http_headers?.Authorization, "Bearer test-github-token", `${platform} auth header`);
+        assert.equal(entry.http_headers?.Authorization, `Bearer ${item.credential.apiKey}`, `${platform} auth header`);
       }
     }
     return;
@@ -497,13 +496,13 @@ function assertPlatformEntry(homeDir, codexHome, codeUserDir, platform, installN
     const actualUrl = entry.url || entry.serverUrl || entry.httpUrl;
     assert.equal(actualUrl, def.serverUrl, `${platform} remote URL`);
     if (platform === "claude-code" || platform === "vscode") {
-      assert.equal(entry.type, "http", `${platform} remote type`);
+      assert.equal(entry.type, def.transport === "sse" ? "sse" : "http", `${platform} remote type`);
     }
     if (platform === "roo-code") {
       assert.equal(entry.type, "streamable-http", `${platform} remote type`);
     }
     if (def.auth?.type === "api_key") {
-      assert.equal(entry.headers?.Authorization, "Bearer test-github-token", `${platform} auth header`);
+      assert.equal(entry.headers?.Authorization, `Bearer ${item.credential.apiKey}`, `${platform} auth header`);
     } else {
       assert.equal(entry.headers, undefined, `${platform} should not have auth headers`);
     }
@@ -762,7 +761,7 @@ test("live MCP registry cases can be projected and installed into fake platform 
     const args = [
       item.installName,
       "--platform",
-      platforms.join(","),
+      (item.platforms || platforms).join(","),
       "--non-interactive",
     ];
     const readiness = runtimeReadinessByInstallName.get(item.installName);
@@ -789,8 +788,8 @@ test("live MCP registry cases can be projected and installed into fake platform 
       assert.ok(apiKeyFile, `${item.id} should use an api key file`);
     }
 
-    for (const platform of platforms) {
-      assertPlatformEntry(homeDir, codexHome, codeUserDir, platform, item.installName, item.def);
+    for (const platform of (item.platforms || platforms)) {
+      assertPlatformEntry(homeDir, codexHome, codeUserDir, platform, item.installName, item.def, item);
     }
   }
 
@@ -804,6 +803,7 @@ test("live MCP registry cases can be projected and installed into fake platform 
       version: item.version,
       selectedTarget: item.selectedTarget,
       transport: item.def.transport,
+      platforms: item.platforms || platforms,
       stdioCommand: item.def.stdioCommand,
       stdioArgs: item.def.stdioArgs,
       serverUrl: item.def.serverUrl,

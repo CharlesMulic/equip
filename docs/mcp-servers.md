@@ -39,7 +39,8 @@ Some platforms require an explicit transport type field:
 
 | Value | Platforms |
 |---|---|
-| `"http"` | Claude Code, VS Code, Copilot CLI, Amazon Q |
+| `"http"` | Claude Code and VS Code for streamable HTTP; Copilot CLI, Amazon Q |
+| `"sse"` | Claude Code and VS Code for SSE |
 | `"streamable-http"` | Roo Code |
 | *(none)* | All others |
 
@@ -60,13 +61,13 @@ Some platforms require an explicit transport type field:
 
 See [platforms.md](./platforms.md) for the complete matrix.
 
-## HTTP vs Stdio Transport
+## Remote vs Stdio Transport
 
-Equip supports both HTTP and stdio transports.
+Equip supports remote and stdio MCP transports.
 
-### HTTP Transport (default)
+### Remote Transport (default)
 
-The server runs remotely. Equip writes the platform-specific URL and auth headers:
+The server runs remotely. Equip writes the platform-specific URL, transport type, and auth headers. Legacy `transport: "http"` is treated as remote streamable HTTP for compatibility. Structured install targets should prefer `transport: "streamable-http"` or `transport: "sse"`:
 
 ```json
 {
@@ -149,7 +150,7 @@ For package stdio targets, Equip can project:
 
 Use `runtimeArguments` for arguments to the runtime command and `packageArguments` for arguments to the MCP server package/binary. Literal `value` and non-secret `default` values are projected into the generated command. Arguments with variables or required values without defaults are recognized but blocked until structured substitution is available.
 
-Remote targets use `targetKind: "remote"`, `transport: "streamable-http"`, and `url`. A single required secret credential input is supported for standard Authorization bearer configuration:
+Remote targets use `targetKind: "remote"`, `transport: "streamable-http"` or `transport: "sse"`, and `url`. A single required secret credential input is supported for standard Authorization bearer configuration:
 
 ```json
 {
@@ -164,6 +165,8 @@ Remote targets use `targetKind: "remote"`, `transport: "streamable-http"`, and `
 ```
 
 Values for required inputs come from prompts, `--mcp-input KEY=VALUE`, `--mcp-input-file KEY=path`, or a caller-provided `mcpInstallInputs` map. Definition files should describe required values, not contain raw user secrets.
+
+SSE is platform-dependent. Equip currently writes direct SSE config for Claude Code and VS Code, which both use `type: "sse"`. Platforms without an explicit SSE shape block with `remote-sse-unsupported` instead of silently installing a streamable HTTP-shaped entry.
 
 ## Runtime Preflight
 
@@ -253,6 +256,10 @@ equip.buildConfig("windsurf", "sk-xxx");
 // Stdio config (requires stdio in AugmentConfig)
 equip.buildConfig("claude-code", "sk-xxx", "stdio");
 // { command: "npx", args: ["-y", "@example/my-mcp@latest"], env: { MY_API_KEY: "sk-xxx" } }
+
+// SSE config for platforms with direct SSE support
+equip.buildConfig("vscode", null, "sse");
+// { url: "https://api.example.com/mcp", type: "sse" }
 ```
 
 ### `equip.installMcp(platform, apiKey, options?)`
@@ -269,7 +276,7 @@ for (const p of platforms) {
 ```
 
 **Options:**
-- `transport` -- `"http"` (default) or `"stdio"`
+- `transport` -- `"http"` / `"streamable-http"` (default remote), `"sse"`, or `"stdio"`
 - `dryRun` -- `true` to skip file writes
 
 **Returns:** `ArtifactResult` with MCP-specific `method` set to `"json"` or `"toml"`.

@@ -279,8 +279,7 @@
         "transport": "sse"
       },
       "expected": {
-        "support": "unsupported",
-        "reason": "remote-sse"
+        "support": "install"
       }
     },
     {
@@ -296,8 +295,7 @@
         "apiKey": "test-fodda-token"
       },
       "expected": {
-        "support": "unsupported",
-        "reason": "remote-sse"
+        "support": "install"
       }
     },
     {

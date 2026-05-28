@@ -348,3 +348,5 @@ interface UninstallSkillResult {
 | `installedSkills(platform)` | List names of installed skills |
 | `supportsHooks(platform)` | Check if platform supports hooks |
 | `verify(platform)` | Check all artifacts are correctly installed |
+
+Remote MCP transport defaults to streamable HTTP. Pass `"sse"` only when targeting a platform that can represent SSE directly; Equip currently emits direct SSE config for Claude Code and VS Code and fails closed for other platforms. Pass `"stdio"` only when the augment includes a `stdio` command/args definition.

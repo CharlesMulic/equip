@@ -2,6 +2,9 @@
 
 const { describe, it } = require("node:test");
 const assert = require("assert/strict");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 const {
   assessMcpInstallability,
@@ -36,7 +39,7 @@ describe("registryDefToMcpInstallTargets", () => {
     assert.equal(assessMcpInstallability(targets[0]).status, "installable");
   });
 
-  it("keeps SSE visible but unsupported", () => {
+  it("keeps SSE visible and installable before platform-specific output", () => {
     const [target] = registryDefToMcpInstallTargets({
       name: "sse-demo",
       title: "SSE Demo",
@@ -49,8 +52,8 @@ describe("registryDefToMcpInstallTargets", () => {
     const report = assessMcpInstallability(target);
 
     assert.equal(target.transport, "sse");
-    assert.equal(report.status, "unsupported");
-    assert.equal(report.findings[0].code, "remote-sse-unsupported");
+    assert.equal(report.status, "installable");
+    assert.equal(report.findings[0].code, "remote-sse-platform-dependent");
   });
 
   it("projects package stdio targets from registry package facts", () => {
@@ -320,7 +323,7 @@ describe("registryDefToMcpInstallTargets", () => {
 });
 
 describe("selectPreferredMcpInstallTarget", () => {
-  it("prefers installable streamable HTTP over unsupported SSE", () => {
+  it("prefers streamable HTTP over SSE when both are installable", () => {
     const targets = registryDefToMcpInstallTargets({
       name: "multi-target",
       title: "Multi Target",
@@ -435,10 +438,32 @@ describe("buildMcpConfigForInstallTarget", () => {
       serverUrl: "https://example.com/sse",
     });
 
-    const result = buildMcpConfigForInstallTarget(target, "claude-code");
+    const result = buildMcpConfigForInstallTarget(target, "codex");
 
     assert.equal(result.success, false);
     assert.equal(result.errorCode, "remote-sse-unsupported");
+  });
+
+  it("writes SSE config for platforms that can represent SSE directly", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "sse-demo",
+      title: "SSE Demo",
+      description: "",
+      installMode: "direct",
+      transport: "sse",
+      serverUrl: "https://example.com/sse",
+    });
+
+    const claude = buildMcpConfigForInstallTarget(target, "claude-code");
+    const vscode = buildMcpConfigForInstallTarget(target, "vscode");
+
+    assert.equal(claude.success, true);
+    assert.equal(claude.transport, "sse");
+    assert.equal(claude.entry.url, "https://example.com/sse");
+    assert.equal(claude.entry.type, "sse");
+    assert.equal(vscode.success, true);
+    assert.equal(vscode.entry.url, "https://example.com/sse");
+    assert.equal(vscode.entry.type, "sse");
   });
 
   it("writes npm stdio targets with provided env input", () => {
@@ -816,6 +841,57 @@ describe("assessMcpRuntimeReadiness", () => {
     assert.equal(seenEnvs.every((env) => env.PATH === "/usr/bin"), true);
     assert.equal(seenEnvs.some((env) => Object.hasOwn(env, "EXAMPLE_TOKEN")), false);
     assert.equal(seenEnvs.some((env) => Object.hasOwn(env, "EQUIP_BRIDGE_TOKEN")), false);
+  });
+
+  it("uses the resolved Windows shim path for passive runtime checks", {
+    skip: process.platform !== "win32" && "Windows shim resolution regression test",
+  }, async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-win-shim-"));
+    const workspace = path.join(root, "workspace");
+    const safeBin = path.join(root, "safe-bin");
+    const marker = path.join(root, "shadow-ran.txt");
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.mkdirSync(safeBin, { recursive: true });
+    fs.writeFileSync(
+      path.join(workspace, "uvx.cmd"),
+      `@echo off\r\necho shadow > "${marker}"\r\nexit /b 9\r\n`,
+    );
+    fs.writeFileSync(
+      path.join(safeBin, "uvx.cmd"),
+      "@echo off\r\necho uvx 1.0.0\r\nexit /b 0\r\n",
+    );
+
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(workspace);
+      const [target] = registryDefToMcpInstallTargets({
+        name: "pypi-demo",
+        title: "PyPI Demo",
+        description: "",
+        installMode: "package",
+        installTargets: [{
+          targetKind: "stdio",
+          transport: { type: "stdio" },
+          registryType: "pypi",
+          identifier: "example-mcp",
+        }],
+      });
+
+      const report = await assessMcpRuntimeReadiness(target, {
+        env: {
+          PATH: safeBin,
+          PATHEXT: ".CMD",
+          SYSTEMROOT: process.env.SYSTEMROOT,
+          WINDIR: process.env.WINDIR,
+        },
+      });
+
+      assert.equal(report.status, "ready");
+      assert.equal(fs.existsSync(marker), false, "current-directory shim must not shadow the resolved PATH entry");
+    } finally {
+      process.chdir(previousCwd);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("builds a combined readiness report without running an MCP server", async () => {

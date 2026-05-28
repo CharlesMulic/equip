@@ -185,21 +185,21 @@ This is useful for:
 
 Each platform has its own field names for HTTP MCP server configuration. Equip translates automatically, but here's the full matrix for reference:
 
-| Platform | URL Field | Type Field | Headers Field |
-|---|---|---|---|
-| Claude Code | `url` | `"http"` | `headers` |
-| Cursor | `url` | -- | `headers` |
-| Windsurf | `serverUrl` | -- | `headers` |
-| VS Code | `url` | `"http"` | `headers` |
-| Cline | `url` | -- | `headers` |
-| Roo Code | `url` | `"streamable-http"` | `headers` |
-| Codex | `url` | -- | `http_headers` |
-| Gemini CLI | `httpUrl` | -- | `headers` |
-| Junie | `url` | -- | `headers` |
-| Copilot (JetBrains) | `url` | -- | `headers` |
-| Copilot CLI | `url` | `"http"` | `headers` |
-| Amazon Q | `url` | `"http"` | `headers` |
-| Tabnine | `url` | -- | `requestInit.headers` (nested) |
+| Platform | URL Field | Streamable HTTP Type | SSE Type | Headers Field |
+|---|---|---|---|---|
+| Claude Code | `url` | `"http"` | `"sse"` | `headers` |
+| Cursor | `url` | -- | unsupported | `headers` |
+| Windsurf | `serverUrl` | -- | unsupported | `headers` |
+| VS Code | `url` | `"http"` | `"sse"` | `headers` |
+| Cline | `url` | -- | unsupported | `headers` |
+| Roo Code | `url` | `"streamable-http"` | unsupported | `headers` |
+| Codex | `url` | -- | unsupported | `http_headers` |
+| Gemini CLI | `httpUrl` | -- | unsupported | `headers` |
+| Junie | `url` | -- | unsupported | `headers` |
+| Copilot (JetBrains) | `url` | -- | unsupported | `headers` |
+| Copilot CLI | `url` | `"http"` | unsupported | `headers` |
+| Amazon Q | `url` | `"http"` | unsupported | `headers` |
+| Tabnine | `url` | -- | unsupported | `requestInit.headers` (nested) |
 
 See [mcp-servers.md](./mcp-servers.md) for details on how equip builds and writes these configs.
 

@@ -241,6 +241,9 @@ export function selectPreferredMcpInstallTarget(
     const kindDelta = targetKindRank(a.kind) - targetKindRank(b.kind);
     if (kindDelta !== 0) return kindDelta;
 
+    const transportDelta = transportRank(a.transport) - transportRank(b.transport);
+    if (transportDelta !== 0) return transportDelta;
+
     return a.targetKey.localeCompare(b.targetKey);
   })[0];
 }
@@ -341,11 +344,12 @@ export function assessMcpInstallability(
 
   if (target.kind === "remote") {
     if (target.transport === "sse") {
-      findings.push(blocked(
-        "remote-sse-unsupported",
-        "SSE MCP transport is recognized but not supported by Equip install output yet.",
-        "Use a streamable HTTP endpoint, or wait for SSE platform support.",
-      ));
+      findings.push({
+        code: "remote-sse-platform-dependent",
+        severity: "warning",
+        message: "SSE MCP transport is recognized, but only some platforms can represent it directly.",
+        remediation: "Choose a platform with explicit SSE support, or use a streamable HTTP endpoint.",
+      });
     }
     if (hasUrlVariables(target.url)) {
       findings.push(blocked(
@@ -632,7 +636,8 @@ export async function assessMcpRuntimeReadiness(
       continue;
     }
 
-    const result = await runCommand(command, requirement.args ?? ["--version"], { timeoutMs, env: commandEnv });
+    const commandForCheck = options.runCommand ? command : executable;
+    const result = await runCommand(commandForCheck, requirement.args ?? ["--version"], { timeoutMs, env: commandEnv });
     if (requirement.kind === "docker-daemon") {
       checks.push(dockerDaemonCheck(requirement, executable, result));
       continue;
@@ -993,6 +998,13 @@ function targetKindRank(kind: McpInstallTargetKind): number {
   return 2;
 }
 
+function transportRank(transport: McpTransport): number {
+  if (transport === "streamable-http") return 0;
+  if (transport === "stdio") return 1;
+  if (transport === "sse") return 2;
+  return 3;
+}
+
 function firstSecretInput(inputs: McpInputRequirement[]): McpInputRequirement | undefined {
   return inputs.find((input) => input.required && input.secret);
 }
@@ -1262,8 +1274,10 @@ function defaultRunCommand(
     let settled = false;
     let stdout = "";
     let stderr = "";
+    const useWindowsShimShell = process.platform === "win32" && usesWindowsShim(command);
     const child = spawn(command, args, {
       env: options.env as NodeJS.ProcessEnv,
+      shell: useWindowsShimShell,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -1290,6 +1304,10 @@ function defaultRunCommand(
       resolve({ exitCode: code, stdout, stderr });
     });
   });
+}
+
+function usesWindowsShim(command: string): boolean {
+  return /\.(cmd|bat)$/i.test(command);
 }
 
 function stableTargetKey(name: string, kind: string, transport: string, discriminator: string): string {

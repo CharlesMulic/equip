@@ -23,6 +23,7 @@ const {
 // ─── Test Helpers ───────────────────────────────────────────
 
 const { setupFullHome } = require("./_isolation");
+const { setupInstalledAugment } = require("./storage/_test-helpers");
 
 let isolation, tempHome;
 
@@ -650,6 +651,67 @@ describe("prior delegated auth", () => {
     assert.equal(calledUrl, "https://api-staging.cg3.io/token");
 
     deleteStoredCredential(name);
+  });
+
+  it("preserves SSE platform config shape when refreshing OAuth credentials", async () => {
+    const fullHome = setupFullHome("equip-auth-refresh-sse");
+    const originalFetch = global.fetch;
+    const name = testToolName();
+    try {
+      fs.mkdirSync(path.join(fullHome.home, ".claude"), { recursive: true });
+      setupInstalledAugment(name, {
+        source: "registry",
+        title: "OAuth SSE Test",
+        transport: "sse",
+        platforms: ["claude-code"],
+      });
+      writeStoredCredential({
+        authType: "oauth",
+        credential: "old-access",
+        toolName: name,
+        oauth: {
+          accessToken: "old-access",
+          refreshToken: "rt-old",
+          tokenUrl: "https://example.com/token",
+          clientId: "test-client",
+        },
+        storedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const configPath = path.join(fullHome.home, ".claude.json");
+      fs.writeFileSync(configPath, JSON.stringify({
+        mcpServers: {
+          [name]: {
+            type: "sse",
+            url: "https://example.com/sse",
+            headers: { Authorization: "Bearer old-access" },
+          },
+        },
+      }, null, 2));
+
+      global.fetch = async () => ({
+        json: async () => ({
+          access_token: "new-access",
+          refresh_token: "rt-new",
+          expires_in: 3600,
+        }),
+      });
+
+      const result = await refreshCredential(name);
+      const updated = JSON.parse(fs.readFileSync(configPath, "utf-8")).mcpServers[name];
+
+      assert.equal(result.success, true);
+      assert.equal(result.configsUpdated, 1);
+      assert.equal(updated.type, "sse");
+      assert.equal(updated.url, "https://example.com/sse");
+      assert.equal(updated.headers.Authorization, "Bearer new-access");
+    } finally {
+      if (originalFetch === undefined) delete global.fetch;
+      else global.fetch = originalFetch;
+      deleteStoredCredential(name);
+      fullHome.dispose();
+    }
   });
 });
 

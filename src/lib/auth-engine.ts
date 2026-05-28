@@ -445,7 +445,8 @@ function updatePlatformConfigs(toolName: string, newToken: string, logger: Equip
         || (entry as Record<string, unknown>).httpUrl;
       if (!serverUrl || typeof serverUrl !== "string") continue;
 
-      const newConfig = buildHttpConfigWithAuth(serverUrl, newToken, p.platform);
+      const transport = (entry as Record<string, unknown>).type === "sse" ? "sse" : "streamable-http";
+      const newConfig = buildHttpConfigWithAuth(serverUrl, newToken, p.platform, undefined, transport);
       installMcp(p, toolName, newConfig, { logger });
       updated++;
     }
