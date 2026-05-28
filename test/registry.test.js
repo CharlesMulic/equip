@@ -24,6 +24,7 @@ const AUTH_FIXTURE_NAME = "demo-direct-install-auth";
 const HASH_MATCH_FIXTURE_NAME = "demo-direct-install-hash-match";
 const HASH_ALGORITHM_MISMATCH_FIXTURE_NAME = "demo-direct-install-hash-algorithm-mismatch";
 const UNREVIEWED_FIXTURE_NAME = "demo-direct-install-unreviewed";
+const REVIEW_UNSUPPORTED_FIXTURE_NAME = "demo-direct-install-review-unsupported";
 const STDIO_MISSING_RUNTIME_FIXTURE_NAME = "demo-stdio-missing-runtime";
 const SSE_UNSUPPORTED_FIXTURE_NAME = "demo-remote-sse-unsupported-platform";
 const SSE_AUTH_UNSUPPORTED_FIXTURE_NAME = "demo-remote-sse-auth-unsupported-platform";
@@ -118,6 +119,23 @@ function startFixtureRegistry() {
             status: "synced-unreviewed",
             reviewStatus: "unreviewed",
             trustTier: "unscanned",
+          }),
+          [REVIEW_UNSUPPORTED_FIXTURE_NAME]: buildFixture(origin, REVIEW_UNSUPPORTED_FIXTURE_NAME, {
+            title: "Demo Direct Install Review Unsupported",
+            reviewStatus: "unreviewed",
+            trustTier: "unscanned",
+            trustState: {
+              reviewState: "unsupported",
+              equipGate: "warning-gated",
+              transportPath: "stdio-mcp",
+              credentialEligibility: "not-required",
+            },
+            recommendedMcpPath: {
+              supportLevel: "unsupported",
+              evidenceTier: "unsupported-source-or-transport",
+              recommendedAction: "unsupported",
+              supportSummary: "Automated review is not supported for this path yet.",
+            },
           }),
           [STDIO_MISSING_RUNTIME_FIXTURE_NAME]: buildFixture(origin, STDIO_MISSING_RUNTIME_FIXTURE_NAME, {
             title: "Demo Stdio Missing Runtime",
@@ -523,6 +541,25 @@ describe("resolveRegistryInstallReviewGate", () => {
     assert.equal(gate.code, "allowed");
   });
 
+  it("allows modern trustState normal registry MCP definitions", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "trust-reviewed",
+      title: "Trust Reviewed",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustTier: "unscanned",
+      trustState: {
+        reviewState: "reviewed-pass",
+        equipGate: "normal",
+      },
+    });
+
+    assert.equal(gate.allowed, true);
+    assert.equal(gate.code, "allowed");
+  });
+
   it("does not gate rules-only definitions", () => {
     const gate = resolveRegistryInstallReviewGate({
       name: "rules-only",
@@ -557,6 +594,86 @@ describe("resolveRegistryInstallReviewGate", () => {
     assert.equal(gate.allowed, false);
     assert.equal(gate.bypassable, true);
     assert.equal(gate.code, "unreviewed");
+  });
+
+  it("warning-gates review-unsupported paths without treating them as install-unsupported", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "unsupported-review",
+      title: "Unsupported Review",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKey: "pypi-target",
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "pypi",
+        identifier: "example-mcp",
+      }],
+      trustState: {
+        reviewState: "unsupported",
+        equipGate: "warning-gated",
+      },
+      recommendedMcpPath: {
+        supportLevel: "unsupported",
+        evidenceTier: "unsupported-source-or-transport",
+        recommendedAction: "unsupported",
+        supportSummary: "Automated review is not supported for this path yet.",
+      },
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.equal(gate.code, "warning-gated");
+    assert.match(gate.detail, /Automated review is not supported/);
+  });
+
+  it("warning-gates path review gaps before broad normal trust states", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "contradictory-path",
+      title: "Contradictory Path",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKey: "pypi-target",
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "pypi",
+        identifier: "example-mcp",
+      }],
+      trustState: {
+        reviewState: "reviewed-pass",
+        equipGate: "normal",
+      },
+      recommendedMcpPath: {
+        supportLevel: "unsupported",
+        evidenceTier: "unsupported-source-or-transport",
+        recommendedAction: "unsupported",
+        supportSummary: "Automated review is not supported for this path yet.",
+      },
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.equal(gate.code, "unreviewed");
+  });
+
+  it("warning-gates reviewed-warning MCP definitions", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "warning-review",
+      title: "Warning Review",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustState: {
+        reviewState: "reviewed-warning",
+        equipGate: "warning-gated",
+      },
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.equal(gate.code, "warning-gated");
   });
 
   it("gates registry package installTargets as MCP definitions", () => {
@@ -606,6 +723,31 @@ describe("resolveRegistryInstallReviewGate", () => {
         transport: "http",
         serverUrl: "https://example.com/mcp",
         reviewStatus,
+      });
+
+      assert.equal(gate.allowed, false);
+      assert.equal(gate.bypassable, false);
+    }
+  });
+
+  it("hard-blocks failed or emergency-disabled trust states", () => {
+    for (const trustState of [
+      { reviewState: "rejected", equipGate: "blocked" },
+      { reviewState: "failed", equipGate: "blocked" },
+      { reviewState: "blocked", equipGate: "blocked" },
+      { reviewState: "reviewed-pass", equipGate: "emergency-disabled" },
+      { reviewState: "unsupported", equipGate: "blocked" },
+      { reviewState: "pending-review" },
+      { reviewState: "needs-attention" },
+    ]) {
+      const gate = resolveRegistryInstallReviewGate({
+        name: `trust-${trustState.reviewState}-${trustState.equipGate}`,
+        title: "Blocked",
+        description: "",
+        installMode: "direct",
+        transport: "http",
+        serverUrl: "https://example.com/mcp",
+        trustState,
       });
 
       assert.equal(gate.allowed, false);
@@ -933,7 +1075,7 @@ describe("direct-mode CLI", () => {
     ], cliEnv);
 
     assert.equal(blocked.code, 1, blocked.output);
-    assert.match(blocked.output, /has not cleared CG3 review/);
+    assert.match(blocked.output, /has not cleared Equip review/);
     assert.match(blocked.output, /--allow-unreviewed/);
 
     const allowed = await runEquip([
@@ -945,7 +1087,32 @@ describe("direct-mode CLI", () => {
     ], cliEnv);
 
     assert.equal(allowed.code, 0, allowed.output);
-    assert.match(allowed.output, /continuing with an unreviewed MCP augment/);
+    assert.match(allowed.output, /continuing after an MCP review warning/);
+    assert.match(allowed.output, /Done\./);
+  });
+
+  it("allows explicitly acknowledged review-unsupported registry MCP installs to continue to readiness checks", async () => {
+    const blocked = await runEquip([
+      REVIEW_UNSUPPORTED_FIXTURE_NAME,
+      "--dry-run",
+      "--platform",
+      "claude-code",
+    ], cliEnv);
+
+    assert.equal(blocked.code, 1, blocked.output);
+    assert.match(blocked.output, /Automated review is not supported/);
+    assert.match(blocked.output, /--allow-unreviewed/);
+
+    const allowed = await runEquip([
+      REVIEW_UNSUPPORTED_FIXTURE_NAME,
+      "--dry-run",
+      "--allow-unreviewed",
+      "--platform",
+      "claude-code",
+    ], cliEnv);
+
+    assert.equal(allowed.code, 0, allowed.output);
+    assert.match(allowed.output, /continuing after an MCP review warning/);
     assert.match(allowed.output, /Done\./);
   });
 

@@ -323,6 +323,24 @@ describe("registryDefToMcpInstallTargets", () => {
 });
 
 describe("selectPreferredMcpInstallTarget", () => {
+  it("preserves explicit target keys from registry installTargets", () => {
+    const [target] = registryDefToMcpInstallTargets({
+      name: "explicit-target-key",
+      title: "Explicit Target Key",
+      description: "",
+      installMode: "package",
+      installTargets: [{
+        targetKey: "registry-target-key",
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "@example/mcp-server",
+      }],
+    });
+
+    assert.equal(target.targetKey, "registry-target-key");
+  });
+
   it("prefers streamable HTTP over SSE when both are installable", () => {
     const targets = registryDefToMcpInstallTargets({
       name: "multi-target",
@@ -339,6 +357,35 @@ describe("selectPreferredMcpInstallTarget", () => {
 
     assert.equal(selected.kind, "remote");
     assert.equal(selected.transport, "streamable-http");
+  });
+
+  it("honors a recommended install target key when supplied by the registry", () => {
+    const selected = registryDefToPreferredMcpInstallTarget({
+      name: "recommended-target",
+      title: "Recommended Target",
+      description: "",
+      installMode: "direct",
+      recommendedInstallTargetKey: "pypi-target",
+      installTargets: [
+        {
+          targetKey: "remote-target",
+          targetKind: "remote",
+          transport: "streamable-http",
+          url: "https://example.com/mcp",
+        },
+        {
+          targetKey: "pypi-target",
+          targetKind: "stdio",
+          transport: { type: "stdio" },
+          registryType: "pypi",
+          identifier: "example-mcp",
+        },
+      ],
+    });
+
+    assert.equal(selected.targetKey, "pypi-target");
+    assert.equal(selected.kind, "stdio");
+    assert.equal(selected.command, "uvx");
   });
 
   it("returns needs-input targets when they are the best supported option", () => {

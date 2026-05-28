@@ -797,7 +797,7 @@ export function enforceRegistryInstallReviewGate(toolDef: RegistryDef, parsedArg
   cli.log(`  ${cli.DIM}${gate.detail}${cli.RESET}`);
 
   if (gate.bypassable && parsedArgs.allowUnreviewed) {
-    cli.warn("Explicit --allow-unreviewed supplied; continuing with an unreviewed MCP augment.");
+    cli.warn("Explicit --allow-unreviewed supplied; continuing after an MCP review warning.");
     return;
   }
 

@@ -191,6 +191,7 @@ export interface McpDefinitionInput {
   npmPackage?: string | null;
   setupCommand?: string | null;
   installTargets?: unknown;
+  recommendedInstallTargetKey?: string | null;
 }
 
 export interface McpRuntimeReadinessOptions {
@@ -225,10 +226,16 @@ export function registryDefToMcpInstallTargets(def: McpDefinitionInput): McpInst
 
 export function selectPreferredMcpInstallTarget(
   targets: McpInstallTarget[],
-  options: { inputs?: Record<string, string | undefined>; apiKey?: string | null } = {},
+  options: { inputs?: Record<string, string | undefined>; apiKey?: string | null; preferredTargetKey?: string | null } = {},
 ): McpInstallTarget | null {
   if (targets.length === 0) return null;
+  const preferredTargetKey = options.preferredTargetKey?.trim();
   return [...targets].sort((a, b) => {
+    if (preferredTargetKey) {
+      const preferredDelta = Number(b.targetKey === preferredTargetKey) - Number(a.targetKey === preferredTargetKey);
+      if (preferredDelta !== 0) return preferredDelta;
+    }
+
     const aReport = assessMcpInstallability(a, {
       inputs: withLegacyCredentialFallback(a, options.inputs, options.apiKey),
     });
@@ -252,7 +259,10 @@ export function registryDefToPreferredMcpInstallTarget(
   def: McpDefinitionInput,
   options: { inputs?: Record<string, string | undefined>; apiKey?: string | null } = {},
 ): McpInstallTarget | null {
-  return selectPreferredMcpInstallTarget(registryDefToMcpInstallTargets(def), options);
+  return selectPreferredMcpInstallTarget(registryDefToMcpInstallTargets(def), {
+    ...options,
+    preferredTargetKey: def.recommendedInstallTargetKey,
+  });
 }
 
 export function mcpDefinitionToMcpInstallTargets(
@@ -691,12 +701,8 @@ function parseExplicitTarget(
   const rawTransport = readString(record.transport) ?? readString(asRecord(record.transport)?.type);
   const transport = normalizeTransport(rawTransport);
   const rawKind = (readString(record.kind) ?? readString(record.targetKind) ?? inferTargetKind(record, transport)).toLowerCase();
-  const targetKey = stableTargetKey(
-    def.name,
-    rawKind || "target",
-    transport,
-    readString(record.targetKey) ?? readString(record.id) ?? String(index),
-  );
+  const explicitTargetKey = safeExplicitTargetKey(readString(record.targetKey) ?? readString(record.id));
+  const targetKey = explicitTargetKey ?? stableTargetKey(def.name, rawKind || "target", transport, String(index));
   const label = readString(record.label) ?? readString(record.name) ?? def.title ?? def.name;
   const inputs = mergeInputRequirements([
     ...inputRequirementsFromRawTarget(record),
@@ -881,6 +887,16 @@ function inferTargetKind(record: Record<string, unknown>, transport: McpTranspor
   if (record.command || record.stdioCommand || transport === "stdio") return "stdio";
   if (record.registryType || record.packageRegistry || record.identifier) return "package";
   return "";
+}
+
+function safeExplicitTargetKey(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 200) return null;
+  if (!/^[a-zA-Z0-9:._/-]+$/.test(trimmed)) return null;
+  if (/(token|secret|password|api[_-]?key)/i.test(trimmed)) return null;
+  return trimmed;
 }
 
 function inputRequirementsFromAuth(def: {

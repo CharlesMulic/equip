@@ -105,8 +105,9 @@ export interface RegistryDef {
   trustTier?: string | null;
   trustLabel?: string | null;
   trustSignals?: Array<{ id: string; label: string; status: string; detail?: string }>;
+  trustState?: RegistryTrustState | null;
   mcpReviewPaths?: unknown[];
-  recommendedMcpPath?: unknown;
+  recommendedMcpPath?: RegistryMcpPathSummary | null;
   recommendedInstallTargetKey?: string | null;
   lastReviewedAt?: string | null;
 
@@ -165,6 +166,31 @@ export interface RegistryDef {
   hashAlgorithm?: string;
 }
 
+export interface RegistryTrustState {
+  catalogPresence?: string;
+  discoveryExposure?: string;
+  claimState?: string;
+  reviewState?: string;
+  equipGate?: string;
+  transportPath?: string;
+  credentialEligibility?: string;
+  reasonCodes?: string[];
+  normallyEquipable?: boolean;
+}
+
+export interface RegistryMcpPathSummary {
+  pathKey?: string;
+  supportLevel?: string | null;
+  supportSummary?: string | null;
+  supportDetail?: string | null;
+  unsupportedReasonDetail?: string | null;
+  evidenceTier?: string | null;
+  label?: string | null;
+  summary?: string | null;
+  recommendedAction?: string | null;
+  normallyEquipable?: boolean;
+}
+
 export type RegistryInstallReviewGateCode =
   | "allowed"
   | "no-mcp"
@@ -172,6 +198,8 @@ export type RegistryInstallReviewGateCode =
   | "rejected"
   | "needs-attention"
   | "pending-review"
+  | "blocked"
+  | "warning-gated"
   | "unreviewed";
 
 export interface RegistryInstallReviewGate {
@@ -183,7 +211,6 @@ export interface RegistryInstallReviewGate {
 }
 
 const REVIEWED_TRUST_TIERS = new Set(["first-party", "verified", "reviewed"]);
-const LIMITED_TRUST_TIERS = new Set(["scanned", "unscanned"]);
 
 /**
  * Registry MCP install safety gate.
@@ -200,31 +227,59 @@ export function resolveRegistryInstallReviewGate(def: RegistryDef): RegistryInst
   }
 
   const status = normalizeReviewGateValue(def.registryStatus ?? def.status);
-  const reviewStatus = normalizeReviewGateValue(def.reviewStatus);
+  const legacyReviewStatus = normalizeReviewGateValue(def.reviewStatus);
+  const trustReviewState = normalizeReviewGateValue(def.trustState?.reviewState);
+  const equipGate = normalizeReviewGateValue(def.trustState?.equipGate);
   const trustTier = normalizeReviewGateValue(def.trustTier);
+  const reviewStatus = trustReviewState || legacyReviewStatus;
+  const pathAction = normalizeReviewGateValue(def.recommendedMcpPath?.recommendedAction);
+  const pathSupport = normalizeReviewGateValue(def.recommendedMcpPath?.supportLevel);
+  const pathEvidence = normalizeReviewGateValue(def.recommendedMcpPath?.evidenceTier);
 
   if (def.listed === false || status === "retracted" || status === "hidden") {
     return blockGate("not-listed", "This augment is not listed for installation.", "The registry has hidden or retracted this augment.");
   }
-  if (status === "rejected" || reviewStatus === "rejected") {
-    return blockGate("rejected", "This augment was rejected by review.", "Rejected MCP augments cannot be installed from the registry.");
+  if (equipGate === "emergency-disabled") {
+    return blockGate("blocked", "This MCP augment has been disabled.", "Equip has disabled registry installation for this MCP augment.");
+  }
+  if (status === "rejected" || reviewStatus === "rejected" || reviewStatus === "failed" || reviewStatus === "blocked") {
+    return blockGate("rejected", "This MCP augment did not pass review.", "Rejected or failed MCP augments cannot be installed from the registry.");
   }
   if (status === "needs-attention" || reviewStatus === "needs-attention") {
     return blockGate("needs-attention", "This augment needs publisher or operator attention.", "It has not cleared review for normal installation.");
   }
-  if (status === "pending-review" || reviewStatus === "pending-review") {
+  if (status === "pending-review" || reviewStatus === "pending-review" || reviewStatus === "pending" || reviewStatus === "review-pending") {
     return blockGate("pending-review", "This augment is still under review.", "Wait for review to finish before installing from the registry.");
   }
-  if (status === "synced-unreviewed" || reviewStatus === "unreviewed" || LIMITED_TRUST_TIERS.has(trustTier)) {
-    return {
-      allowed: false,
-      bypassable: true,
-      code: "unreviewed",
-      title: "This MCP augment has not cleared CG3 review.",
-      detail: "It may run local code or connect to a remote server that has not been scanned or approved for normal installation.",
-    };
+  if (equipGate === "local-manual-only") {
+    return blockGate("blocked", "This MCP augment requires manual local setup.", "Equip cannot automatically install this registry MCP path.");
   }
-  if (reviewStatus === "approved" || REVIEWED_TRUST_TIERS.has(trustTier)) {
+  if (equipGate === "blocked") {
+    return blockGate(
+      "blocked",
+      "This MCP augment is blocked by policy.",
+      pathReviewDetail(def.recommendedMcpPath) || "The registry did not mark this MCP augment as eligible for warning-gated installation.",
+    );
+  }
+  if (equipGate === "warning-gated" || reviewStatus === "reviewed-warning") {
+    return warnGate(
+      "warning-gated",
+      "This MCP augment requires an explicit warning before install.",
+      pathReviewDetail(def.recommendedMcpPath) || "Review completed with concerns or limitations. Install readiness will still be checked separately.",
+    );
+  }
+  if (isBypassableReviewGap(status, reviewStatus, pathAction, pathSupport, pathEvidence)) {
+    return warnGate(
+      "unreviewed",
+      "This MCP augment has not cleared Equip review.",
+      pathReviewDetail(def.recommendedMcpPath) ||
+        "It may run local code or connect to a remote server that has not been approved for normal installation.",
+    );
+  }
+  if (equipGate === "normal") {
+    return allowGate("allowed", "Review gate passed", "This registry MCP augment is eligible for normal Equip install.");
+  }
+  if (reviewStatus === "approved" || reviewStatus === "reviewed-pass" || REVIEWED_TRUST_TIERS.has(trustTier)) {
     return allowGate("allowed", "Review gate passed", "This registry MCP augment has reviewed or trusted status.");
   }
 
@@ -245,6 +300,38 @@ function normalizeReviewGateValue(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function pathReviewDetail(path: RegistryMcpPathSummary | null | undefined): string | null {
+  if (!path) return null;
+  return path.unsupportedReasonDetail?.trim()
+    || path.supportDetail?.trim()
+    || path.supportSummary?.trim()
+    || path.summary?.trim()
+    || null;
+}
+
+function isBypassableReviewGap(
+  status: string,
+  reviewStatus: string,
+  pathAction: string,
+  pathSupport: string,
+  pathEvidence: string,
+): boolean {
+  return status === "synced-unreviewed" ||
+    reviewStatus === "unreviewed" ||
+    reviewStatus === "partial-auth-required" ||
+    reviewStatus === "inconclusive" ||
+    reviewStatus === "unsupported" ||
+    reviewStatus === "reviewed-warning" ||
+    pathAction === "unsupported" ||
+    pathAction === "claim-server" ||
+    pathAction === "provide-review-access" ||
+    pathAction === "manual-review" ||
+    pathAction === "manual_review" ||
+    pathSupport === "unsupported" ||
+    pathSupport === "blocked" ||
+    pathEvidence === "unsupported-source-or-transport";
+}
+
 function allowGate(
   code: RegistryInstallReviewGateCode,
   title: string,
@@ -259,6 +346,14 @@ function blockGate(
   detail: string,
 ): RegistryInstallReviewGate {
   return { allowed: false, bypassable: false, code, title, detail };
+}
+
+function warnGate(
+  code: RegistryInstallReviewGateCode,
+  title: string,
+  detail: string,
+): RegistryInstallReviewGate {
+  return { allowed: false, bypassable: true, code, title, detail };
 }
 
 export type RegistryValidationResult =
