@@ -105,6 +105,9 @@ export interface RegistryDef {
   trustTier?: string | null;
   trustLabel?: string | null;
   trustSignals?: Array<{ id: string; label: string; status: string; detail?: string }>;
+  mcpReviewPaths?: unknown[];
+  recommendedMcpPath?: unknown;
+  recommendedInstallTargetKey?: string | null;
   lastReviewedAt?: string | null;
 
   // Direct-mode fields
