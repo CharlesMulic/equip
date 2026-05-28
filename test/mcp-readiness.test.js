@@ -848,7 +848,7 @@ describe("assessMcpRuntimeReadiness", () => {
   }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "equip-win-shim-"));
     const workspace = path.join(root, "workspace");
-    const safeBin = path.join(root, "safe-bin");
+    const safeBin = path.join(root, "safe bin with spaces");
     const marker = path.join(root, "shadow-ran.txt");
     fs.mkdirSync(workspace, { recursive: true });
     fs.mkdirSync(safeBin, { recursive: true });

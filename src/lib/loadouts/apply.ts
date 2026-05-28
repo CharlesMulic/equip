@@ -2,6 +2,7 @@ import * as os from "os";
 import * as path from "path";
 import { Augment, type AugmentConfig } from "../../index";
 import { readStoredCredential, isCredentialExpired } from "../auth-engine";
+import { registryDefToConfig, type RegistryDef } from "../registry";
 import { createManualPlatform, type DetectedPlatform } from "../platforms";
 import { acquireLock, atomicWriteFileSync, safeReadJsonSync } from "../fs";
 import { ensureInitialSnapshots } from "../snapshots";
@@ -371,13 +372,23 @@ function installEntry(entry: LoadoutPlanEntry, context: LoadoutApplyWriterContex
   if (!manifestEntry) throw new Error(`Cannot apply ${entry.augmentName}: manifest entry is unavailable`);
 
   const platforms = entry.platforms.map((platformId) => createManualPlatform(platformId));
-  const augment = new Augment(contentToAugmentConfig(content, manifestEntry));
   const apiKey = content.requiresAuth ? context.credentialValueReader(entry.augmentName) : null;
   if (content.requiresAuth && !apiKey) throw new Error(`Cannot apply ${entry.augmentName}: credential is unavailable`);
+  const augment = new Augment(contentToAugmentConfig(content, manifestEntry, apiKey));
 
   const failures: string[] = [];
   const transport = content.transport ?? (content.stdio ? "stdio" : "http");
-  const hasMcp = !!(content.serverUrl || content.stdio);
+  const hasMcp = !!(augment.serverUrl || augment.stdio || augment.mcpInstallTarget);
+  if (hasMcp) {
+    for (const platform of platforms) {
+      try {
+        augment.buildConfig(platform.platform, apiKey, transport);
+      } catch (error: unknown) {
+        failures.push(`${platform.platform}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (failures.length > 0) throw new Error(failures.join("; "));
+  }
   for (const platform of platforms) {
     if (hasMcp) {
       const result = augment.installMcp(platform, apiKey, { transport });
@@ -433,7 +444,7 @@ function uninstallEntry(entry: LoadoutPlanEntry, context: LoadoutApplyWriterCont
 
   for (const platformId of platforms) {
     const platform = createManualPlatform(platformId);
-    if (resolved.serverUrl || resolved.stdio) uninstallMcp(platform, entry.augmentName);
+    if (resolved.serverUrl || resolved.stdio || resolved.installTargets) uninstallMcp(platform, entry.augmentName);
     if (resolved.rules) uninstallRules(platform, { marker: resolved.rules.marker, dryRun: false });
     if (resolved.hooks.length > 0) {
       const removed = uninstallHooks(platform, resolved.hooks, { hookDir, dryRun: false });
@@ -459,10 +470,17 @@ function uninstallEntry(entry: LoadoutPlanEntry, context: LoadoutApplyWriterCont
   return { removedPlatforms: platforms };
 }
 
-function contentToAugmentConfig(content: AugmentContent, entry: LoadoutEntry): AugmentConfig {
+function contentToAugmentConfig(content: AugmentContent, entry: LoadoutEntry, apiKey: string | null): AugmentConfig {
   const source = entry.sourceKind === "registry" ? "registry"
     : entry.sourceKind === "wrapped" ? "wrapped"
       : "local";
+  if (content.installTargets !== undefined) {
+    const config = registryDefToConfig(contentToRegistryDef(content, entry), { apiKey });
+    config.source = source;
+    config.augmentVersion = entry.registryVersion;
+    return config;
+  }
+
   const config: AugmentConfig = {
     name: content.name,
     source,
@@ -478,6 +496,35 @@ function contentToAugmentConfig(content: AugmentContent, entry: LoadoutEntry): A
   if (content.skills) config.skills = content.skills;
   if (content.hooks) config.hooks = content.hooks;
   return config;
+}
+
+function contentToRegistryDef(content: AugmentContent, entry: LoadoutEntry): RegistryDef {
+  return {
+    name: content.name,
+    title: content.title || content.name,
+    description: content.description || "",
+    installMode: content.installTargets !== undefined ? "package" : "direct",
+    version: entry.registryVersion,
+    transport: content.transport,
+    serverUrl: content.serverUrl,
+    requiresAuth: content.requiresAuth,
+    auth: content.auth as RegistryDef["auth"],
+    envKey: content.stdio?.envKey,
+    stdioCommand: content.stdio?.command,
+    stdioArgs: content.stdio?.args,
+    npmPackage: content.npmPackage,
+    setupCommand: content.setupCommand,
+    installTargets: content.installTargets,
+    rules: content.rules,
+    skills: content.skills,
+    hooks: content.hooks,
+    categories: content.categories,
+    homepage: content.homepage,
+    repository: content.repository,
+    license: content.license,
+    subtitle: content.subtitle,
+    flavorText: content.flavorText,
+  };
 }
 
 function contentSourceFor(entry: LoadoutEntry, planEntry: LoadoutPlanEntry, now: string): ContentSource {

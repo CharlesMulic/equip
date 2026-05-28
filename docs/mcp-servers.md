@@ -181,6 +181,8 @@ Remote MCP targets normally need no local runtime, so install can proceed once U
 
 Runtime checks are preflight checks only. They do not initialize the MCP server, call tools, read resources, or execute arbitrary package code. The CLI blocks normal installs when required runtimes are missing, allows `--dry-run` reporting, and allows a deliberate `--force` install. Desktop callers should run the readiness API before install and pass collected values through `mcpInstallInputs`; the sidecar also rejects installs when the selected stdio runtime is not ready.
 
+On Windows, passive readiness checks resolve shim commands such as `npx.cmd`, `npm.cmd`, `uvx.cmd`, and `docker.cmd` to the exact PATH entry before running version checks, including when the resolved path contains spaces. This avoids accidentally executing a current-directory shadow command.
+
 ## How `installMcp` Works
 
 ### Atomic Writes
@@ -305,6 +307,7 @@ const entry = equip.readMcp(platform);
 ### `equip.updateMcpKey(platform, apiKey, transport?)`
 
 Update the API key in an existing config entry. Functionally equivalent to `installMcp` but semantically signals a key rotation.
+When `transport` is omitted, Equip reads the existing platform entry and preserves `type: "sse"` for SSE remotes instead of rewriting the server as streamable HTTP.
 
 ```typescript
 const result = equip.updateMcpKey(platform, newApiKey);

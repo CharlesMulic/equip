@@ -26,6 +26,7 @@ const HASH_ALGORITHM_MISMATCH_FIXTURE_NAME = "demo-direct-install-hash-algorithm
 const UNREVIEWED_FIXTURE_NAME = "demo-direct-install-unreviewed";
 const STDIO_MISSING_RUNTIME_FIXTURE_NAME = "demo-stdio-missing-runtime";
 const SSE_UNSUPPORTED_FIXTURE_NAME = "demo-remote-sse-unsupported-platform";
+const SSE_AUTH_UNSUPPORTED_FIXTURE_NAME = "demo-remote-sse-auth-unsupported-platform";
 
 function tmpPath(prefix = "reg-test") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -135,6 +136,17 @@ function startFixtureRegistry() {
             title: "Demo Remote SSE Unsupported Platform",
             transport: "sse",
             serverUrl: `${origin}/mcp/${SSE_UNSUPPORTED_FIXTURE_NAME}/sse`,
+            rules: undefined,
+            skills: [],
+          }),
+          [SSE_AUTH_UNSUPPORTED_FIXTURE_NAME]: buildFixture(origin, SSE_AUTH_UNSUPPORTED_FIXTURE_NAME, {
+            title: "Demo Remote SSE Auth Unsupported Platform",
+            transport: "sse",
+            serverUrl: `${origin}/mcp/${SSE_AUTH_UNSUPPORTED_FIXTURE_NAME}/sse`,
+            auth: {
+              type: "api_key",
+              envKey: "DEMO_SSE_AUTH_KEY",
+            },
             rules: undefined,
             skills: [],
           }),
@@ -963,6 +975,21 @@ describe("direct-mode CLI", () => {
     assert.match(result.output, /Codex: Equip: MCP target/);
     assert.match(result.output, /remote-sse-unsupported|Remote MCP transport "sse"/);
     assert.equal(fs.existsSync(path.join(homeDir, ".claude.json")), false, "SSE preflight should not partially write Claude config");
+    assert.equal(fs.existsSync(path.join(codexHome, "config.toml")), false, "SSE preflight should not write Codex config");
+  });
+
+  it("reports unsupported SSE platform output before auth prompts", async () => {
+    const result = await runEquip([
+      SSE_AUTH_UNSUPPORTED_FIXTURE_NAME,
+      "--platform",
+      "codex",
+      "--non-interactive",
+    ], cliEnv);
+
+    assert.equal(result.code, 1, result.output);
+    assert.match(result.output, /MCP config cannot be written/);
+    assert.match(result.output, /Remote MCP transport "sse"/);
+    assert.doesNotMatch(result.output, /requires authentication|requires an API key/);
     assert.equal(fs.existsSync(path.join(codexHome, "config.toml")), false, "SSE preflight should not write Codex config");
   });
 });

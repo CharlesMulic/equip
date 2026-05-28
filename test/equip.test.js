@@ -1593,6 +1593,29 @@ describe("Augment.updateMcpKey()", () => {
     cleanup(configPath);
     try { fs.rmSync(path.join(os.homedir(), ".equip"), { recursive: true, force: true }); } catch {}
   }));
+
+  it("preserves existing SSE transport when updating an API key", () => withTempHome(() => {
+    const configPath = tmpPath("sse-rekey") + ".json";
+    const e = new Augment({ name: "sse-server", serverUrl: "https://example.com/sse" });
+    const p = mockPlatform({ platform: "vscode", configPath, rootKey: "servers", configFormat: "json" });
+    cleanup(configPath);
+    e.installMcp(p, "old-key", { transport: "sse" });
+    trackInstallation("sse-server", {
+      source: "registry",
+      title: "SSE Server",
+      transport: "sse",
+      serverUrl: "https://example.com/sse",
+      platforms: ["vscode"],
+      artifacts: { vscode: { mcp: true } },
+    });
+
+    e.updateMcpKey(p, "new-key");
+    const entry = e.readMcp(p);
+    assert.equal(entry.type, "sse");
+    assert.equal(entry.headers.Authorization, "Bearer new-key");
+    cleanup(configPath);
+    try { fs.rmSync(path.join(os.homedir(), ".equip"), { recursive: true, force: true }); } catch {}
+  }));
 });
 
 // ─── resolvePlatformId ──────────────────────────────────────
@@ -2518,6 +2541,26 @@ describe("config migration", () => {
     assert.equal(entry.type, undefined, "type field should be removed");
     assert.equal(entry.url, "https://api.example.com/mcp", "should preserve URL");
     assert.equal(entry.headers.Authorization, "Bearer ask_old", "should preserve auth");
+  });
+
+  it("does not rewrite unsupported SSE entries during migration", () => {
+    const { results, content } = setupAndMigrate("cursor", "test-migrate", {
+      mcpServers: {
+        "test-migrate": {
+          url: "https://api.example.com/sse",
+          type: "sse",
+          headers: { Authorization: "Bearer ask_old" }
+        }
+      }
+    });
+
+    const migration = results.find(r => r.toolName === "test-migrate" && r.platform === "cursor");
+    assert.equal(migration.action, "skipped");
+    assert.ok(migration.detail.includes("remote transport \"sse\" is not supported"));
+
+    const entry = content.mcpServers["test-migrate"];
+    assert.equal(entry.type, "sse", "unsupported SSE shape should be left untouched");
+    assert.equal(entry.url, "https://api.example.com/sse");
   });
 
   it("adds type field when wrong value (hypothetical)", () => {

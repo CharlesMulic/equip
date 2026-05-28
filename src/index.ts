@@ -188,8 +188,10 @@ class Augment {
     return uninstallMcp(platform, this.name, dryRun);
   }
 
-  updateMcpKey(platform: DetectedPlatform, apiKey: string | null, transport: string = "http"): ArtifactResult {
-    const config = this.buildConfig(platform.platform, apiKey, transport);
+  updateMcpKey(platform: DetectedPlatform, apiKey: string | null, transport?: string): ArtifactResult {
+    const existing = transport === undefined ? this.readMcp(platform) : null;
+    const resolvedTransport = transport ?? (existing?.type === "sse" ? "sse" : "http");
+    const config = this.buildConfig(platform.platform, apiKey, resolvedTransport);
     return updateMcpKey(platform, this.name, config, { logger: this.logger });
   }
 

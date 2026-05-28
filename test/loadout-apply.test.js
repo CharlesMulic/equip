@@ -174,6 +174,98 @@ describe("loadout apply", () => {
     assert.doesNotMatch(config, /alpha\/mcp"/);
   });
 
+  it("preflights MCP config compatibility before mixed-platform loadout writes", () => {
+    const sseHash = putContent("sse-tool", {
+      transport: "sse",
+      serverUrl: "https://example.com/sse",
+    });
+    const loadout = createLoadout({
+      name: "SSE Mixed",
+      entries: [loadoutEntry("sse-tool", sseHash, { platformTargets: ["claude-code", "codex"] })],
+    });
+
+    const receipt = applyLoadout({
+      operationId: "op_sse_mixed_preflight",
+      loadout: loadout.id,
+    }, {
+      enabledPlatformIds: ["claude-code", "codex"],
+      now: "2026-05-10T00:00:00.000Z",
+    });
+
+    assert.equal(receipt.status, "failed");
+    assert.equal(receipt.steps[0].status, "failed");
+    assert.match(receipt.steps[0].error, /codex: Equip: Remote MCP transport "sse"/);
+    assert.equal(fs.existsSync(path.join(isolation.home, ".claude.json")), false, "loadout preflight should not partially write Claude config");
+    assert.equal(fs.existsSync(codexConfigPath()), false, "loadout preflight should not write Codex config");
+    assert.equal(JsonStore.resolve("sse-tool"), null);
+  });
+
+  it("preflights installTargets-only SSE loadout content before writes", () => {
+    const sseHash = putContent("sse-target-tool", {
+      transport: undefined,
+      serverUrl: undefined,
+      installTargets: [{
+        targetKind: "remote",
+        transport: "sse",
+        url: "https://example.com/sse",
+      }],
+    });
+    const loadout = createLoadout({
+      name: "SSE Target Mixed",
+      entries: [loadoutEntry("sse-target-tool", sseHash, { platformTargets: ["claude-code", "codex"] })],
+    });
+
+    const receipt = applyLoadout({
+      operationId: "op_sse_install_targets_preflight",
+      loadout: loadout.id,
+    }, {
+      enabledPlatformIds: ["claude-code", "codex"],
+      now: "2026-05-10T00:00:00.000Z",
+    });
+
+    assert.equal(receipt.status, "failed");
+    assert.equal(receipt.steps[0].status, "failed");
+    assert.match(receipt.steps[0].error, /codex: Equip: MCP target/);
+    assert.match(receipt.steps[0].error, /Remote MCP transport "sse"/);
+    assert.equal(fs.existsSync(path.join(isolation.home, ".claude.json")), false, "installTargets preflight should not partially write Claude config");
+    assert.equal(fs.existsSync(codexConfigPath()), false, "installTargets preflight should not write Codex config");
+    assert.equal(JsonStore.resolve("sse-target-tool"), null);
+  });
+
+  it("writes installTargets-only package stdio loadout content", () => {
+    const stdioHash = putContent("stdio-target-tool", {
+      transport: undefined,
+      serverUrl: undefined,
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "npm",
+        identifier: "example-mcp",
+        version: "1.2.3",
+      }],
+    });
+    const loadout = createLoadout({
+      name: "Stdio Target",
+      entries: [loadoutEntry("stdio-target-tool", stdioHash, { platformTargets: ["codex"] })],
+    });
+
+    const receipt = applyLoadout({
+      operationId: "op_stdio_install_targets",
+      loadout: loadout.id,
+    }, {
+      enabledPlatformIds: ["codex"],
+      now: "2026-05-10T00:00:00.000Z",
+    });
+
+    assert.equal(receipt.status, "success", receipt.steps[0]?.error);
+    const config = fs.readFileSync(codexConfigPath(), "utf-8");
+    assert.match(config, /\[mcp_servers\.stdio-target-tool\]/);
+    assert.match(config, process.platform === "win32" ? /command = "cmd"/ : /command = "npx"/);
+    assert.match(config, /"npx"/);
+    assert.match(config, /"example-mcp@1\.2\.3"/);
+    assert.equal(JsonStore.resolve("stdio-target-tool").installed, true);
+  });
+
   it("replays a duplicate operation without extra journal or platform writes", () => {
     const alphaHash = putContent("alpha");
     const loadout = createLoadout({

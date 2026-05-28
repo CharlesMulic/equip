@@ -11,7 +11,7 @@
 // Zero dependencies.
 
 import * as fs from "fs";
-import { PLATFORM_REGISTRY, remoteTypeFieldForPlatform, type DetectedPlatform, type PlatformRemoteTransport } from "./platforms";
+import { PLATFORM_REGISTRY, platformSupportsRemoteTransport, remoteTypeFieldForPlatform, type DetectedPlatform, type PlatformRemoteTransport } from "./platforms";
 import { readMcpEntry, buildHttpConfig, buildHttpConfigWithAuth } from "./mcp";
 import { JsonStore } from "./storage/datastore";
 import { safeReadJsonSync, atomicWriteFileSync } from "./fs";
@@ -56,6 +56,17 @@ export function migrateConfigs(): MigrationResult[] {
       // TOML migration is not supported yet — too complex for the minimal parser
       if (def.configFormat === "toml") {
         results.push({ platform: platformId, toolName, action: "skipped", detail: "TOML migration not supported" });
+        continue;
+      }
+
+      const transport = inferRemoteTransport(existing);
+      if (!platformSupportsRemoteTransport(platformId, transport)) {
+        results.push({
+          platform: platformId,
+          toolName,
+          action: "skipped",
+          detail: `remote transport "${transport}" is not supported on ${platformId}; leaving entry unchanged`,
+        });
         continue;
       }
 
@@ -145,6 +156,9 @@ function rebuildEntry(
 ): Record<string, unknown> {
   const shape = def.httpShape;
   const transport = inferRemoteTransport(existing);
+  if (!platformSupportsRemoteTransport(def.id, transport)) {
+    throw new Error(`Cannot migrate: remote transport "${transport}" is not supported on ${def.id}`);
+  }
 
   // Extract the server URL from whichever field it's in
   const serverUrl = (existing[shape.urlField] || existing.url || existing.serverUrl || existing.httpUrl) as string | undefined;

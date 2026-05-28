@@ -1274,13 +1274,13 @@ function defaultRunCommand(
     let settled = false;
     let stdout = "";
     let stderr = "";
-    const useWindowsShimShell = process.platform === "win32" && usesWindowsShim(command);
-    const child = spawn(command, args, {
-      env: options.env as NodeJS.ProcessEnv,
-      shell: useWindowsShimShell,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = process.platform === "win32" && usesWindowsShim(command)
+      ? spawnWindowsShim(command, args, options.env)
+      : spawn(command, args, {
+        env: options.env as NodeJS.ProcessEnv,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
     const timer = setTimeout(() => {
       if (settled) return;
@@ -1289,8 +1289,8 @@ function defaultRunCommand(
       resolve({ exitCode: null, stdout, stderr, timedOut: true });
     }, options.timeoutMs);
 
-    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
-    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
     child.on("error", (error) => {
       if (settled) return;
       settled = true;
@@ -1308,6 +1308,33 @@ function defaultRunCommand(
 
 function usesWindowsShim(command: string): boolean {
   return /\.(cmd|bat)$/i.test(command);
+}
+
+function spawnWindowsShim(
+  command: string,
+  args: string[],
+  env: Record<string, string | undefined>,
+): ReturnType<typeof spawn> {
+  const commandLine = `"${[quoteWindowsCmdToken(command), ...args.map(quoteWindowsCmdToken)].join(" ")}"`;
+  return spawn(resolveWindowsCommandShell(env), ["/d", "/s", "/c", commandLine], {
+    env: env as NodeJS.ProcessEnv,
+    windowsHide: true,
+    windowsVerbatimArguments: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function quoteWindowsCmdToken(value: string): string {
+  return `"${value.replace(/"/g, `""`)}"`;
+}
+
+function resolveWindowsCommandShell(env: Record<string, string | undefined>): string {
+  const explicit = process.env.ComSpec ?? process.env.COMSPEC;
+  if (explicit) return explicit;
+
+  const windowsRoot = env.SystemRoot ?? env.SYSTEMROOT ?? env.WINDIR ?? env.Windir ?? process.env.SystemRoot ?? process.env.WINDIR;
+  if (windowsRoot) return path.join(windowsRoot, "System32", "cmd.exe");
+  return "cmd.exe";
 }
 
 function stableTargetKey(name: string, kind: string, transport: string, discriminator: string): string {

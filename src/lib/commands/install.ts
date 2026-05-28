@@ -7,7 +7,7 @@ import { spawn } from "child_process";
 import { Augment, type AugmentConfig } from "../../index";
 import { registryDefToConfig, REGISTRY_API, resolveRegistryInstallReviewGate, type RegistryDef } from "../registry";
 import { createManualPlatform } from "../platforms";
-import { platformName, resolvePlatformId } from "../platforms";
+import { platformName, platformSupportsRemoteTransport, resolvePlatformId } from "../platforms";
 import { InstallReportBuilder, makeResult } from "../types";
 import { resolveAuth, validateCredential } from "../auth-engine";
 import { reconcileState } from "../reconcile";
@@ -132,6 +132,68 @@ function logMcpConfigPreflightFailures(failures: McpConfigPreflightFailure[]): v
   for (const failure of failures) {
     cli.log(`  ${platformName(failure.platformId)}: ${failure.error}`);
   }
+}
+
+function filterDetectedPlatforms(
+  platforms: ReturnType<Augment["detect"]>,
+  parsedArgs: ParsedArgs,
+  options: { logDisabled?: boolean } = {},
+): ReturnType<Augment["detect"]> {
+  let selected = platforms;
+
+  const beforeFilter = selected.length;
+  selected = selected.filter(p => isPlatformEnabled(p.platform));
+  if (options.logDisabled && selected.length < beforeFilter) {
+    const skipped = beforeFilter - selected.length;
+    cli.log(`  ${cli.DIM}${skipped} disabled platform${skipped === 1 ? "" : "s"} skipped${cli.RESET}`);
+  }
+
+  if (parsedArgs.platform) {
+    const requested = parsedArgs.platform.split(",").map(s => resolvePlatformId(s.trim()));
+    selected = selected.filter(p => requested.includes(p.platform));
+  }
+
+  return selected;
+}
+
+function enforceDetectedPlatforms(platforms: ReturnType<Augment["detect"]>, parsedArgs: ParsedArgs): void {
+  if (parsedArgs.platform && platforms.length === 0) {
+    cli.fail(`None of the specified platforms detected: ${parsedArgs.platform}`);
+    process.exit(1);
+  }
+
+  if (platforms.length === 0) {
+    cli.fail("No supported AI coding tools detected.");
+    cli.log(`\n  Install one of: Claude Code, Cursor, Windsurf, VS Code, Cline, Roo Code`);
+    process.exit(1);
+  }
+}
+
+function preflightMcpTransportCompatibility(
+  equip: Augment,
+  platforms: ReturnType<Augment["detect"]>,
+  transport: string,
+): McpConfigPreflightFailure[] {
+  const target = equip.mcpInstallTarget;
+  const remoteTransport = target?.kind === "remote"
+    ? target.transport
+    : equip.serverUrl
+      ? (transport === "sse" ? "sse" : "streamable-http")
+      : null;
+  if (!remoteTransport) return [];
+
+  const failures: McpConfigPreflightFailure[] = [];
+  for (const platform of platforms) {
+    if (!platformSupportsRemoteTransport(platform.platform, remoteTransport)) {
+      failures.push({
+        platformId: platform.platform,
+        error: target
+          ? `Equip: MCP target ${target.targetKey} is not installable: Remote MCP transport "${remoteTransport}" cannot be written for ${platform.platform}.`
+          : `Equip: Remote MCP transport "${remoteTransport}" cannot be written for ${platform.platform}.`,
+      });
+    }
+  }
+  return failures;
 }
 
 /**
@@ -552,6 +614,19 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   if (dryRun) cli.warn("DRY RUN — no changes will be made");
   enforceRegistryInstallReviewGate(toolDef, parsedArgs);
 
+  const preAuthEquip = new Augment(registryDefToConfig(toolDef, {
+    logger,
+    mcpInstallInputs: { ...parsedArgs.mcpInputs },
+    apiKey: null,
+  }));
+  const preAuthPlatforms = filterDetectedPlatforms(preAuthEquip.detect(), parsedArgs);
+  enforceDetectedPlatforms(preAuthPlatforms, parsedArgs);
+  const earlyConfigFailures = preflightMcpTransportCompatibility(preAuthEquip, preAuthPlatforms, toolDef.transport || "http");
+  if (earlyConfigFailures.length > 0) {
+    logMcpConfigPreflightFailures(earlyConfigFailures);
+    process.exit(1);
+  }
+
   // ── Auth Resolution ──
   let apiKey: string | null = null;
   const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "oidc" as const } : { type: "none" as const });
@@ -624,31 +699,8 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   }
   config.equipVersion = equipVersion;
   const equip = new Augment(config);
-  let platforms = equip.detect();
-
-  // Filter out disabled platforms
-  const beforeFilter = platforms.length;
-  platforms = platforms.filter(p => isPlatformEnabled(p.platform));
-  if (platforms.length < beforeFilter) {
-    const skipped = beforeFilter - platforms.length;
-    cli.log(`  ${cli.DIM}${skipped} disabled platform${skipped === 1 ? "" : "s"} skipped${cli.RESET}`);
-  }
-
-  // Filter by --platform if specified
-  if (parsedArgs.platform) {
-    const requested = parsedArgs.platform.split(",").map(s => resolvePlatformId(s.trim()));
-    platforms = platforms.filter(p => requested.includes(p.platform));
-    if (platforms.length === 0) {
-      cli.fail(`None of the specified platforms detected: ${parsedArgs.platform}`);
-      process.exit(1);
-    }
-  }
-
-  if (platforms.length === 0) {
-    cli.fail("No supported AI coding tools detected.");
-    cli.log(`\n  Install one of: Claude Code, Cursor, Windsurf, VS Code, Cline, Roo Code`);
-    process.exit(1);
-  }
+  const platforms = filterDetectedPlatforms(equip.detect(), parsedArgs, { logDisabled: true });
+  enforceDetectedPlatforms(platforms, parsedArgs);
 
   const names = platforms.map(p => platformName(p.platform)).join(", ");
   cli.log(`\n  Detected   ${names}`);
