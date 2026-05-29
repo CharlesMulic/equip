@@ -32,16 +32,31 @@ function teardown() {
 }
 
 function content(name, options = {}) {
+  const {
+    gateMetadata = true,
+    ...contentOptions
+  } = options;
   return {
     name,
     title: name,
     description: `Fixture for ${name}`,
-    transport: "http",
-    serverUrl: `https://example.com/${name}/mcp`,
+    transport: undefined,
+    serverUrl: undefined,
     requiresAuth: false,
     skills: [],
     hooks: [],
-    ...options,
+    ...(gateMetadata ? {
+      registryStatus: "listed",
+      listed: true,
+      reviewStatus: "reviewed-pass",
+      trustTier: "reviewed",
+      trustState: {
+        equipGate: "normal",
+        reviewState: "passed",
+        credentialEligibility: "not-required",
+      },
+    } : {}),
+    ...contentOptions,
   };
 }
 
@@ -94,7 +109,7 @@ describe("loadout apply", () => {
   afterEach(teardown);
 
   it("applies mixed uninstall/install, writes a receipt, snapshots first, and marks active clean", () => {
-    installIntent("old-tool");
+    installIntent("old-tool", { contentHash: putContent("old-tool", { transport: "http", serverUrl: "https://example.com/old-tool/mcp" }) });
     const newHash = putContent("new-tool");
     const loadout = createLoadout({
       name: "New Set",
@@ -127,7 +142,6 @@ describe("loadout apply", () => {
     ]);
     const config = fs.readFileSync(codexConfigPath(), "utf-8");
     assert.ok(!config.includes("old-tool"));
-    assert.ok(config.includes("[mcp_servers.new-tool]"));
     assert.ok(config.includes("[mcp_servers.manual]"), "unmanaged/manual entry survives apply");
     assert.equal(JsonStore.resolve("old-tool").installed, false);
     assert.equal(JsonStore.resolve("new-tool").installed, true);
@@ -138,7 +152,7 @@ describe("loadout apply", () => {
 
   it("applies update entries by replacing managed config and journal state", () => {
     const oldHash = installIntent("alpha");
-    const newHash = putContent("alpha", { serverUrl: "https://example.com/alpha-v2/mcp" });
+    const newHash = putContent("alpha", { description: "Updated alpha content" });
     const loadout = createLoadout({
       name: "Updated Alpha",
       entries: [loadoutEntry("alpha", newHash, { registryVersion: 2 })],
@@ -169,9 +183,11 @@ describe("loadout apply", () => {
     assert.equal(receipt.summary.installCount, 0);
     assert.equal(JsonStore.resolve("alpha").contentHash, newHash);
     assert.notEqual(JsonStore.resolve("alpha").contentHash, oldHash);
-    const config = fs.readFileSync(codexConfigPath(), "utf-8");
-    assert.match(config, /alpha-v2\/mcp/);
-    assert.doesNotMatch(config, /alpha\/mcp"/);
+    assert.equal(fs.readFileSync(codexConfigPath(), "utf-8"), [
+      "[mcp_servers.alpha]",
+      "url = \"https://example.com/alpha/mcp\"",
+      "",
+    ].join("\n"));
   });
 
   it("preflights MCP config compatibility before mixed-platform loadout writes", () => {
@@ -194,7 +210,7 @@ describe("loadout apply", () => {
 
     assert.equal(receipt.status, "failed");
     assert.equal(receipt.steps[0].status, "failed");
-    assert.match(receipt.steps[0].error, /codex: Equip: Remote MCP transport "sse"/);
+    assert.match(receipt.steps[0].error, /registry MCP loadout apply requires a live registry gate check/);
     assert.equal(fs.existsSync(path.join(isolation.home, ".claude.json")), false, "loadout preflight should not partially write Claude config");
     assert.equal(fs.existsSync(codexConfigPath()), false, "loadout preflight should not write Codex config");
     assert.equal(JsonStore.resolve("sse-tool"), null);
@@ -225,14 +241,13 @@ describe("loadout apply", () => {
 
     assert.equal(receipt.status, "failed");
     assert.equal(receipt.steps[0].status, "failed");
-    assert.match(receipt.steps[0].error, /codex: Equip: MCP target/);
-    assert.match(receipt.steps[0].error, /Remote MCP transport "sse"/);
+    assert.match(receipt.steps[0].error, /registry MCP loadout apply requires a live registry gate check/);
     assert.equal(fs.existsSync(path.join(isolation.home, ".claude.json")), false, "installTargets preflight should not partially write Claude config");
     assert.equal(fs.existsSync(codexConfigPath()), false, "installTargets preflight should not write Codex config");
     assert.equal(JsonStore.resolve("sse-target-tool"), null);
   });
 
-  it("writes installTargets-only package stdio loadout content", () => {
+  it("blocks installTargets-only package stdio loadout content without a live gate", () => {
     const stdioHash = putContent("stdio-target-tool", {
       transport: undefined,
       serverUrl: undefined,
@@ -257,13 +272,9 @@ describe("loadout apply", () => {
       now: "2026-05-10T00:00:00.000Z",
     });
 
-    assert.equal(receipt.status, "success", receipt.steps[0]?.error);
-    const config = fs.readFileSync(codexConfigPath(), "utf-8");
-    assert.match(config, /\[mcp_servers\.stdio-target-tool\]/);
-    assert.match(config, process.platform === "win32" ? /command = "cmd"/ : /command = "npx"/);
-    assert.match(config, /"npx"/);
-    assert.match(config, /"example-mcp@1\.2\.3"/);
-    assert.equal(JsonStore.resolve("stdio-target-tool").installed, true);
+    assert.equal(receipt.status, "failed");
+    assert.match(receipt.steps[0].error, /registry MCP loadout apply requires a live registry gate check/);
+    assert.equal(JsonStore.resolve("stdio-target-tool"), null);
   });
 
   it("replays a duplicate operation without extra journal or platform writes", () => {
@@ -321,6 +332,32 @@ describe("loadout apply", () => {
     assert.equal(receipt.status, "blocked");
     assert.equal(receipt.diagnostics[0].code, "plan_hash_mismatch");
     assert.equal(fs.readFileSync(codexConfigPath(), "utf-8"), before);
+    assert.equal(JsonStore.resolve("alpha"), null);
+  });
+
+  it("fails closed when registry MCP loadout content has no gate metadata", () => {
+    const alphaHash = putContent("alpha", {
+      gateMetadata: false,
+      transport: "http",
+      serverUrl: "https://example.com/alpha/mcp",
+    });
+    const loadout = createLoadout({
+      name: "Missing Gate",
+      entries: [loadoutEntry("alpha", alphaHash)],
+    });
+
+    const receipt = applyLoadout({
+      operationId: "op_missing_gate_metadata",
+      loadout: loadout.id,
+    }, {
+      enabledPlatformIds: ["codex"],
+      now: "2026-05-10T00:00:00.000Z",
+    });
+
+    assert.equal(receipt.status, "failed");
+    assert.equal(receipt.steps[0].status, "failed");
+    assert.match(receipt.steps[0].error, /registry MCP loadout apply requires a live registry gate check|registry MCP install gate metadata is unavailable/);
+    assert.equal(fs.existsSync(codexConfigPath()), false);
     assert.equal(JsonStore.resolve("alpha"), null);
   });
 

@@ -11,9 +11,8 @@ import * as os from "os";
 
 import { ParsedArgs, parseArgs, isLocalPath, YELLOW, DIM, RESET, BOLD, GREEN, createConsoleLogger } from "../lib/cli.js";
 import * as cli from "../lib/cli.js";
-import { readEquipMeta } from "../lib/equip-meta.js";
-import { fetchRegistryDef, RegistryDef } from "../lib/registry.js";
-import { getEquipHome } from "../lib/equip-home.js";
+import { readEquipMeta, getInstallId } from "../lib/equip-meta.js";
+import { fetchRegistryDefForInstall, RegistryDef, writeRegistryInstallGateAcceptanceReceipt, type RegistryInstallReviewGate } from "../lib/registry.js";
 import { validateCredential, readStoredCredential } from "../lib/auth-engine.js";
 import { runStatus } from "../lib/commands/status.js";
 import { runDoctor } from "../lib/commands/doctor.js";
@@ -83,7 +82,8 @@ function cmdHelp(): void {
   console.log("  --mcp-input-file KEY=path   Read a declared MCP install value from a file (recommended for secrets)");
   console.log("  --platform <p>   Target specific platform(s), comma-separated");
   console.log("  --dry-run        Preview without writing");
-  console.log("  --allow-unreviewed  Explicitly install a visible but unreviewed MCP augment");
+  console.log("  --accept-risk    Acknowledge registry MCP install warnings for this install");
+  console.log("  --allow-unreviewed  Deprecated alias for --accept-risk on registry MCP warnings");
   console.log("  --delete-added   Restore files that were absent in the snapshot by deleting them");
   console.log("  --preserve-added Restore files that were absent in the snapshot by preserving them");
   console.log("  --json           Emit machine-readable JSON where supported");
@@ -126,10 +126,7 @@ async function cmdUpdate(parsedArgs: ParsedArgs): Promise<void> {
 
     cli.log(`\n${BOLD}equip update${RESET} ${toolName}\n`);
 
-    // Clear cache to get fresh definition
-    try { fs.unlinkSync(path.join(getEquipHome(), "cache", `${toolName}.json`)); } catch {}
-
-    const toolDef = await fetchRegistryDef(toolName, { logger });
+    const toolDef = await fetchRegistryDefForInstall(toolName, { logger });
     if (!toolDef) {
       cli.fail(`Augment "${toolName}" not found in registry`);
       process.exit(1);
@@ -220,7 +217,15 @@ function runLocal(localPath: string, extraArgs: string[]): void {
   });
 }
 
-function spawnPackage(pkg: string, command: string, extraArgs: string[], augmentName: string): void {
+function spawnPackage(
+  toolDef: RegistryDef,
+  gate: RegistryInstallReviewGate,
+  command: string,
+  extraArgs: string[],
+  parsedArgs: ParsedArgs,
+): void {
+  const pkg = toolDef.npmPackage!;
+  const augmentName = toolDef.name;
   // Capture initial snapshots before the package modifies configs
   try {
     ensureInitialSnapshots(detectPlatforms());
@@ -233,6 +238,18 @@ function spawnPackage(pkg: string, command: string, extraArgs: string[], augment
     env: { ...process.env, EQUIP_VERSION },
   });
   child.on("close", (code) => {
+    if (gate.bypassable && (parsedArgs.acceptRisk || parsedArgs.allowUnreviewed)) {
+      try {
+        writeRegistryInstallGateAcceptanceReceipt(toolDef, gate, {
+          surface: "equip-cli-package",
+          actorLocalProfile: getInstallId(),
+          acceptedReasonCodes: parsedArgs.acceptedRiskReasons.length > 0
+            ? parsedArgs.acceptedRiskReasons
+            : (gate.unsuppressedWarningReasons || gate.warningReasons || []).map((reason) => reason.code),
+          installResult: code === 0 ? "succeeded" : "failed",
+        });
+      } catch {}
+    }
     if (augmentName) {
       try {
         const changed = reconcileState({ toolName: augmentName, package: pkg, marker: augmentName });
@@ -262,10 +279,11 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
     return;
   }
 
-  // Fetch augment definition from registry API (with cache fallback)
+  // Fetch augment definition from live registry. Cache is allowed for display,
+  // but install/write authorization must not use stale local policy state.
   const logger = parsedArgs.verbose ? createConsoleLogger() : undefined;
 
-  const toolDef = await fetchRegistryDef(alias, { logger });
+  const toolDef = await fetchRegistryDefForInstall(alias, { logger });
 
   if (toolDef && toolDef.installMode === "direct") {
     await runInstall(toolDef, parsedArgs, EQUIP_VERSION);
@@ -273,8 +291,8 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
   }
 
   if (toolDef && toolDef.installMode === "package") {
-    enforceRegistryInstallReviewGate(toolDef, parsedArgs);
-    spawnPackage(toolDef.npmPackage!, toolDef.setupCommand || "setup", extraArgs, alias);
+    const gate = enforceRegistryInstallReviewGate(toolDef, parsedArgs);
+    spawnPackage(toolDef, gate, toolDef.setupCommand || "setup", extraArgs, parsedArgs);
     return;
   }
 

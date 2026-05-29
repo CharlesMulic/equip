@@ -2,7 +2,12 @@ import * as os from "os";
 import * as path from "path";
 import { Augment, type AugmentConfig } from "../../index";
 import { readStoredCredential, isCredentialExpired } from "../auth-engine";
-import { registryDefToConfig, type RegistryDef } from "../registry";
+import {
+  registryDefFromStoredContent,
+  registryDefHasMcp,
+  registryDefToConfig,
+  type RegistryDef,
+} from "../registry";
 import { createManualPlatform, type DetectedPlatform } from "../platforms";
 import { acquireLock, atomicWriteFileSync, safeReadJsonSync } from "../fs";
 import { ensureInitialSnapshots } from "../snapshots";
@@ -370,6 +375,7 @@ function installEntry(entry: LoadoutPlanEntry, context: LoadoutApplyWriterContex
   if (!content) throw new Error(`Cannot apply ${entry.augmentName}: target content is unavailable`);
   const manifestEntry = context.manifestEntry;
   if (!manifestEntry) throw new Error(`Cannot apply ${entry.augmentName}: manifest entry is unavailable`);
+  enforceLoadoutRegistryInstallGate(entry, content);
 
   const platforms = entry.platforms.map((platformId) => createManualPlatform(platformId));
   const apiKey = content.requiresAuth ? context.credentialValueReader(entry.augmentName) : null;
@@ -430,6 +436,15 @@ function installEntry(entry: LoadoutPlanEntry, context: LoadoutApplyWriterContex
   });
 
   return { platforms: entry.platforms, contentHash: entry.target.contentHash };
+}
+
+function enforceLoadoutRegistryInstallGate(entry: LoadoutPlanEntry, content: AugmentContent): void {
+  if (entry.sourceKind !== "registry") return;
+
+  const gateDef = registryDefFromStoredContent(content, entry.target?.contentHash || null);
+  if (!gateDef || !registryDefHasMcp(gateDef)) return;
+
+  throw new Error(`Cannot apply ${entry.augmentName}: registry MCP loadout apply requires a live registry gate check and per-item install acceptance`);
 }
 
 function uninstallEntry(entry: LoadoutPlanEntry, context: LoadoutApplyWriterContext): Record<string, unknown> {

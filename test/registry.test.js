@@ -70,6 +70,34 @@ function buildFixture(origin, name, overrides = {}) {
   });
 }
 
+function warningReason(code, overrides = {}) {
+  const messages = {
+    "publisher-unclaimed": "This content is unclaimed.",
+    "review-missing": "No passing review is available for this selected path.",
+    "review-unsupported": "Automated review does not currently support this path.",
+    "stdio-local-code": "This stdio server runs local code on your machine.",
+  };
+  const suggestedPreferenceScopes = {
+    "publisher-unclaimed": ["source", "augment", "path"],
+    "publisher-unverified": ["reason-global", "source", "publisher"],
+    "review-missing": ["augment", "path", "source"],
+    "review-unsupported": ["source", "augment", "path"],
+    "stdio-local-code": [],
+  };
+  return {
+    code,
+    category: code.startsWith("publisher") ? "identity" : code === "stdio-local-code" ? "capability" : "review",
+    severity: code === "stdio-local-code" ? "danger" : "warning",
+    message: messages[code] || code,
+    copyKey: `equip.installGate.${code.replaceAll("-", ".")}.v1`,
+    copyVersion: 1,
+    oneTimeAcceptable: true,
+    preferenceSuppressible: !["stdio-local-code"].includes(code),
+    suggestedPreferenceScopes: suggestedPreferenceScopes[code] || ["augment", "path"],
+    ...overrides,
+  };
+}
+
 function withV2ContentHash(def, hashAlgorithm = "sha256-v2") {
   return {
     ...def,
@@ -87,7 +115,8 @@ function startFixtureRegistry() {
     const server = http.createServer((req, res) => {
       requests.push({ method: req.method || "GET", url: req.url || "/" });
 
-      const match = /^\/augments\/([^/]+)$/.exec(req.url || "");
+      const parsedUrl = new URL(req.url || "/", origin || "http://127.0.0.1");
+      const match = /^\/augments\/([^/]+)$/.exec(parsedUrl.pathname);
       if (req.method === "GET" && match) {
         const name = decodeURIComponent(match[1]);
         const fixtures = {
@@ -97,6 +126,11 @@ function startFixtureRegistry() {
             auth: {
               type: "api_key",
               envKey: "DEMO_DIRECT_INSTALL_KEY",
+            },
+            trustState: {
+              equipGate: "normal",
+              reviewState: "passed",
+              credentialEligibility: "eligible",
             },
             rules: {
               marker: AUTH_FIXTURE_NAME,
@@ -119,6 +153,16 @@ function startFixtureRegistry() {
             status: "synced-unreviewed",
             reviewStatus: "unreviewed",
             trustTier: "unscanned",
+            trustState: {
+              reviewState: "unreviewed",
+              equipGate: "warning-gated",
+              transportPath: "remote-mcp",
+              credentialEligibility: "not-required",
+              warningReasons: [
+                warningReason("publisher-unclaimed"),
+                warningReason("review-missing"),
+              ],
+            },
           }),
           [REVIEW_UNSUPPORTED_FIXTURE_NAME]: buildFixture(origin, REVIEW_UNSUPPORTED_FIXTURE_NAME, {
             title: "Demo Direct Install Review Unsupported",
@@ -129,6 +173,10 @@ function startFixtureRegistry() {
               equipGate: "warning-gated",
               transportPath: "stdio-mcp",
               credentialEligibility: "not-required",
+              warningReasons: [
+                warningReason("review-unsupported"),
+                warningReason("stdio-local-code"),
+              ],
             },
             recommendedMcpPath: {
               supportLevel: "unsupported",
@@ -578,7 +626,7 @@ describe("resolveRegistryInstallReviewGate", () => {
     assert.equal(gate.code, "no-mcp");
   });
 
-  it("requires an explicit override for visible unreviewed MCP definitions", () => {
+  it("requires an explicit acknowledgement for backend warning-gated MCP definitions", () => {
     const gate = resolveRegistryInstallReviewGate({
       name: "unreviewed",
       title: "Unreviewed",
@@ -589,11 +637,38 @@ describe("resolveRegistryInstallReviewGate", () => {
       status: "synced-unreviewed",
       reviewStatus: "unreviewed",
       trustTier: "unscanned",
+      trustState: {
+        reviewState: "unreviewed",
+        equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("review-missing"),
+          warningReason("stdio-local-code"),
+        ],
+      },
     });
 
     assert.equal(gate.allowed, false);
     assert.equal(gate.bypassable, true);
-    assert.equal(gate.code, "unreviewed");
+    assert.equal(gate.code, "warning-gated");
+    assert.deepEqual(gate.unsuppressedWarningReasons.map((reason) => reason.code), ["review-missing", "stdio-local-code"]);
+  });
+
+  it("fails closed for legacy unreviewed MCP metadata without backend warning reasons", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "legacy-unreviewed",
+      title: "Legacy Unreviewed",
+      description: "",
+      installMode: "direct",
+      stdioCommand: "node",
+      stdioArgs: ["server.js"],
+      status: "synced-unreviewed",
+      reviewStatus: "unreviewed",
+      trustTier: "unscanned",
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "blocked");
   });
 
   it("warning-gates review-unsupported paths without treating them as install-unsupported", () => {
@@ -612,6 +687,10 @@ describe("resolveRegistryInstallReviewGate", () => {
       trustState: {
         reviewState: "unsupported",
         equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("review-unsupported"),
+          warningReason("stdio-local-code"),
+        ],
       },
       recommendedMcpPath: {
         supportLevel: "unsupported",
@@ -624,10 +703,10 @@ describe("resolveRegistryInstallReviewGate", () => {
     assert.equal(gate.allowed, false);
     assert.equal(gate.bypassable, true);
     assert.equal(gate.code, "warning-gated");
-    assert.match(gate.detail, /Automated review is not supported/);
+    assert.match(gate.detail, /Automated review does not currently support/);
   });
 
-  it("warning-gates path review gaps before broad normal trust states", () => {
+  it("treats backend normal as authoritative over legacy path review hints", () => {
     const gate = resolveRegistryInstallReviewGate({
       name: "contradictory-path",
       title: "Contradictory Path",
@@ -652,9 +731,58 @@ describe("resolveRegistryInstallReviewGate", () => {
       },
     });
 
+    assert.equal(gate.allowed, true);
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "allowed");
+  });
+
+  it("treats backend normal as authoritative over legacy review and listing statuses", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "backend-normal-hidden",
+      title: "Backend Normal Hidden",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      listed: false,
+      status: "pending-review",
+      reviewStatus: "pending-review",
+      trustState: {
+        reviewState: "reviewed-pass",
+        equipGate: "normal",
+      },
+    });
+
+    assert.equal(gate.allowed, true);
+    assert.equal(gate.code, "allowed");
+  });
+
+  it("fails closed when blocker reasons contradict backend normal", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "contradictory-blocker",
+      title: "Contradictory Blocker",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustState: {
+        reviewState: "reviewed-pass",
+        equipGate: "normal",
+        blockerReasons: [
+          warningReason("known-malicious", {
+            category: "suppression",
+            severity: "blocker",
+            preferenceSuppressible: false,
+            oneTimeAcceptable: false,
+            suggestedPreferenceScopes: [],
+          }),
+        ],
+      },
+    });
+
     assert.equal(gate.allowed, false);
-    assert.equal(gate.bypassable, true);
-    assert.equal(gate.code, "unreviewed");
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "blocked");
   });
 
   it("warning-gates reviewed-warning MCP definitions", () => {
@@ -668,12 +796,151 @@ describe("resolveRegistryInstallReviewGate", () => {
       trustState: {
         reviewState: "reviewed-warning",
         equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("review-warning", {
+            category: "review",
+            preferenceSuppressible: false,
+          }),
+        ],
       },
     });
 
     assert.equal(gate.allowed, false);
     assert.equal(gate.bypassable, true);
     assert.equal(gate.code, "warning-gated");
+  });
+
+  it("allows warning-gated MCP definitions when all warnings match local preferences", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "preferred-warning",
+      title: "Preferred Warning",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      syncSourceName: "mcp-registry",
+      trustState: {
+        reviewState: "unreviewed",
+        equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("publisher-unclaimed"),
+          warningReason("review-missing"),
+        ],
+      },
+    }, {
+      preferences: [
+        { reasonCode: "publisher-unclaimed", scope: "source", scopeValue: "mcp-registry" },
+        { reasonCode: "review-missing", scope: "augment", scopeValue: "preferred-warning" },
+      ],
+    });
+
+    assert.equal(gate.allowed, true);
+    assert.equal(gate.acceptedByPreference, true);
+    assert.equal(gate.unsuppressedWarningReasons.length, 0);
+    assert.equal(gate.suppressedWarningReasons.length, 2);
+  });
+
+  it("does not apply preferences for scopes the backend reason did not suggest", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "narrow-warning",
+      title: "Narrow Warning",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustState: {
+        reviewState: "unreviewed",
+        equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("review-missing", { suggestedPreferenceScopes: ["augment"] }),
+        ],
+      },
+    }, {
+      preferences: [
+        { reasonCode: "review-missing", scope: "reason-global" },
+      ],
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.deepEqual(gate.unsuppressedWarningReasons.map((reason) => reason.code), ["review-missing"]);
+  });
+
+  it("does not apply preferences with invalid expiry timestamps", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "invalid-expiry-warning",
+      title: "Invalid Expiry Warning",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustState: {
+        reviewState: "unreviewed",
+        equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("review-missing"),
+        ],
+      },
+    }, {
+      preferences: [
+        { reasonCode: "review-missing", scope: "augment", scopeValue: "invalid-expiry-warning", expiresAt: "later" },
+      ],
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+  });
+
+  it("blocks warning-gated reasons that are not one-time acceptable", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "not-acceptable",
+      title: "Not Acceptable",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustState: {
+        reviewState: "reviewed-warning",
+        equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("review-warning", {
+            preferenceSuppressible: false,
+            oneTimeAcceptable: false,
+          }),
+        ],
+      },
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "blocked");
+  });
+
+  it("does not suppress one-time-only warning reasons with preferences", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "stdio-one-time",
+      title: "Stdio One Time",
+      description: "",
+      installMode: "direct",
+      transport: "stdio",
+      stdioCommand: "node",
+      stdioArgs: ["server.js"],
+      trustState: {
+        reviewState: "unreviewed",
+        equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("stdio-local-code", { preferenceSuppressible: false }),
+        ],
+      },
+    }, {
+      preferences: [
+        { reasonCode: "stdio-local-code", scope: "augment", scopeValue: "stdio-one-time" },
+      ],
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.deepEqual(gate.unsuppressedWarningReasons.map((reason) => reason.code), ["stdio-local-code"]);
   });
 
   it("gates registry package installTargets as MCP definitions", () => {
@@ -693,11 +960,53 @@ describe("resolveRegistryInstallReviewGate", () => {
     });
 
     assert.equal(gate.allowed, false);
-    assert.equal(gate.bypassable, true);
-    assert.equal(gate.code, "unreviewed");
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "blocked");
   });
 
-  it("requires an explicit override when MCP review metadata is missing", () => {
+  it("honors backend trust gates for package definitions without structured MCP targets", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "legacy-package-mcp",
+      title: "Legacy Package MCP",
+      description: "",
+      installMode: "package",
+      npmPackage: "@example/legacy-package-mcp",
+      setupCommand: "setup",
+      trustState: {
+        reviewState: "failed",
+        equipGate: "blocked",
+        transportPath: "stdio-mcp",
+      },
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "blocked");
+  });
+
+  it("treats ambiguous package definitions with backend install gates as MCP-gated", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "ambiguous-package-mcp",
+      title: "Ambiguous Package MCP",
+      description: "",
+      installMode: "package",
+      npmPackage: "@example/ambiguous-package-mcp",
+      setupCommand: "setup",
+      trustState: {
+        reviewState: "unreviewed",
+        equipGate: "warning-gated",
+        warningReasons: [
+          warningReason("review-missing"),
+        ],
+      },
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, true);
+    assert.equal(gate.code, "warning-gated");
+  });
+
+  it("blocks when MCP review metadata is missing", () => {
     const gate = resolveRegistryInstallReviewGate({
       name: "unknown-mcp",
       title: "Unknown MCP",
@@ -709,8 +1018,8 @@ describe("resolveRegistryInstallReviewGate", () => {
     });
 
     assert.equal(gate.allowed, false);
-    assert.equal(gate.bypassable, true);
-    assert.equal(gate.code, "unreviewed");
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "blocked");
   });
 
   it("hard-blocks rejected and needs-attention MCP definitions", () => {
@@ -760,11 +1069,12 @@ describe("fetchRegistryDef", () => {
   let registry;
   let hermeticHome;
   let fetchRegistryDef;
+  let fetchRegistryDefForInstall;
 
   before(async () => {
     registry = await startFixtureRegistry();
     hermeticHome = setHermeticHome("equip-fetch-registry-home");
-    ({ fetchRegistryDef } = loadRegistryModule(registry.origin));
+    ({ fetchRegistryDef, fetchRegistryDefForInstall } = loadRegistryModule(registry.origin));
   });
 
   after(async () => {
@@ -788,6 +1098,16 @@ describe("fetchRegistryDef", () => {
 
     const infos = logger.calls.filter(c => c.level === "info");
     assert.ok(infos.some(c => c.msg.includes("fetched from API")));
+  });
+
+  it("fetches install definitions through the fresh install-gate path", async () => {
+    const beforeCount = registry.requests.length;
+    const def = await fetchRegistryDefForInstall(HERMETIC_FIXTURE_NAME);
+
+    assert.ok(def, "Should fetch the hermetic fixture from the live registry");
+    const request = registry.requests.slice(beforeCount).find((entry) => entry.url.includes(`/augments/${HERMETIC_FIXTURE_NAME}`));
+    assert.ok(request, "Expected an install fetch request");
+    assert.ok(request.url.includes("installGate=1"), "Install fetch should request backend fresh install-gate projection");
   });
 
   it("accepts a registry definition whose advertised hash algorithm matches its digest", async () => {
@@ -1075,19 +1395,19 @@ describe("direct-mode CLI", () => {
     ], cliEnv);
 
     assert.equal(blocked.code, 1, blocked.output);
-    assert.match(blocked.output, /has not cleared Equip review/);
-    assert.match(blocked.output, /--allow-unreviewed/);
+    assert.match(blocked.output, /requires explicit acknowledgement/);
+    assert.match(blocked.output, /--accept-risk/);
 
     const allowed = await runEquip([
       UNREVIEWED_FIXTURE_NAME,
       "--dry-run",
-      "--allow-unreviewed",
+      "--accept-risk",
       "--platform",
       "claude-code",
     ], cliEnv);
 
     assert.equal(allowed.code, 0, allowed.output);
-    assert.match(allowed.output, /continuing after an MCP review warning/);
+    assert.match(allowed.output, /continuing after MCP install warnings/);
     assert.match(allowed.output, /Done\./);
   });
 
@@ -1100,19 +1420,19 @@ describe("direct-mode CLI", () => {
     ], cliEnv);
 
     assert.equal(blocked.code, 1, blocked.output);
-    assert.match(blocked.output, /Automated review is not supported/);
-    assert.match(blocked.output, /--allow-unreviewed/);
+    assert.match(blocked.output, /Automated review does not currently support/);
+    assert.match(blocked.output, /--accept-risk/);
 
     const allowed = await runEquip([
       REVIEW_UNSUPPORTED_FIXTURE_NAME,
       "--dry-run",
-      "--allow-unreviewed",
+      "--accept-risk",
       "--platform",
       "claude-code",
     ], cliEnv);
 
     assert.equal(allowed.code, 0, allowed.output);
-    assert.match(allowed.output, /continuing after an MCP review warning/);
+    assert.match(allowed.output, /continuing after MCP install warnings/);
     assert.match(allowed.output, /Done\./);
   });
 

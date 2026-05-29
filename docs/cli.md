@@ -28,6 +28,7 @@ equip prior --api-key-file ./.prior.key  # Read API key from a file (recommended
 equip prior --api-key ask_xxx      # Provide API key directly (may expose it locally)
 equip prior --mcp-input REGION=us  # Provide a declared MCP install value
 equip prior --mcp-input-file API_KEY=./secret.txt  # Read a declared MCP value from a file
+equip prior --accept-risk          # Acknowledge registry warning reasons for this install
 equip prior --dry-run              # Preview without writing
 equip prior --verbose              # Show detailed logging
 equip prior --non-interactive      # No prompts (fail if info missing)
@@ -40,6 +41,8 @@ Disabled platforms are automatically skipped.
 Some MCP augments declare structured install inputs such as environment variables or remote credentials. Use repeatable `--mcp-input KEY=VALUE` for non-secret values and `--mcp-input-file KEY=path` for secrets. Values are applied to the generated platform MCP config; secrets are not written to Equip's registry cache.
 
 Before writing config for stdio MCP servers, Equip checks the local runtime it can infer from the selected target. Remote MCP servers do not need a local runtime. Stdio targets may require `npx`, `uvx`, Docker, or a direct executable on `PATH`. A missing required runtime blocks a normal install with remediation text; `--dry-run` reports the issue without writing, and `--force` writes the config anyway when you deliberately want to configure first and install the runtime later. Equip does not run arbitrary third-party MCP server code during install.
+
+Some registry MCP augments are installable but have warnings, such as an unclaimed publisher, missing review, auth-limited review evidence, or stdio local code. Equip shows the specific warning reason codes and stops before writing config. Re-run with `--accept-risk` to acknowledge all current warning reasons for that install attempt, or use `--accept-risk=reason-a,reason-b` to acknowledge an exact reason set. `--allow-unreviewed` remains available as a deprecated alias for older scripts, but it only works for registry MCP install warnings and cannot bypass blocked or unsupported targets.
 
 If the API is unreachable, equip falls back to a registry-scoped local cache under `~/.equip/cache/registries/`.
 
@@ -200,6 +203,8 @@ Run the built-in interactive demo that walks through building an augment.
 | `--mcp-input KEY=VALUE` | Provide a declared MCP install value such as a required non-secret env var. Repeatable. |
 | `--mcp-input-file KEY=path` | Read a declared MCP install value from a file. Recommended for MCP secrets. Repeatable. |
 | `--platform <name>` | Target specific platform(s), comma-separated (e.g., `claude,cursor`) |
+| `--accept-risk[=code,code]` | Acknowledge registry MCP install warnings for this install attempt. Cannot bypass blocked targets. |
+| `--allow-unreviewed` | Deprecated alias for `--accept-risk` on registry MCP install warnings. |
 | `--force` | Allow supported commands to continue past a blocking safety or readiness gate when the command explicitly documents that behavior. For MCP stdio runtime preflight, this writes config even if the runtime is missing. |
 | `--delete-added` | Snapshot restore policy: remove regular files that did not exist in the target snapshot |
 | `--preserve-added` | Snapshot restore policy: preserve files that did not exist in the target snapshot (default) |
@@ -246,6 +251,7 @@ Equip manages state across multiple files in `~/.equip/`:
 | `equip.json` | Equip version, timestamps, preferences. |
 | `credentials/<name>.json` | Stored auth credentials per augment. |
 | `cache/registries/<registry-key>/<name>.json` | Cached registry API responses (fallback when offline). |
+| `install-gate-receipts/<augment>.jsonl` | Local warning acknowledgement receipts for warning-gated registry installs. |
 | `snapshots/<platform>/<id>.json` | Config snapshots — captured platform state for rollback. |
 
 Install and local-script flows reconcile state from disk by scanning the platform config files after writes. Uninstall records the removal in Equip's journal, and `equip status` reads the current platform config files directly.

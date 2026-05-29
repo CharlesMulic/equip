@@ -67,6 +67,15 @@ export interface ResolvedAugment {
   installTargets?: unknown;
   requiresAuth: boolean;
   auth?: Record<string, unknown>;
+  registryStatus?: string;
+  listed?: boolean;
+  reviewStatus?: string;
+  trustTier?: string;
+  trustState?: Record<string, unknown>;
+  recommendedMcpPath?: Record<string, unknown>;
+  syncSource?: string;
+  syncSourceName?: string;
+  publisher?: { name?: string; slug?: string; verified?: boolean; avatarUrl?: string };
   rules?: { content: string; version: string; marker: string };
   skills: { name: string; files: { path: string; content: string }[] }[];
   hooks: { event: string; matcher?: string; script: string; name: string }[];
@@ -271,6 +280,15 @@ function composeView(state: FoldState, content: AugmentContent): ResolvedAugment
     installTargets: content.installTargets,
     requiresAuth: content.requiresAuth ?? false,
     auth: content.auth,
+    registryStatus: content.registryStatus,
+    listed: content.listed,
+    reviewStatus: content.reviewStatus,
+    trustTier: content.trustTier,
+    trustState: content.trustState,
+    recommendedMcpPath: content.recommendedMcpPath,
+    syncSource: content.syncSource,
+    syncSourceName: content.syncSourceName,
+    publisher: content.publisher,
     rules,
     skills,
     hooks,

@@ -128,7 +128,7 @@ See [Platforms](./docs/platforms.md) for config paths, detection, and per-platfo
 | `equip restore <platform>` | Restore platform config to a previous snapshot |
 | `equip ./script.js` | Run a local setup script (for development) |
 
-Options: `--verbose`, `--dry-run`, `--api-key-file <path>`, `--api-key <key>`, `--platform <name>`, `--non-interactive`, `--delete-added`, `--preserve-added`, `--json`
+Options: `--verbose`, `--dry-run`, `--api-key-file <path>`, `--api-key <key>`, `--platform <name>`, `--accept-risk`, `--non-interactive`, `--delete-added`, `--preserve-added`, `--json`
 
 See [CLI Reference](./docs/cli.md) for details.
 

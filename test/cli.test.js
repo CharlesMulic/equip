@@ -28,6 +28,8 @@ describe("parseArgs", () => {
     assert.strictEqual(result.nonInteractive, false);
     assert.strictEqual(result.platform, null);
     assert.strictEqual(result.allowUnreviewed, false);
+    assert.strictEqual(result.acceptRisk, false);
+    assert.deepStrictEqual(result.acceptedRiskReasons, []);
   });
 
   it("collects positional args in _", () => {
@@ -49,6 +51,21 @@ describe("parseArgs", () => {
   it("parses --allow-unreviewed", () => {
     const result = parseArgs(["--allow-unreviewed"]);
     assert.strictEqual(result.allowUnreviewed, true);
+  });
+
+  it("parses --accept-risk with optional reason codes", () => {
+    const bare = parseArgs(["--accept-risk"]);
+    assert.strictEqual(bare.acceptRisk, true);
+    assert.deepStrictEqual(bare.acceptedRiskReasons, []);
+
+    const valued = parseArgs(["--accept-risk=review-missing,stdio-local-code"]);
+    assert.strictEqual(valued.acceptRisk, true);
+    assert.deepStrictEqual(valued.acceptedRiskReasons, ["review-missing", "stdio-local-code"]);
+
+    const beforeAugment = parseArgs(["--accept-risk", "prior"]);
+    assert.strictEqual(beforeAugment.acceptRisk, true);
+    assert.deepStrictEqual(beforeAugment.acceptedRiskReasons, []);
+    assert.deepStrictEqual(beforeAugment._, ["prior"]);
   });
 
   it("parses --non-interactive", () => {
@@ -240,6 +257,7 @@ describe("equip CLI", () => {
     assert.match(output, /--api-key-file <path>/);
     assert.match(output, /--mcp-input KEY=VALUE/);
     assert.match(output, /--mcp-input-file KEY=path/);
+    assert.match(output, /--accept-risk/);
     assert.match(output, /shell history\/process lists/);
     assert.match(output, /loadout/);
     assert.match(output, /Telemetry/);

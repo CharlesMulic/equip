@@ -142,6 +142,10 @@ export interface ParsedArgs {
   force: boolean;
   /** Explicitly allow installing registry MCP content that is visible but not reviewed. */
   allowUnreviewed: boolean;
+  /** Explicitly accept backend warning-gated MCP install risk. */
+  acceptRisk: boolean;
+  /** Optional reason-code subset accepted by --accept-risk=<code>[,<code>]. */
+  acceptedRiskReasons: string[];
   /** Restore snapshots by deleting files that did not exist at snapshot time. */
   deleteAdded: boolean;
   /** Restore snapshots by preserving files that did not exist at snapshot time. */
@@ -156,7 +160,7 @@ export interface ParsedArgs {
 
 /** Parse CLI argv into structured args. Flags are consumed; positional args go to `_`. */
 export function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, mcpInputs: {}, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, allowUnreviewed: false, deleteAdded: false, preserveAdded: false, json: false, operationId: null, planHash: null };
+  const args: ParsedArgs = { _: [], verbose: false, dryRun: false, apiKey: null, mcpInputs: {}, nonInteractive: false, platform: null, takeover: false, adopt: false, fixOrphanHooks: false, force: false, allowUnreviewed: false, acceptRisk: false, acceptedRiskReasons: [], deleteAdded: false, preserveAdded: false, json: false, operationId: null, planHash: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--verbose") { args.verbose = true; }
@@ -167,6 +171,13 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === "--fix-orphan-hooks") { args.fixOrphanHooks = true; }
     else if (a === "--force") { args.force = true; }
     else if (a === "--allow-unreviewed") { args.allowUnreviewed = true; }
+    else if (a === "--accept-risk") {
+      args.acceptRisk = true;
+    }
+    else if (a.startsWith("--accept-risk=")) {
+      args.acceptRisk = true;
+      args.acceptedRiskReasons.push(...a.slice("--accept-risk=".length).split(",").map(s => s.trim()).filter(Boolean));
+    }
     else if (a === "--delete-added") { args.deleteAdded = true; }
     else if (a === "--preserve-added") { args.preserveAdded = true; }
     else if (a === "--json") { args.json = true; }

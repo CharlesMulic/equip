@@ -81,6 +81,16 @@ export interface AugmentContent {
   skills?: { name: string; files: { path: string; content: string }[] }[];
   /** Event hooks. Shape matches the legacy HookDefinition (event/matcher/script/name). */
   hooks?: { event: string; matcher?: string; script: string; name: string }[];
+  /** Registry install-gate metadata captured with registry content. */
+  registryStatus?: string;
+  listed?: boolean;
+  reviewStatus?: string;
+  trustTier?: string;
+  trustState?: Record<string, unknown>;
+  recommendedMcpPath?: Record<string, unknown>;
+  syncSource?: string;
+  syncSourceName?: string;
+  publisher?: { name?: string; slug?: string; verified?: boolean; avatarUrl?: string };
 }
 
 const STORAGE_CONTENT_DIRNAME = "storage/content";

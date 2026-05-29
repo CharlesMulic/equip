@@ -5,11 +5,20 @@
 import * as os from "os";
 import { spawn } from "child_process";
 import { Augment, type AugmentConfig } from "../../index";
-import { registryDefToConfig, REGISTRY_API, resolveRegistryInstallReviewGate, type RegistryDef } from "../registry";
+import {
+  registryDefToConfig,
+  registryDefHasMcp,
+  REGISTRY_API,
+  missingAcceptedWarningReasonCodes,
+  resolveRegistryInstallReviewGate,
+  writeRegistryInstallGateAcceptanceReceipt,
+  type RegistryDef,
+  type RegistryInstallReviewGate,
+} from "../registry";
 import { createManualPlatform } from "../platforms";
 import { platformName, platformSupportsRemoteTransport, resolvePlatformId } from "../platforms";
 import { InstallReportBuilder, makeResult } from "../types";
-import { resolveAuth, validateCredential } from "../auth-engine";
+import { resolveAuth, validateCredential, type AuthConfig } from "../auth-engine";
 import { reconcileState } from "../reconcile";
 import { isPlatformEnabled } from "../platform-state";
 import { acquireLock } from "../fs";
@@ -612,7 +621,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
 
   cli.log(`\n${cli.BOLD}equip${cli.RESET} v${equipVersion} — installing ${toolDef.title || toolDef.name}`);
   if (dryRun) cli.warn("DRY RUN — no changes will be made");
-  enforceRegistryInstallReviewGate(toolDef, parsedArgs);
+  const installGate = enforceRegistryInstallReviewGate(toolDef, parsedArgs);
 
   const preAuthEquip = new Augment(registryDefToConfig(toolDef, {
     logger,
@@ -630,6 +639,7 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
   // ── Auth Resolution ──
   let apiKey: string | null = null;
   const authConfig = toolDef.auth || (toolDef.requiresAuth ? { type: "oidc" as const } : { type: "none" as const });
+  enforceCredentialEligibility(toolDef, authConfig, parsedArgs);
 
   // OIDC delegated access tokens are bearer credentials — require HTTPS on the augment's server URL.
   if (authConfig.type === "oidc" && toolDef.serverUrl) {
@@ -728,6 +738,19 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
     adopt: parsedArgs.adopt,
     logger,
   });
+  if (!dryRun && installGate.bypassable && (parsedArgs.acceptRisk || parsedArgs.allowUnreviewed)) {
+    try {
+      writeRegistryInstallGateAcceptanceReceipt(toolDef, installGate, {
+        surface: "equip-cli",
+        actorLocalProfile: getInstallId(),
+        acceptedReasonCodes: acceptedRiskReasonCodes(installGate, parsedArgs),
+        installResult: report.overallSuccess ? "succeeded" : "failed",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      cli.warn(`Could not write install warning receipt: ${message}`);
+    }
+  }
 
   // ── Telemetry ──
   if (!dryRun) {
@@ -789,22 +812,66 @@ export async function runInstall(toolDef: RegistryDef, parsedArgs: ParsedArgs, e
 
 // ─── Post-Install Action Executor ───────────────────────────
 
-export function enforceRegistryInstallReviewGate(toolDef: RegistryDef, parsedArgs: ParsedArgs): void {
+export function enforceRegistryInstallReviewGate(toolDef: RegistryDef, parsedArgs: ParsedArgs): RegistryInstallReviewGate {
   const gate = resolveRegistryInstallReviewGate(toolDef);
-  if (gate.allowed) return;
+  if (gate.allowed) return gate;
 
   cli.warn(gate.title);
   cli.log(`  ${cli.DIM}${gate.detail}${cli.RESET}`);
+  for (const reason of gate.unsuppressedWarningReasons || gate.warningReasons || []) {
+    cli.log(`  ${cli.YELLOW}${reason.code}${cli.RESET} ${reason.message || reason.details || ""}`.trimEnd());
+    if (reason.details) cli.log(`  ${cli.DIM}${reason.details}${cli.RESET}`);
+  }
 
-  if (gate.bypassable && parsedArgs.allowUnreviewed) {
-    cli.warn("Explicit --allow-unreviewed supplied; continuing after an MCP review warning.");
-    return;
+  if (gate.bypassable && (parsedArgs.acceptRisk || parsedArgs.allowUnreviewed)) {
+    if (parsedArgs.acceptedRiskReasons.length > 0) {
+      const missing = missingAcceptedRiskReasons(gate, parsedArgs.acceptedRiskReasons);
+      if (missing.length > 0) {
+        cli.fail(`--accept-risk did not include all current warning reasons: ${missing.join(", ")}`);
+        cli.log(`  ${cli.DIM}Use --accept-risk with no value to accept all current warning reasons for this install attempt.${cli.RESET}`);
+        process.exit(1);
+      }
+    }
+    if (parsedArgs.allowUnreviewed && !parsedArgs.acceptRisk) {
+      cli.warn("--allow-unreviewed is deprecated; use --accept-risk for registry MCP install warnings.");
+    } else {
+      cli.warn("Explicit --accept-risk supplied; continuing after MCP install warnings.");
+    }
+    return gate;
   }
 
   if (gate.bypassable) {
-    cli.log(`  ${cli.DIM}Install only if you personally trust the publisher and code. Re-run with --allow-unreviewed to proceed.${cli.RESET}`);
+    cli.log(`  ${cli.DIM}Install only if you personally trust the publisher, source, and local runtime requirements. Re-run with --accept-risk to proceed.${cli.RESET}`);
   }
 
+  process.exit(1);
+}
+
+function missingAcceptedRiskReasons(gate: RegistryInstallReviewGate, accepted: string[]): string[] {
+  return missingAcceptedWarningReasonCodes(gate, accepted);
+}
+
+function acceptedRiskReasonCodes(gate: RegistryInstallReviewGate, parsedArgs: ParsedArgs): string[] {
+  if (parsedArgs.acceptedRiskReasons.length > 0) return parsedArgs.acceptedRiskReasons;
+  return (gate.unsuppressedWarningReasons || gate.warningReasons || []).map((reason) => reason.code);
+}
+
+function enforceCredentialEligibility(toolDef: RegistryDef, authConfig: AuthConfig, parsedArgs: ParsedArgs): void {
+  if (authConfig.type === "none") return;
+  if (!registryDefHasMcp(toolDef)) return;
+  const eligibility = (toolDef.trustState?.credentialEligibility || "").trim().toLowerCase();
+  if (eligibility === "eligible") return;
+
+  if (eligibility === "user-supplied-only" && authConfig.type === "api_key" && parsedArgs.apiKey) {
+    return;
+  }
+
+  const detail = !eligibility
+    ? "This MCP augment did not include credential eligibility metadata, so Equip will not inject credentials."
+    : eligibility === "user-supplied-only"
+    ? "This MCP augment can only use credentials you explicitly provide for this install; Equip will not use stored, brokered, or session-derived credentials."
+    : "This MCP augment is not eligible for Equip-managed credential injection.";
+  cli.fail(detail);
   process.exit(1);
 }
 
