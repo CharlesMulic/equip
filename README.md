@@ -194,6 +194,12 @@ Install and local-script flows reconcile state from disk by scanning platform co
 - **Structured observability** — every install returns typed results with error codes and warnings
 - **Credential lifecycle** — store, validate, refresh, and rotate automatically
 
+## Broker Mode Boundary
+
+The standalone `equip` CLI installs augments in direct mode. It writes platform MCP config, rules, skills, credentials, and local state, but it does not start, stop, monitor, or operate a broker runtime.
+
+The npm package also exposes broker-aware platform config helpers for host applications that ship their own broker daemon. Those helpers only write the platform config entry that points at a host-provided bridge binary and preserve broker-managed state for status/doctor/reconcile. The host application owns the broker process, credential refresh, MCP proxying, runtime health, and any UI around that lifecycle.
+
 ## Telemetry
 
 Equip sends privacy-preserving install metrics (augment name, platform, OS, architecture, Node version, equip version, and a generated install ID) to help improve equip. **No credentials, file paths, or user-authored content are included.**

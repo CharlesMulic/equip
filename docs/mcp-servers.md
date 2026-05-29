@@ -183,6 +183,14 @@ Runtime checks are preflight checks only. They do not initialize the MCP server,
 
 On Windows, passive readiness checks resolve shim commands such as `npx.cmd`, `npm.cmd`, `uvx.cmd`, and `docker.cmd` to the exact PATH entry before running version checks, including when the resolved path contains spaces. This avoids accidentally executing a current-directory shadow command.
 
+## Broker Mode Boundary
+
+The standalone CLI writes direct MCP config and does not run a broker. Broker-mode APIs in `@cg3/equip` are a programmatic integration surface for host applications that provide their own broker runtime.
+
+In broker mode, Equip's library code can generate the platform-specific config entry that launches a host-provided bridge binary. The host application is responsible for resolving that binary path, running the broker daemon, storing and refreshing credentials, proxying MCP traffic, reporting runtime health, and repairing or replacing broker helpers when the host app updates.
+
+`equip doctor` understands broker-managed entries only enough to avoid direct-mode false positives and report that runtime status is externally managed. It does not contact or validate a broker daemon.
+
 ## Functional Smoke Testing
 
 Equip keeps functional MCP execution separate from normal install. The Docker initialize smoke (`npm run test:docker:mcp-initialize-smoke`) launches only local allowlisted registry-shaped npm/PyPI fixtures, sends MCP `initialize`, redacts diagnostics, and kills the process group afterward. It proves that the package target plumbing can produce launchable stdio MCP configs, but it is not a publisher safety review and does not execute arbitrary live registry packages.
