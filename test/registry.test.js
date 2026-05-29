@@ -10,7 +10,11 @@ const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
 
-const { registryDefToConfig, resolveRegistryInstallReviewGate } = require("../dist/lib/registry");
+const {
+  registryDefToConfig,
+  registryInstallGateReasonIdentity,
+  resolveRegistryInstallReviewGate,
+} = require("../dist/lib/registry");
 const { Augment } = require("../dist/index");
 const {
   computeContentHashV2,
@@ -94,6 +98,7 @@ function warningReason(code, overrides = {}) {
     oneTimeAcceptable: true,
     preferenceSuppressible: !["stdio-local-code"].includes(code),
     suggestedPreferenceScopes: suggestedPreferenceScopes[code] || ["augment", "path"],
+    policyFingerprint: "policy-fixture",
     ...overrides,
   };
 }
@@ -914,6 +919,65 @@ describe("resolveRegistryInstallReviewGate", () => {
     assert.equal(gate.allowed, false);
     assert.equal(gate.bypassable, false);
     assert.equal(gate.code, "blocked");
+  });
+
+  it("binds warning identities to definition content hash when reason hash is absent", () => {
+    const reason = warningReason("review-missing", {
+      contentHash: null,
+      policyFingerprint: null,
+    });
+    const defV1 = {
+      name: "content-bound-warning",
+      title: "Content Bound Warning",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      syncSourceName: "mcp-registry",
+      contentHash: "content-hash-v1",
+      trustState: {
+        warningTextVersion: 1,
+        policyFingerprint: "policy-a",
+      },
+    };
+    const defV2 = {
+      ...defV1,
+      contentHash: "content-hash-v2",
+    };
+
+    const v1Identity = registryInstallGateReasonIdentity(defV1, reason);
+    const v2Identity = registryInstallGateReasonIdentity(defV2, reason);
+
+    assert.match(v1Identity, /content-hash-v1/);
+    assert.match(v2Identity, /content-hash-v2/);
+    assert.notEqual(v1Identity, v2Identity);
+  });
+
+  it("fails closed when warning reasons have no content or policy binding", () => {
+    const gate = resolveRegistryInstallReviewGate({
+      name: "unbound-warning",
+      title: "Unbound Warning",
+      description: "",
+      installMode: "direct",
+      transport: "http",
+      serverUrl: "https://example.com/mcp",
+      trustState: {
+        reviewState: "unreviewed",
+        equipGate: "warning-gated",
+        policyFingerprint: null,
+        warningReasons: [
+          warningReason("review-missing", {
+            contentHash: null,
+            policyFingerprint: null,
+          }),
+        ],
+      },
+    });
+
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.bypassable, false);
+    assert.equal(gate.code, "blocked");
+    assert.match(gate.detail, /cannot be safely accepted/);
   });
 
   it("does not suppress one-time-only warning reasons with preferences", () => {

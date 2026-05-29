@@ -492,6 +492,16 @@ function warningGate(
     );
   }
 
+  const unboundReasons = unsuppressedWarningReasons.filter((reason) => !reasonHasAcceptanceBinding(def, reason));
+  if (unboundReasons.length > 0) {
+    return blockGate(
+      "blocked",
+      "This MCP augment has warning reasons without a current acceptance binding.",
+      `Warning reason${unboundReasons.length === 1 ? "" : "s"} cannot be safely accepted for this content: ${unboundReasons.map((reason) => reason.code).join(", ")}.`,
+      def,
+    );
+  }
+
   return {
     allowed: false,
     bypassable: true,
@@ -553,7 +563,7 @@ function preferenceMatches(
 }
 
 export function registryInstallGateReasonIdentity(
-  def: Pick<RegistryDef, "name" | "syncSource" | "syncSourceName" | "trustState">,
+  def: Pick<RegistryDef, "name" | "syncSource" | "syncSourceName" | "contentHash" | "trustState">,
   reason: RegistryInstallGateReason,
 ): string {
   return [
@@ -561,11 +571,26 @@ export function registryInstallGateReasonIdentity(
     normalizeReviewGateValue(def.syncSourceName || def.syncSource || ""),
     normalizeReviewGateValue(reason.code),
     normalizeReviewGateValue(reason.selectedPathKey || ""),
-    normalizeReviewGateValue(reason.contentHash || ""),
+    normalizeReviewGateValue(reasonContentBinding(def, reason)),
     normalizeReviewGateValue(reason.policyFingerprint || def.trustState?.policyFingerprint || ""),
     String(reason.copyVersion ?? 1),
     String(def.trustState?.warningTextVersion ?? 1),
   ].join("|");
+}
+
+function reasonContentBinding(
+  def: Pick<RegistryDef, "contentHash">,
+  reason: RegistryInstallGateReason,
+): string {
+  return reason.contentHash || def.contentHash || "";
+}
+
+function reasonHasAcceptanceBinding(
+  def: Pick<RegistryDef, "contentHash" | "trustState">,
+  reason: RegistryInstallGateReason,
+): boolean {
+  return !!normalizeReviewGateValue(reasonContentBinding(def, reason))
+    || !!normalizeReviewGateValue(reason.policyFingerprint || def.trustState?.policyFingerprint || "");
 }
 
 export function missingAcceptedWarningReasonCodes(
@@ -580,7 +605,7 @@ export function missingAcceptedWarningReasonCodes(
 }
 
 export function missingAcceptedWarningReasonIdentities(
-  def: Pick<RegistryDef, "name" | "syncSource" | "syncSourceName" | "trustState">,
+  def: Pick<RegistryDef, "name" | "syncSource" | "syncSourceName" | "contentHash" | "trustState">,
   gate: RegistryInstallReviewGate,
   acceptedReasonIdentities: string[],
 ): string[] {
