@@ -140,7 +140,7 @@ export interface ParsedArgs {
   fixOrphanHooks: boolean;
   /** Generic --force flag for any command that opts in. */
   force: boolean;
-  /** Explicitly allow installing registry MCP content that is visible but not reviewed. */
+  /** Deprecated alias for accepting backend-projected registry MCP install warnings. */
   allowUnreviewed: boolean;
   /** Explicitly accept backend warning-gated MCP install risk. */
   acceptRisk: boolean;
