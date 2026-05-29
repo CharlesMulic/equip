@@ -463,7 +463,7 @@ function resolveSnapshotForRestore(platformId: string, snapshotId?: string): Sna
 
 /**
  * Preview the exact file operations a restore would perform.
- * The result is JSON-safe so CLI, sidecar, and UI callers can render the same
+ * The result is JSON-safe so CLI and programmatic callers can render the same
  * restore plan before any writes happen.
  */
 export function diffSnapshot(

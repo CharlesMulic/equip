@@ -1,5 +1,5 @@
 // Content hash computation for augment integrity verification.
-// Must produce identical output to the Kotlin implementation in ContentHashService.kt.
+// Must produce identical output to the registry service implementation.
 // Uses a positional JSON array to eliminate key-ordering ambiguity across languages.
 
 import * as crypto from "crypto";
@@ -44,9 +44,9 @@ export function computeContentHash(manifest: ContentManifest): string {
  * the client sees the hash change and the user can decide to apply
  * the update.
  *
- * **Must produce byte-identical output** to the Kotlin impl in
- * equip-product/ContentHashService.kt `computeContentHashV2`. The
- * ContentHashGoldenTest suite enforces this with a lockstep vector.
+ * **Must produce byte-identical output** to the registry service's
+ * `computeContentHashV2` implementation. The ContentHashGoldenTest suite
+ * enforces this with a lockstep vector.
  */
 export interface ContentManifestV2 extends ContentManifest {
   title: string | null;

@@ -37,7 +37,7 @@ GitHub Actions keeps the existing OS/Node matrix for `npm test` and adds a dedic
 
 - resolves a Docker CLI binary, including common Docker Desktop locations on Windows
 - builds `test/docker/Dockerfile`
-- runs the internal acceptance suite inside the container
+- runs the container acceptance suite inside the container
 
 ## Next Good Scenarios
 
@@ -49,9 +49,9 @@ After the first direct-install lane is stable, the next useful additions are:
 - cached install fallback after an initial live fetch
 - later, a flow where the registry creates or serves an augment definition and `equip` installs it inside a specialized stack
 
-## Live MCP Registry Install Spike
+## MCP Registry Compatibility Canary
 
-There is also a deliberately separate live-registry spike/canary lane:
+There is also a deliberately separate live-registry compatibility canary lane:
 
 ```bash
 npm run test:docker:mcp-registry-live

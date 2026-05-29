@@ -81,8 +81,9 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
 
   const server = http.createServer((req, res) => {
     requests.push({ method: req.method || "GET", url: req.url || "/" });
+    const pathname = new URL(req.url || "/", "http://127.0.0.1").pathname;
 
-    if (req.method === "GET" && req.url === "/augments/demo-direct-install") {
+    if (req.method === "GET" && pathname === "/augments/demo-direct-install") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(makeFixture(serverUrl)));
       return;
@@ -128,7 +129,10 @@ test("direct-mode registry install is hermetic in Docker for Claude Code and Cod
   assert.match(install.output, /Done\./);
   assert.match(install.output, /2 platforms configured/);
   assert.ok(
-    requests.some(request => request.method === "GET" && request.url === "/augments/demo-direct-install"),
+    requests.some(request => {
+      const pathname = new URL(request.url, "http://127.0.0.1").pathname;
+      return request.method === "GET" && pathname === "/augments/demo-direct-install";
+    }),
     "fixture registry should receive the augment definition request",
   );
 

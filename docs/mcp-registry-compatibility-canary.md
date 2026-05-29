@@ -1,4 +1,4 @@
-# Live MCP Registry Install Spike
+# MCP Registry Compatibility Canary
 
 **Status:** complete as a repeatable live canary harness  
 **Created:** 2026-05-26  
@@ -6,18 +6,20 @@
 
 ## Question
 
-Can the current Equip CLI install representative live official MCP registry servers into real platform config files when we bypass Equip's own registry/review pipeline and project official registry metadata directly into Equip's direct-mode install shape?
+Can the Equip CLI project representative official MCP registry servers into real platform config files using the same install writer that registry-backed augments use?
 
 ## Why This Matters
 
-Content ingestion can expose official MCP registry entries as augments, but discovery is only useful if Equip can actually write a runnable platform config for the selected target. The official MCP registry describes `packages` and `remotes`; the Equip CLI currently consumes CG3 `RegistryDef` fields such as `serverUrl`, `stdioCommand`, `stdioArgs`, `envKey`, and `auth`.
+Users expect an MCP server listed in the official registry to become an installable augment whenever its target can be represented safely in platform configuration. The official MCP registry describes `packages` and `remotes`; the Equip CLI consumes a normalized registry response with fields such as `serverUrl`, `stdioCommand`, `stdioArgs`, `envKey`, and `auth`.
+
+This canary answers a narrow compatibility question: "can Equip write the platform config?" It does not answer whether a server is safe, trustworthy, or functionally correct.
 
 ## Harness
 
 The harness:
 
 1. Fetches retained cases from `https://registry.modelcontextprotocol.io`.
-2. Projects installable targets into a local CG3-style registry response.
+2. Projects installable targets into a local Equip registry-shaped response.
 3. Starts a local registry stub.
 4. Runs `bin/equip.js` against fake platform homes in Docker.
 5. Verifies config files for Claude Code, Codex, Cursor, VS Code, and Roo Code. SSE cases are verified only on platforms with an explicit direct SSE shape: Claude Code and VS Code.
@@ -47,7 +49,7 @@ On 2026-05-26, a 1,200-row live API sample across latest registry versions found
 | OCI stdio with env vars or package args | 4 | `io.github.github/github-mcp-server`, `ai.haymon/database` |
 | package-launched streamable HTTP | 4 | `ai.haymon/database`, `ai.com.mcp/hapi-mcp` |
 
-The registry API is live and slow enough that full scans should use the ingestion reconciler rather than the canary test. This harness keeps a representative retained set instead.
+The registry API is live and slow enough that full scans should use a data ingestion or reconciliation process rather than this canary test. This harness keeps a representative retained set instead.
 
 ## Current Results
 
@@ -74,7 +76,7 @@ Classified unsupported:
 
 | Case | Official server | Gap |
 |---|---|---|
-| `stdio-npm-required-non-secret-env` | `io.github.Digital-Defiance/mcp-filesystem` | Required non-secret env/config input cannot be represented by current `RegistryDef`/CLI prompt model. |
+| `stdio-npm-required-non-secret-env` | `io.github.Digital-Defiance/mcp-filesystem` | Required non-secret env/config input cannot be represented by the current CLI prompt model. |
 | `remote-streamable-url-vars` | `ai.autorfp/mcp` | URL template variables need a value collection/substitution flow. |
 | `remote-streamable-secret-url-var` | `app.cardog/mcp` | Secret URL variables need secure collection and substitution; current auth model only handles headers/env. |
 | `remote-streamable-custom-header` | `ai.reka/mcp` | Non-Authorization headers need first-class header-name/value support. |
@@ -101,30 +103,26 @@ Runtime preflight from the Docker canary:
 - Remote SSE is installable on platforms with an explicit SSE config shape. The retained canary verifies Claude Code and VS Code entries with `type: "sse"` and blocks other platforms rather than collapsing SSE into streamable HTTP.
 - Remote `Authorization` can be approximated with current API-key auth because the writer emits `Authorization: Bearer <key>`.
 - Simple npm stdio packages are installable.
-- PyPI stdio can be projected to `uvx`, but this is a convention in the spike, not a productized runtime capability with dependency checks.
+- PyPI stdio can be projected to `uvx` and is covered by runtime preflight.
 - OCI stdio can be projected to `docker run`, including the common "secret env var is forwarded with `-e NAME`" shape.
 - Package arguments with literal/default values can be projected into stdio args.
-- Optional/default environment variables are currently only reported as warnings because the direct registry shape can carry one credential env key but not a general env map.
-- Current production `RegistryDef` is too narrow for arbitrary official registry inputs because it only has one `envKey` and no general variable/value collection model.
-- The spike installs and verifies exact platform config projections and Docker-image runtime executables. It does not execute third-party MCP code or prove that the MCP server initializes/functions, and OCI stdio still requires a Docker daemon/socket where the platform runs.
-- The desktop app uses the same core registry-to-platform writer for install config, but its current registry install UX does not provide a first-class API-key entry flow for arbitrary registry `api_key` installs. API-key installs work cleanly through the CLI and can work in the app when a credential is already available, but productized app support needs explicit credential collection rather than falling back to terminal-style prompting.
-- The app-side registry journal now preserves stdio `envKey` in persisted content, matching the CLI content model.
+- Optional/default environment variables are currently only reported as warnings because the normalized registry response can carry one credential env key but not a general env map.
+- The current normalized registry response is too narrow for arbitrary official registry inputs because it only has one `envKey` and no general variable/value collection model.
+- The canary installs and verifies exact platform config projections and Docker-image runtime executables. It does not execute third-party MCP code or prove that the MCP server initializes/functions, and OCI stdio still requires a Docker daemon/socket where the platform runs.
 - A separate Docker initialize smoke now proves the next runtime step for local allowlisted registry-shaped fixtures: one npm stdio target launched through `npx` and one PyPI stdio target launched through `uvx` both answer MCP `initialize` with redacted diagnostics and timeout coverage. This remains separate from the live registry canary because it executes code; the live canary still does not run arbitrary third-party registry packages.
 
-## Recommendation
+## Open Compatibility Gaps
 
-Create a dedicated Equip install compatibility initiative for official MCP registry content. Keep it separate from review/trust work.
-
-The next production shape should add:
+Future CLI compatibility work should add:
 
 - a normalized MCP install target model that preserves official registry source fields;
-- a variable collection model for required env vars, package arguments, runtime arguments, and custom headers;
+- a variable collection model for required env vars, package arguments, runtime arguments, URL templates, and custom headers;
 - broader platform confirmation for direct SSE support beyond Claude Code and VS Code;
 - explicit transport support for package-launched local HTTP as a separate case;
-- runtime preflight for `npx`, `uvx`, `docker`, and eventually other registry types;
+- runtime preflight for future registry package types beyond `npx`, `uvx`, and Docker;
 - end-to-end "write config, spawn server, initialize MCP" smoke for safe selected fixtures.
 
 ## Verification
 
-- `npm run test:docker:mcp-registry-live:internal` passed locally on Windows.
+- `npm run test:docker:mcp-registry-live:container` passed locally on Windows.
 - `npm run test:docker:mcp-registry-live` passed in Docker.

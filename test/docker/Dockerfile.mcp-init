@@ -33,4 +33,4 @@ ENV HOME=/home/equip \
   NO_COLOR=1 \
   FORCE_COLOR=0
 
-CMD ["npm", "run", "test:docker:mcp-initialize-smoke:internal"]
+CMD ["npm", "run", "test:docker:mcp-initialize-smoke:container"]

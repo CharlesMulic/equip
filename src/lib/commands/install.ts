@@ -93,8 +93,8 @@ import { noopCounter, COUNTER_NAMES, type Counter } from "../telemetry";
 //
 // If you add a resource type to the AugmentDef schema without wiring it
 // into apply, installed copies will silently miss the new resource —
-// exactly the silent-staleness bug class the equip-augment-update-propagation
-// initiative was created to fix.
+// exactly the silent-staleness bug class these integration tests are meant to
+// catch.
 
 export interface ApplyOptions {
   dryRun?: boolean;

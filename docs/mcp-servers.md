@@ -179,7 +179,7 @@ Remote MCP targets normally need no local runtime, so install can proceed once U
 - OCI/Docker stdio: Docker CLI plus Docker daemon reachability when the check is explicitly requested
 - direct command stdio: the command must be visible on `PATH`
 
-Runtime checks are preflight checks only. They do not initialize the MCP server, call tools, read resources, or execute arbitrary package code. The CLI blocks normal installs when required runtimes are missing, allows `--dry-run` reporting, and allows a deliberate `--force` install. Desktop callers should run the readiness API before install and pass collected values through `mcpInstallInputs`; the sidecar also rejects installs when the selected stdio runtime is not ready.
+Runtime checks are preflight checks only. They do not initialize the MCP server, call tools, read resources, or execute arbitrary package code. The CLI blocks normal installs when required runtimes are missing, allows `--dry-run` reporting, and allows a deliberate `--force` install. Programmatic callers can run the readiness helpers before install and pass collected values through `mcpInstallInputs`; install flows should reject selected stdio targets when their required runtime is not ready unless the user explicitly forces the install.
 
 On Windows, passive readiness checks resolve shim commands such as `npx.cmd`, `npm.cmd`, `uvx.cmd`, and `docker.cmd` to the exact PATH entry before running version checks, including when the resolved path contains spaces. This avoids accidentally executing a current-directory shadow command.
 

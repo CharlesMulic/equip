@@ -3,6 +3,9 @@
   "title": "Demo Direct Install",
   "description": "Hermetic Docker acceptance fixture for the equip CLI",
   "installMode": "direct",
+  "registryStatus": "active",
+  "reviewStatus": "approved",
+  "trustTier": "reviewed",
   "transport": "http",
   "serverUrl": "__SERVER_URL__",
   "rules": {

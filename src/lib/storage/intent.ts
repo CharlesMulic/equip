@@ -15,9 +15,9 @@
  * - `seq`: monotonic counter local to this machine (advances on every append)
  * - `node`: stable machine identifier (placeholder until multi-device sync)
  *
- * Multi-device sync (deferred to a follow-up initiative) will compare
- * (seq, node) for total ordering within a per-augment scope. For now,
- * single-device single-writer means seq order = append order = clock order.
+ * Future multi-device sync can compare (seq, node) for total ordering within a
+ * per-augment scope. For now, single-device single-writer means seq order =
+ * append order = clock order.
  */
 export interface IntentClock {
   ts: string;

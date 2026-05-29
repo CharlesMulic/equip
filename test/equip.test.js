@@ -2992,8 +2992,8 @@ describe("writeAugmentDefAndApply (commands/install)", () => {
 // invoke at the end of every save) hardcoded `source: "registry"` in its
 // trackInstallation call. That hardcode was correct when the only caller
 // was runInstall (registry-fetched augments). After the equip-augment-
-// update-propagation initiative shipped writeAugmentDefAndApply as the
-// user-save boundary for ALL augment edits (including local), every save
+// update propagation introduced writeAugmentDefAndApply as the user-save
+// boundary for ALL augment edits (including local), every save
 // of a local augment overwrote installations.json's source field to
 // "registry" — corrupting local state and making the augment look like a
 // registry-published, uneditable item.

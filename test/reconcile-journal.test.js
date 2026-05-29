@@ -89,9 +89,9 @@ describe("Phase A.3b — reconcileState journal writes", () => {
       skills: [],
     };
 
-    // First, seed the journal with a broker-mode install intent. The
-    // typical real-world path is the sidecar bridge appending this when
-    // the user installs in broker mode; here we synthesize it directly.
+    // First, seed the journal with a broker-mode install intent. A broker
+    // integration would append this when the user installs in broker mode;
+    // here we synthesize it directly.
     const seedContent = {
       name: "broker-aug",
       title: "Broker Augment",

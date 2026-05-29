@@ -59,7 +59,7 @@ The old local PowerShell publish path is retired for stable `@cg3/equip` release
 - `deploy/publish-equip.ps1` is now only a deprecation shim
 - legacy local pre-push authorization hooks are not part of the current release contract
 
-If you have a stale local pre-push hook blocking normal pushes in this repo, remove or neutralize `.git/hooks/pre-push`. That hook came from legacy CG3 workspace tooling and is not required for the GitHub Actions + Changesets flow.
+If you have a stale local pre-push hook blocking normal pushes in this repo, remove or neutralize `.git/hooks/pre-push`. That hook came from legacy local tooling and is not required for the GitHub Actions + Changesets flow.
 
 ## GitHub PR Creation Auth
 

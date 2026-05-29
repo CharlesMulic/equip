@@ -29,7 +29,7 @@ describe("Counter port contract", () => {
 });
 
 describe("Counter name constants", () => {
-  it("declares the broker/install counters wired across equip and equip-app", () => {
+  it("declares the broker/install counters used by broker integrations", () => {
     assert.equal(COUNTER_NAMES.BROKER_REFRESH_TOTAL, "equip_broker_refresh_total");
     assert.equal(COUNTER_NAMES.BROKER_REQUEST_TOTAL, "equip_broker_request_total");
     assert.equal(COUNTER_NAMES.BROKER_PROXY_TOTAL, "equip_broker_proxy_total");

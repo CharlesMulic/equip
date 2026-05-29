@@ -133,7 +133,7 @@ export type LoadoutPlanAction = "install" | "uninstall" | "noop" | "update";
 export type LoadoutPlanDiagnosticSeverity = "info" | "warning" | "blocked";
 
 // `action` is the canonical operation field. `codes` intentionally repeats
-// that action code alongside diagnostics so UI/sidecar callers can filter a
+// that action code alongside diagnostics so programmatic callers can filter a
 // single stable code array without parsing display strings.
 export type LoadoutPlanCode =
   | "install"

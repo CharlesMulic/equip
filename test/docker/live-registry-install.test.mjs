@@ -129,7 +129,7 @@ function buildEnvPlan(envVars, item) {
       return {
         supported: false,
         reason: "secret-env-needs-test-credential",
-        detail: `${keyEnvVar} is secret and this spike case did not provide a test credential.`,
+        detail: `${keyEnvVar} is secret and this canary case did not provide a test credential.`,
       };
     }
     return {
@@ -191,7 +191,7 @@ function appendDockerRuntimeArguments(args, runtimeArguments, item) {
         return {
           supported: false,
           reason: "secret-runtime-argument-needs-test-credential",
-          detail: `${keyEnvVar} is secret and this spike case did not provide a test credential.`,
+          detail: `${keyEnvVar} is secret and this canary case did not provide a test credential.`,
         };
       }
       args.push(input.name, keyEnvVar);
@@ -247,7 +247,7 @@ function convertRemote(server, remote, item) {
       return unsupported(item, "remote-custom-headers", "Only Authorization bearer-style remote headers are representable by Equip direct-mode installs today.");
     }
     if (!item.credential?.apiKey) {
-      return unsupported(item, "remote-authorization-needs-test-credential", "Authorization header requires a test credential for this spike case.");
+      return unsupported(item, "remote-authorization-needs-test-credential", "Authorization header requires a test credential for this canary case.");
     }
     auth = {
       type: "api_key",
@@ -385,7 +385,7 @@ function supported(item, server, fields) {
     registryStatus: "active",
     reviewStatus: "approved",
     trustTier: "reviewed",
-    tags: ["mcp-registry-live-spike", item.target.kind, item.target.transport].filter(Boolean),
+    tags: ["mcp-registry-live-canary", item.target.kind, item.target.transport].filter(Boolean),
     transport: fields.transport,
     serverUrl: fields.serverUrl,
     stdioCommand: fields.stdioCommand,
@@ -701,7 +701,7 @@ test("live MCP registry cases can be projected and installed into fake platform 
   }
 
   const supported = fetched.filter(item => item.support === "install");
-  assert.ok(supported.length >= 5, "spike should exercise several installable live registry cases");
+  assert.ok(supported.length >= 5, "canary should exercise several installable live registry cases");
   const runtimeReadiness = await assessRuntimeReadiness(supported);
   const runtimeReadinessByInstallName = new Map(runtimeReadiness.map(item => [item.installName, item]));
   if (process.env.EQUIP_MCP_REGISTRY_REQUIRE_RUNTIME_PREFLIGHT === "1") {

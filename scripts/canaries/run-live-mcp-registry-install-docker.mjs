@@ -67,5 +67,5 @@ runOrThrow(dockerBin, [
   imageTag,
   "npm",
   "run",
-  "test:docker:mcp-registry-live:internal",
+  "test:docker:mcp-registry-live:container",
 ]);

@@ -42,13 +42,13 @@ export const COUNTER_NAMES = {
   BROKER_REFRESH_TOTAL: "equip_broker_refresh_total",
   /** Broker IPC server requests, by method. Emitted from ipc-server.ts. */
   BROKER_REQUEST_TOTAL: "equip_broker_request_total",
-  /** Broker proxy sessions, by lifecycle result. Emitted from equip-app broker proxy. */
+  /** Broker proxy sessions, by lifecycle result. Emitted from broker proxy implementations. */
   BROKER_PROXY_TOTAL: "equip_broker_proxy_total",
-  /** Broker proxy failures, by closed-set reason. Emitted from equip-app broker proxy. */
+  /** Broker proxy failures, by closed-set reason. Emitted from broker proxy implementations. */
   BROKER_PROXY_FAILURE_TOTAL: "equip_broker_proxy_failure_total",
   /** Broker proxy session duration buckets. Encoded as counters until a histogram layer exists. */
   BROKER_PROXY_LATENCY_BUCKET_TOTAL: "equip_broker_proxy_latency_bucket_total",
-  /** Broker startup prewarm attempts. Emitted from equip-app broker daemon. */
+  /** Broker startup prewarm attempts. Emitted from broker daemon implementations. */
   BROKER_PREWARM_TOTAL: "equip_broker_prewarm_total",
   /** Equip MCP installs, by mode + platform. Emitted from install.ts via the port. */
   INSTALL_MODE_TOTAL: "equip_install_mode_total",

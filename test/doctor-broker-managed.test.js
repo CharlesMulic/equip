@@ -143,8 +143,8 @@ describe("equip doctor: broker-managed branch", () => {
 
   it("does NOT call auth-engine.readStoredCredential for broker-managed entries", () => {
     // Indirect check: broker-managed augments have credentials in the
-    // sidecar's FileCredentialStore (~/.equip/secrets/), NOT in
-    // auth-engine's store (~/.equip/credentials/). Doctor reads only the
+    // broker credential store (~/.equip/secrets/), NOT in auth-engine's
+    // store (~/.equip/credentials/). Doctor reads only the
     // latter; this test verifies that broker-managed augments don't
     // *cause* doctor to look anywhere it shouldn't.
     //
