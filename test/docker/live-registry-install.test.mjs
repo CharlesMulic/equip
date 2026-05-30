@@ -385,6 +385,15 @@ function supported(item, server, fields) {
     registryStatus: "active",
     reviewStatus: "approved",
     trustTier: "reviewed",
+    trustState: {
+      reviewState: "passed",
+      equipGate: "normal",
+      credentialEligibility: fields.auth?.type === "api_key" ? "eligible" : "not-required",
+      reasonCodes: [],
+      warningReasons: [],
+      blockerReasons: [],
+      normallyEquipable: true,
+    },
     tags: ["mcp-registry-live-canary", item.target.kind, item.target.transport].filter(Boolean),
     transport: fields.transport,
     serverUrl: fields.serverUrl,
@@ -716,8 +725,9 @@ test("live MCP registry cases can be projected and installed into fake platform 
 
   const defs = new Map(supported.map(item => [item.installName, item.def]));
   const server = http.createServer((req, res) => {
-    if (req.method === "GET" && req.url?.startsWith("/augments/")) {
-      const name = decodeURIComponent(req.url.slice("/augments/".length));
+    const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+    if (req.method === "GET" && requestUrl.pathname.startsWith("/augments/")) {
+      const name = decodeURIComponent(requestUrl.pathname.slice("/augments/".length));
       const def = defs.get(name);
       if (!def) {
         res.writeHead(404, { "Content-Type": "application/json" });
