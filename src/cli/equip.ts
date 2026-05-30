@@ -270,6 +270,12 @@ function spawnPackage(
 
 // ─── Augment Dispatch ───────────────────────────────────────
 
+function packageDefHasConfigurableMcpTarget(toolDef: RegistryDef): boolean {
+  return !!toolDef.serverUrl
+    || !!toolDef.stdioCommand
+    || (Array.isArray(toolDef.installTargets) && toolDef.installTargets.length > 0);
+}
+
 async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<void> {
   const extraArgs = parsedArgs._;
 
@@ -291,6 +297,11 @@ async function dispatchAugment(alias: string, parsedArgs: ParsedArgs): Promise<v
   }
 
   if (toolDef && toolDef.installMode === "package") {
+    if (packageDefHasConfigurableMcpTarget(toolDef)) {
+      await runInstall(toolDef, parsedArgs, EQUIP_VERSION);
+      return;
+    }
+
     const gate = enforceRegistryInstallReviewGate(toolDef, parsedArgs);
     spawnPackage(toolDef, gate, toolDef.setupCommand || "setup", extraArgs, parsedArgs);
     return;

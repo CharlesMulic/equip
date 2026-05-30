@@ -226,7 +226,8 @@ export function apply(
   opts: ApplyOptions = {},
 ): InstallReportBuilder {
   const { dryRun = false, takeover, adopt, logger } = opts;
-  const transport = toolDef.transport || "http";
+  const transport = equip.mcpInstallTarget?.transport
+    || (equip.stdio ? "stdio" : toolDef.transport || "http");
   const report = opts.report ?? new InstallReportBuilder();
   const counter = opts.counter ?? noopCounter;
 

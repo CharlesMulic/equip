@@ -10,10 +10,12 @@ const assert = require("node:assert/strict");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const { execFileSync, spawnSync } = require("child_process");
+const http = require("http");
+const { execFileSync, spawn, spawnSync } = require("child_process");
 const { setupFullHome } = require("./_isolation");
 
 const { parseArgs, isLocalPath } = require("../dist/lib/cli");
+const { parseTomlServerEntry } = require("../dist/lib/mcp");
 
 // ─── parseArgs ──────────────────────────────────────────────
 
@@ -238,6 +240,86 @@ function runCliStrict(bin, args, envOverrides = {}) {
   return output;
 }
 
+function runCliProcess(bin, args, envOverrides = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bin, ...args], {
+      env: makeCliEnv(envOverrides),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`CLI timed out: ${args.join(" ")}`));
+    }, 10000);
+
+    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (status) => {
+      clearTimeout(timeout);
+      resolve({ status, stdout, stderr, output: `${stdout}${stderr}` });
+    });
+  });
+}
+
+async function startRegistryServer(defsByName) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({ method: req.method || "GET", url: req.url || "/" });
+    const parsed = new URL(req.url || "/", "http://127.0.0.1");
+    const match = /^\/augments\/([^/]+)$/.exec(parsed.pathname);
+
+    if (req.method === "GET" && match) {
+      const name = decodeURIComponent(match[1]);
+      const def = defsByName[name];
+      if (def) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(def));
+        return;
+      }
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found" }));
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  const address = server.address();
+  assert.ok(address && typeof address === "object", "registry server should listen on a TCP port");
+  return {
+    origin: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: () => new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve())),
+  };
+}
+
+function createFakeNpx(binDir) {
+  fs.mkdirSync(binDir, { recursive: true });
+  if (process.platform === "win32") {
+    fs.writeFileSync(path.join(binDir, "npx.cmd"), "@echo off\r\necho fake-npx %*\r\nexit /b 0\r\n");
+    return;
+  }
+
+  const script = path.join(binDir, "npx");
+  fs.writeFileSync(script, [
+    "#!/bin/sh",
+    "printf 'fake-npx'",
+    "for arg in \"$@\"; do printf ' %s' \"$arg\"; done",
+    "printf '\\n'",
+    "exit 0",
+    "",
+  ].join("\n"));
+  fs.chmodSync(script, 0o755);
+}
+
 describe("equip CLI", () => {
   it("--version prints version", () => {
     const output = runCli(equipBin, ["--version"]);
@@ -332,6 +414,178 @@ describe("equip CLI", () => {
       assert.equal(receipt.status, "success");
       assert.equal(receipt.loadout.name, "Empty");
     } finally {
+      full.dispose();
+    }
+  });
+
+  it("installs package-mode MCP installTargets through the config installer", async () => {
+    const full = setupFullHome("cli-package-stdio-target");
+    const augmentName = "package-stdio-config";
+    const def = {
+      name: augmentName,
+      title: "Package Stdio Config",
+      description: "Fixture package-mode stdio MCP definition.",
+      installMode: "package",
+      listed: true,
+      status: "active",
+      reviewStatus: "unsupported",
+      syncSource: "mcp-registry",
+      syncSourceName: "example/package-stdio-config",
+      trustState: {
+        equipGate: "warning-gated",
+        reviewState: "unsupported",
+        transportPath: "stdio-mcp",
+        policyFingerprint: "cli-package-stdio-target-test",
+        warningTextVersion: 1,
+        warningReasons: [
+          {
+            code: "publisher-unclaimed",
+            category: "identity",
+            severity: "warning",
+            message: "This content is unclaimed.",
+            oneTimeAcceptable: true,
+            preferenceSuppressible: true,
+            suggestedPreferenceScopes: ["source", "augment", "path"],
+            policyFingerprint: "cli-package-stdio-target-test",
+          },
+          {
+            code: "review-unsupported",
+            category: "review",
+            severity: "warning",
+            message: "Automated review does not currently support this path.",
+            oneTimeAcceptable: true,
+            preferenceSuppressible: true,
+            suggestedPreferenceScopes: ["source", "augment", "path"],
+            policyFingerprint: "cli-package-stdio-target-test",
+          },
+          {
+            code: "stdio-local-code",
+            category: "capability",
+            severity: "danger",
+            message: "This stdio server runs local code on your machine.",
+            oneTimeAcceptable: true,
+            preferenceSuppressible: false,
+            suggestedPreferenceScopes: [],
+            policyFingerprint: "cli-package-stdio-target-test",
+          },
+        ],
+      },
+      recommendedMcpPath: {
+        pathKey: "stdio:fixture:package-stdio-config",
+        supportLevel: "unsupported",
+        evidenceTier: "unsupported-source-or-transport",
+        label: "stdio fixture",
+      },
+      installTargets: [{
+        targetKind: "stdio",
+        transport: { type: "stdio" },
+        registryType: "fixture",
+        runtimeHint: "node",
+        runtimeArguments: [{ value: "-e" }, { value: "0" }],
+        environmentVariables: [],
+      }],
+    };
+    const registry = await startRegistryServer({ [augmentName]: def });
+    const env = {
+      EQUIP_HOME: full.equipHome,
+      HOME: full.home,
+      USERPROFILE: full.home,
+      APPDATA: path.join(full.home, "AppData", "Roaming"),
+      CODEX_HOME: full.home,
+      EQUIP_REGISTRY_URL: registry.origin,
+    };
+
+    try {
+      const blocked = await runCliProcess(equipBin, [augmentName, "--platform", "codex", "--non-interactive"], env);
+      assert.equal(blocked.status, 1, blocked.output);
+      assert.match(blocked.output, /requires explicit acknowledgement/i);
+      assert.equal(fs.existsSync(path.join(full.home, "config.toml")), false, "warning gate should stop before writing Codex config");
+
+      const accepted = await runCliProcess(equipBin, [augmentName, "--platform", "codex", "--non-interactive", "--accept-risk"], env);
+      assert.equal(accepted.status, 0, accepted.output);
+      const output = accepted.output;
+      assert.match(output, /MCP Server/);
+      assert.match(output, /Local runtime ready/);
+      assert.match(output, /Transport\s+stdio/);
+      assert.match(output, /stdio, toml/);
+      assert.match(output, /Done\.[\s\S]*1 platform configured/);
+
+      const codexConfigPath = path.join(full.home, "config.toml");
+      const codexConfig = fs.readFileSync(codexConfigPath, "utf-8");
+      const entry = parseTomlServerEntry(codexConfig, "mcp_servers", augmentName);
+      assert.ok(entry, "Codex config should include the stdio MCP server");
+      const entryArgs = typeof entry.args === "string" ? JSON.parse(entry.args) : entry.args;
+      if (process.platform === "win32") {
+        assert.equal(entry.command, "cmd");
+        assert.deepEqual(entryArgs, ["/c", "node", "-e", "0"]);
+      } else {
+        assert.equal(entry.command, "node");
+        assert.deepEqual(entryArgs, ["-e", "0"]);
+      }
+      assert.equal(entry.url, undefined);
+      assert.equal(entry.http_headers, undefined);
+    } finally {
+      await registry.close();
+      full.dispose();
+    }
+  });
+
+  it("keeps configless package definitions on the legacy package setup path", async () => {
+    const full = setupFullHome("cli-legacy-package-target");
+    const augmentName = "legacy-package-configless";
+    const fakeBin = path.join(full.home, "fake-bin");
+    createFakeNpx(fakeBin);
+
+    const registry = await startRegistryServer({
+      [augmentName]: {
+        name: augmentName,
+        title: "Legacy Package Configless",
+        description: "Fixture package-mode augment without MCP config targets.",
+        installMode: "package",
+        npmPackage: "equip-fake-package",
+        setupCommand: "configure",
+        listed: true,
+        status: "active",
+        trustState: {
+          equipGate: "warning-gated",
+          policyFingerprint: "cli-legacy-package-target-test",
+          warningReasons: [{
+            code: "publisher-unclaimed",
+            category: "identity",
+            severity: "warning",
+            message: "This package is unclaimed.",
+            oneTimeAcceptable: true,
+            preferenceSuppressible: true,
+            suggestedPreferenceScopes: ["source", "augment"],
+            policyFingerprint: "cli-legacy-package-target-test",
+          }],
+        },
+      },
+    });
+    const pathWithFakeNpx = `${fakeBin}${path.delimiter}${process.env.PATH || process.env.Path || ""}`;
+    const env = {
+      EQUIP_HOME: full.equipHome,
+      HOME: full.home,
+      USERPROFILE: full.home,
+      APPDATA: path.join(full.home, "AppData", "Roaming"),
+      CODEX_HOME: full.home,
+      EQUIP_REGISTRY_URL: registry.origin,
+      PATH: pathWithFakeNpx,
+      Path: pathWithFakeNpx,
+    };
+
+    try {
+      const result = await runCliProcess(equipBin, [augmentName, "--non-interactive", "--accept-risk"], env);
+      assert.equal(result.status, 0, result.output);
+      assert.match(result.output, /requires explicit acknowledgement/i);
+      assert.match(result.output, /fake-npx/);
+      assert.match(result.output, /-y/);
+      assert.match(result.output, /equip-fake-package@latest/);
+      assert.match(result.output, /configure/);
+      assert.doesNotMatch(result.output, /No supported AI coding tools/);
+      assert.equal(fs.existsSync(path.join(full.home, "config.toml")), false, "legacy package setup should not write Codex config directly");
+    } finally {
+      await registry.close();
       full.dispose();
     }
   });
